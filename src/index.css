@@ -655,3 +655,17 @@
 .light-theme .contact-info-drawer [class*="border-[#2e3b44]"] {
   border-color: #e2e8f0 !important;
 }
+
+.light-theme .contact-info-drawer [class*="bg-[#182229]"] {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light-theme .contact-info-drawer span,
+.light-theme .contact-info-drawer p {
+  color: #111b21;
+}
+
+.light-theme .contact-info-drawer .text-\[\#8696a0\] {
+  color: #64748b !important;
+}

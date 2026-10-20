@@ -8,8 +8,9 @@ import { MessageInput } from './MessageInput';
 import { ChatInfoDrawer } from './ChatInfoDrawer';
 import { ReportMessageModal } from './ReportMessageModal';
 import { MediaViewerModal } from './MediaViewerModal';
+import { JumpToDateModal } from './JumpToDateModal';
 import { Message, UserProfile } from '../../types';
-import { Ban, X, Star, Copy, Trash2, AlertTriangle, RotateCcw } from 'lucide-react';
+import { Ban, X, Star, Copy, Trash2, AlertTriangle, RotateCcw, Search, ChevronUp, ChevronDown, Calendar } from 'lucide-react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 
@@ -48,6 +49,14 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
   const [showDeleteChatConfirm, setShowDeleteChatConfirm] = useState(false);
   const [showStarredFilter, setShowStarredFilter] = useState(false);
   const [reportingMessage, setReportingMessage] = useState<Message | null>(null);
+
+  // Message Search & Jump to Date State
+  const [isSearchingMessages, setIsSearchingMessages] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchMatches, setSearchMatches] = useState<string[]>([]);
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  const [showJumpToDateModal, setShowJumpToDateModal] = useState(false);
+
   const [viewingMedia, setViewingMedia] = useState<{
     url: string;
     type: 'image' | 'video' | 'file';
@@ -87,6 +96,61 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
       markChatAsRead(activeChat.id);
     }
   }, [activeChat?.id, activeChat?.unreadCount, currentUser?.uid, markChatAsRead]);
+
+  // Jump to specific message and pulse highlight
+  const jumpToMessage = (messageId: string) => {
+    if (showStarredFilter) {
+      setShowStarredFilter(false);
+    }
+    setTimeout(() => {
+      const el = document.getElementById(`msg-${messageId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('highlight-pulse');
+        setTimeout(() => {
+          el.classList.remove('highlight-pulse');
+        }, 2500);
+      }
+    }, 120);
+  };
+
+  // Search message filtering & jump
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchMatches([]);
+      setActiveMatchIndex(0);
+      return;
+    }
+    const q = searchQuery.toLowerCase();
+    const matched = messages
+      .filter((m) =>
+        (m.text && m.text.toLowerCase().includes(q)) ||
+        (m.fileName && m.fileName.toLowerCase().includes(q)) ||
+        (m.senderName && m.senderName.toLowerCase().includes(q))
+      )
+      .map((m) => m.id);
+
+    setSearchMatches(matched);
+    if (matched.length > 0) {
+      const lastIdx = matched.length - 1;
+      setActiveMatchIndex(lastIdx);
+      jumpToMessage(matched[lastIdx]);
+    }
+  }, [searchQuery, messages]);
+
+  const handlePrevMatch = () => {
+    if (searchMatches.length === 0) return;
+    const nextIdx = activeMatchIndex > 0 ? activeMatchIndex - 1 : searchMatches.length - 1;
+    setActiveMatchIndex(nextIdx);
+    jumpToMessage(searchMatches[nextIdx]);
+  };
+
+  const handleNextMatch = () => {
+    if (searchMatches.length === 0) return;
+    const nextIdx = activeMatchIndex < searchMatches.length - 1 ? activeMatchIndex + 1 : 0;
+    setActiveMatchIndex(nextIdx);
+    jumpToMessage(searchMatches[nextIdx]);
+  };
 
   if (!activeChat || !currentUser) return null;
 
@@ -253,6 +317,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
             onStartAudioCall={() => startCall({ chat: activeChat, callType: 'audio' })}
             onStartVideoCall={() => startCall({ chat: activeChat, callType: 'video' })}
             onToggleInfo={() => setShowInfo(!showInfo)}
+            onOpenSearch={() => setIsSearchingMessages(true)}
+            onOpenJumpToDate={() => setShowJumpToDateModal(true)}
             onEnterSelectionMode={() => handleEnterSelectionMode()}
             onClearChat={() => setShowClearConfirm(true)}
             onDeleteChat={isSupportChat ? undefined : () => setShowDeleteChatConfirm(true)}
@@ -268,6 +334,77 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
               }
             }}
           />
+        )}
+
+        {/* In-Chat Message Search Bar */}
+        {isSearchingMessages && (
+          <div className="h-14 px-4 bg-[#182229] border-b border-[#2e3b44] flex items-center justify-between gap-3 animate-slide-down z-20 select-none">
+            <div className="flex items-center gap-2 flex-1 max-w-xl bg-[#111b21] px-3 py-1.5 rounded-xl border border-[#2e3b44]">
+              <Search className="w-4 h-4 text-[#8696a0] flex-shrink-0" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search messages in this chat..."
+                className="w-full bg-transparent text-xs sm:text-sm text-white placeholder-[#8696a0] focus:outline-none"
+                autoFocus
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="text-[#8696a0] hover:text-white p-0.5 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1 sm:gap-2 text-xs text-[#8696a0]">
+              {searchQuery.trim() ? (
+                searchMatches.length > 0 ? (
+                  <span className="text-white font-mono text-xs whitespace-nowrap">
+                    {activeMatchIndex + 1} of {searchMatches.length}
+                  </span>
+                ) : (
+                  <span className="text-red-400 text-xs whitespace-nowrap">No matches</span>
+                )
+              ) : null}
+
+              <button
+                type="button"
+                onClick={handlePrevMatch}
+                disabled={searchMatches.length === 0}
+                className="p-1.5 rounded-lg hover:bg-[#202c33] hover:text-white disabled:opacity-30 transition cursor-pointer"
+                title="Previous match"
+              >
+                <ChevronUp className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleNextMatch}
+                disabled={searchMatches.length === 0}
+                className="p-1.5 rounded-lg hover:bg-[#202c33] hover:text-white disabled:opacity-30 transition cursor-pointer"
+                title="Next match"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSearchingMessages(false);
+                  setSearchQuery('');
+                  setSearchMatches([]);
+                }}
+                className="p-1.5 rounded-lg hover:bg-[#202c33] hover:text-white transition cursor-pointer ml-1"
+                title="Close search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Starred Messages Filter Active Banner */}
@@ -359,7 +496,28 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
         messages={messages}
         onBlockUser={blockUser}
         onUnblockUser={unblockUser}
+        onStartAudioCall={() => startCall({ chat: activeChat, callType: 'audio' })}
+        onStartVideoCall={() => startCall({ chat: activeChat, callType: 'video' })}
+        onOpenSearch={() => setIsSearchingMessages(true)}
+        onOpenJumpToDate={() => setShowJumpToDateModal(true)}
+        onJumpToMessage={jumpToMessage}
+        onViewMedia={(media) => {
+          setShowInfo(false);
+          setViewingMedia(media);
+        }}
+        onToggleStarredFilter={() => setShowStarredFilter(prev => !prev)}
+        isFilteringStarred={showStarredFilter}
       />
+
+      {/* Jump to Date Modal */}
+      {showJumpToDateModal && (
+        <JumpToDateModal
+          isOpen={showJumpToDateModal}
+          onClose={() => setShowJumpToDateModal(false)}
+          messages={messages}
+          onSelectDate={jumpToMessage}
+        />
+      )}
 
       {/* SMART BULK DELETE CONFIRMATION MODAL */}
       {showBulkDeleteModal && (

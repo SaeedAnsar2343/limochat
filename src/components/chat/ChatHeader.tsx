@@ -12,7 +12,8 @@ import {
   Trash2,
   RotateCcw,
   Ban,
-  Star
+  Star,
+  Calendar
 } from 'lucide-react';
 import { Chat, UserProfile } from '../../types';
 import { Avatar } from '../common/Avatar';
@@ -28,6 +29,8 @@ interface ChatHeaderProps {
   onStartAudioCall: () => void;
   onStartVideoCall: () => void;
   onToggleInfo: () => void;
+  onOpenSearch?: () => void;
+  onOpenJumpToDate?: () => void;
   onEnterSelectionMode?: () => void;
   onClearChat?: () => void;
   onDeleteChat?: () => void;
@@ -44,6 +47,8 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   onStartAudioCall,
   onStartVideoCall,
   onToggleInfo,
+  onOpenSearch,
+  onOpenJumpToDate,
   onEnterSelectionMode,
   onClearChat,
   onDeleteChat,
@@ -178,6 +183,16 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           <Phone className="w-5 h-5" />
         </button>
 
+        {onOpenSearch && (
+          <button
+            onClick={onOpenSearch}
+            className="p-2.5 rounded-full hover:text-white hover:bg-[#2a3942] transition cursor-pointer"
+            title="Search Messages"
+          >
+            <Search className="w-5 h-5" />
+          </button>
+        )}
+
         {/* 3-Dots More Menu Trigger */}
         <div className="relative">
           <button
@@ -208,6 +223,26 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                   <Info className="w-4 h-4 text-[#00a884]" />
                   <span>{chat.type === 'direct' ? 'Contact info' : 'Group info'}</span>
                 </button>
+
+                {onOpenSearch && (
+                  <button
+                    onClick={onOpenSearch}
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer"
+                  >
+                    <Search className="w-4 h-4 text-emerald-400" />
+                    <span>Search messages</span>
+                  </button>
+                )}
+
+                {onOpenJumpToDate && (
+                  <button
+                    onClick={onOpenJumpToDate}
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer"
+                  >
+                    <Calendar className="w-4 h-4 text-blue-400" />
+                    <span>Jump to date</span>
+                  </button>
+                )}
 
                 {onToggleStarredFilter && (
                   <button
