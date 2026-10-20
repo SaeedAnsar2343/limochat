@@ -259,16 +259,17 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
               </span>
             )}
 
-            {/* Quick Context Menu Trigger on Hover */}
+            {/* Quick Context Menu Trigger (Always accessible on mobile, hover-revealed on desktop) */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setShowMenu(!showMenu);
               }}
-              className="p-1 rounded-full text-[#8696a0] hover:text-white opacity-0 group-hover:opacity-100 transition"
+              className="p-1.5 rounded-full text-[#8696a0] hover:text-[#d1d7db] dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/10 active:scale-90 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-all touch-manipulation cursor-pointer flex-shrink-0"
               title="Chat Options"
+              aria-label="Chat options"
             >
-              <MoreVertical className="w-3.5 h-3.5" />
+              <MoreVertical className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -278,14 +279,14 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
       {showMenu && (
         <>
           <div
-            className="fixed inset-0 z-20 cursor-default"
+            className="fixed inset-0 z-40 cursor-default"
             onClick={(e) => {
               e.stopPropagation();
               setShowMenu(false);
             }}
           />
           <div
-            className="absolute right-4 top-10 z-30 w-48 bg-[#233138] border border-[#2e3b44] rounded-xl shadow-2xl py-1 text-xs text-[#d1d7db] animate-scale-in"
+            className="absolute right-3 top-10 z-50 w-52 bg-[#233138] border border-[#2e3b44] rounded-xl shadow-2xl py-1.5 text-xs text-[#d1d7db] animate-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
           <button

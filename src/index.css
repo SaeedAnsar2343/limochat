@@ -154,6 +154,66 @@
 }
 
 /* =========================================================================
+   ANIMATED EMOJIS & STICKERS MICRO-ANIMATIONS
+   ========================================================================= */
+@keyframes emoji-wiggle {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(8deg); }
+}
+
+.animate-emoji-wiggle {
+  animation: emoji-wiggle 0.75s ease-in-out infinite;
+}
+
+@keyframes emoji-heartbeat {
+  0% { transform: scale(1); }
+  14% { transform: scale(1.28); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.2); }
+  70% { transform: scale(1); }
+}
+
+.animate-emoji-heartbeat {
+  animation: emoji-heartbeat 1.35s ease-in-out infinite;
+}
+
+@keyframes emoji-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-7px); }
+}
+
+.animate-emoji-float {
+  animation: emoji-float 1.8s ease-in-out infinite;
+}
+
+@keyframes emoji-spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-emoji-spin-slow {
+  animation: emoji-spin-slow 4s linear infinite;
+}
+
+@keyframes emoji-pop {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.22); }
+}
+
+.animate-emoji-pop {
+  animation: emoji-pop 0.9s ease-in-out infinite;
+}
+
+@keyframes limo-glow {
+  0%, 100% { box-shadow: 0 0 12px rgba(0, 168, 132, 0.4), inset 0 0 8px rgba(0, 168, 132, 0.2); }
+  50% { box-shadow: 0 0 22px rgba(0, 220, 130, 0.75), inset 0 0 14px rgba(0, 220, 130, 0.4); }
+}
+
+.animate-limo-glow {
+  animation: limo-glow 2.5s ease-in-out infinite;
+}
+
+/* =========================================================================
    LIGHT THEME OVERRIDES (Comprehensive, High-Fidelity WhatsApp Web Aesthetics)
    ========================================================================= */
 .light-theme {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useChat } from '../../context/ChatContext';
 import { useAuth } from '../../context/AuthContext';
 import { useCall } from '../../context/CallContext';
@@ -65,6 +65,28 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
     caption?: string;
     fileName?: string;
   } | null>(null);
+
+  // All media items in current chat for rich carousel navigation
+  const chatMediaList = useMemo(() => {
+    return messages
+      .filter((m) => (m.type === 'image' || m.type === 'video' || (m.type === 'file' && m.mediaUrl)) && !m.isDeletedForEveryone)
+      .map((m) => ({
+        id: m.id,
+        url: m.mediaUrl || '',
+        type: m.type as 'image' | 'video' | 'file',
+        senderName: m.senderName,
+        timestamp: m.timestamp,
+        caption: m.text,
+        fileName: m.fileName,
+      }))
+      .filter((m) => !!m.url);
+  }, [messages]);
+
+  const activeMediaIndex = useMemo(() => {
+    if (!viewingMedia) return 0;
+    const idx = chatMediaList.findIndex((m) => m.url === viewingMedia.url);
+    return idx >= 0 ? idx : 0;
+  }, [viewingMedia, chatMediaList]);
 
   const otherUid = activeChat?.type === 'direct' 
     ? activeChat.participants.find(p => p !== currentUser?.uid) 
@@ -657,11 +679,20 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
         />
       )}
 
-      {/* In-App Media Viewer Lightbox */}
+      {/* In-App Multi-Item Media Viewer Carousel */}
       {viewingMedia && (
         <MediaViewerModal
           isOpen={true}
           onClose={() => setViewingMedia(null)}
+          mediaList={chatMediaList.length > 0 ? chatMediaList : [{
+            url: viewingMedia.url,
+            type: viewingMedia.type,
+            senderName: viewingMedia.senderName,
+            timestamp: viewingMedia.timestamp,
+            caption: viewingMedia.caption,
+            fileName: viewingMedia.fileName
+          }]}
+          initialIndex={activeMediaIndex}
           mediaUrl={viewingMedia.url}
           mediaType={viewingMedia.type}
           senderName={viewingMedia.senderName}

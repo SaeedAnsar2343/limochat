@@ -15,6 +15,7 @@ import {
 import { QuotedMessage, MessageType, Message, UserProfile } from '../../types';
 import { VoiceRecorder } from './VoiceRecorder';
 import { MediaPreviewModal } from './MediaPreviewModal';
+import { EmojiPickerDrawer } from './EmojiPickerDrawer';
 import { formatFileSize } from '../../utils/formatters';
 import { useChat } from '../../context/ChatContext';
 import { useAuth } from '../../context/AuthContext';
@@ -431,20 +432,24 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         )}
       </div>
 
-      {/* Emoji Picker Drawer */}
+      {/* Comprehensive Emojis, LimoChat Exclusives, Animated Stickers & GIFs Drawer */}
       {showEmojiPicker && (
-        <div className="bg-[#182229] border border-[#2e3b44] rounded-2xl p-3 grid grid-cols-9 gap-2 shadow-xl animate-fade-in">
-          {commonEmojis.map((emoji) => (
-            <button
-              key={emoji}
-              onClick={() => {
-                setInputText((prev) => prev + emoji);
-              }}
-              className="text-xl p-1.5 hover:bg-[#202c33] rounded-lg transition active:scale-125"
-            >
-              {emoji}
-            </button>
-          ))}
+        <div className="w-full animate-fade-in pt-1">
+          <EmojiPickerDrawer
+            isOpen={showEmojiPicker}
+            onClose={() => setShowEmojiPicker(false)}
+            onSelectEmoji={(emoji) => {
+              setInputText((prev) => prev + emoji);
+              inputRef.current?.focus();
+            }}
+            onSelectGif={async (gifUrl, title) => {
+              setShowEmojiPicker(false);
+              await onSendMessage(title || 'GIF', 'image', gifUrl);
+            }}
+            onSendAnimatedEmoji={async (emoji, _name) => {
+              await onSendMessage(emoji, 'text');
+            }}
+          />
         </div>
       )}
       {/* Media Send Preview Modal */}

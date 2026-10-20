@@ -122,6 +122,24 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const { startCall } = useCall();
   const fontClass = fontSize === 'lg' ? 'text-base' : fontSize === 'base' ? 'text-sm' : 'text-xs';
 
+  // Detect 1-3 emojis message for animated stickers / large animated display
+  const isEmojiOnly = useMemo(() => {
+    if (!message.text || message.type !== 'text') return false;
+    const clean = message.text.trim();
+    const emojiRegex = /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Emoji_Modifier_Base}|\u200d|\ufe0f|\u20e3){1,3}$/u;
+    return emojiRegex.test(clean);
+  }, [message.text, message.type]);
+
+  const getEmojiAnimationClass = (emojiStr: string) => {
+    const clean = emojiStr.trim();
+    if (clean.includes('❤️') || clean.includes('💖') || clean.includes('💓') || clean.includes('💎')) return 'animate-emoji-heartbeat';
+    if (clean.includes('🔥') || clean.includes('🎉') || clean.includes('👋') || clean.includes('🍾') || clean.includes('🕺') || clean.includes('🐱') || clean.includes('🐶')) return 'animate-emoji-wiggle';
+    if (clean.includes('🚀') || clean.includes('👻') || clean.includes('👑') || clean.includes('😎')) return 'animate-emoji-float';
+    if (clean.includes('🌟') || clean.includes('✨')) return 'animate-emoji-spin-slow';
+    if (clean.includes('🍋') || clean.includes('⚡') || clean.includes('😂') || clean.includes('🤯') || clean.includes('💯') || clean.includes('🚗')) return 'animate-emoji-pop';
+    return '';
+  };
+
   const renderMessageContent = (content: string) => {
     const parts = content.split(/(@[a-zA-Z0-9_\s]{1,30}?(?=\s|$|[.,!?]))/g);
     return parts.map((part, idx) => {
@@ -635,13 +653,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </div>
             )}
 
-            {/* Text Message with Real-Time Translation */}
+            {/* Text Message with Real-Time Translation or Large Animated Emojis */}
             {message.text && message.type !== 'call_log' && (
               <div className="relative">
-                <div className="flex items-start justify-between gap-2">
-                  <p className={`${fontClass} leading-relaxed whitespace-pre-wrap break-words pr-2 flex-1`}>
-                    {renderMessageContent(showTranslated && translatedContent ? translatedContent : message.text)}
-                  </p>
+                {isEmojiOnly ? (
+                  <div className="py-1 px-0.5 select-none flex items-center">
+                    <span className={`text-4xl sm:text-5xl inline-block ${getEmojiAnimationClass(message.text)} transition-transform filter drop-shadow-sm`}>
+                      {message.text}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-start justify-between gap-2">
+                    <p className={`${fontClass} leading-relaxed whitespace-pre-wrap break-words pr-2 flex-1`}>
+                      {renderMessageContent(showTranslated && translatedContent ? translatedContent : message.text)}
+                    </p>
 
                   {/* Translate Action Icon */}
                   <div className="relative flex items-center">
@@ -703,6 +728,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     )}
                   </div>
                 </div>
+              )}
 
                 {/* Translation notification badge */}
                 {showTranslated && (
