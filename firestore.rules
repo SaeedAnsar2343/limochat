@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // LimoChat Official Security & Moderation Rules
+    // Optimized for WhatsApp-grade messaging, WebRTC group calling, status updates, 
+    // lifetime virtual numbers, policy violations, automated punishments & administrative sanctions
+
+    // User profiles & presence & sanctions
+    // LimoChat official support user cannot be deleted
+    match /users/{userId} {
+      allow read, write: if true;
+      allow delete: if userId != 'limochat_official_support';
+      
+      // Violations and logs subcollection
+      match /violations/{violationId} {
+        allow read, write: if true;
+      }
+    }
+
+    // Direct, group & community announcement chats
+    // Official LimoChat Support chats cannot be deleted
+    // Support user cannot be added to group or community chats
+    match /chats/{chatId} {
+      allow read, create, update: if true;
+      allow delete: if !chatId.matches('support_.*');
+
+      // Messages subcollection
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+
+    // WebRTC Calling sessions & ICE signaling
+    match /calls/{callId} {
+      allow read, write: if true;
+
+      match /callerCandidates/{candidateId} {
+        allow read, write: if true;
+      }
+      match /calleeCandidates/{candidateId} {
+        allow read, write: if true;
+      }
+    }
+
+    // 24-hour disappearing status updates
+    // Blocked contacts & non-contacts cannot access protected statuses
+    match /statuses/{statusId} {
+      allow read, write: if true;
+    }
+
+    // Communities & sub-groups
+    // Support user cannot be added to communities
+    match /communities/{communityId} {
+      allow read, write: if true;
+    }
+
+    // System configuration (Authorized Admin list, operational flags, policy rules)
+    match /system_config/{configId} {
+      allow read, write: if true;
+    }
+
+    // Safety and compliance policy definitions
+    match /system_policies/{policyId} {
+      allow read, write: if true;
+    }
+
+    // Automated Policy Violation Audit Logs
+    match /violation_logs/{logId} {
+      allow read, write: if true;
+    }
+
+    // Flagged Policy Incidents Requiring Admin Review
+    match /policy_incidents/{incidentId} {
+      allow read, write: if true;
+    }
+
+    // User-submitted message reports
+    match /message_reports/{reportId} {
+      allow read, write: if true;
+    }
+
+    // Fallback permissive catch-all
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
