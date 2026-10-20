@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Message, UserProfile } from '../../types';
 import { MessageBubble } from './MessageBubble';
 import { formatMessageDate } from '../../utils/formatters';
-import { Lock } from 'lucide-react';
+import { Lock, ChevronDown } from 'lucide-react';
 
 interface MessageListProps {
   messages: Message[];
@@ -41,6 +41,8 @@ export const MessageList: React.FC<MessageListProps> = ({
   onViewMedia,
 }) => {
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
 
   // Single active menu coordinator: only one message menu/modal can be open at a time
   const [activeMenuMessageId, setActiveMenuMessageId] = useState<string | null>(null);
@@ -66,6 +68,17 @@ export const MessageList: React.FC<MessageListProps> = ({
     setActiveMenuMode(null);
   };
 
+  const handleScroll = () => {
+    if (!containerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+    const isUp = scrollHeight - scrollTop - clientHeight > 180;
+    setShowScrollBottom(isUp);
+  };
+
+  const scrollToBottom = () => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   useEffect(() => {
     if (!isSelectionMode) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -73,7 +86,11 @@ export const MessageList: React.FC<MessageListProps> = ({
   }, [messages.length, isSelectionMode]);
 
   return (
-    <div className="flex-1 overflow-y-auto px-2 sm:px-4 py-4 space-y-1 select-none">
+    <div 
+      ref={containerRef}
+      onScroll={handleScroll}
+      className="flex-1 overflow-y-auto px-2 sm:px-4 py-4 space-y-1 select-none relative scroll-smooth"
+    >
       {/* End-to-End Encryption Notice Banner */}
       <div className="flex justify-center mb-4">
         <div className="bg-[#182229]/80 border border-[#233138] rounded-xl px-4 py-2 text-center max-w-md shadow-sm">
@@ -138,6 +155,19 @@ export const MessageList: React.FC<MessageListProps> = ({
       })}
 
       <div ref={bottomRef} />
+
+      {/* Floating Scroll to Bottom Button */}
+      {showScrollBottom && (
+        <button
+          type="button"
+          onClick={scrollToBottom}
+          className="fixed sm:absolute bottom-20 sm:bottom-24 right-4 sm:right-6 z-20 p-2.5 rounded-full bg-[#202c33]/90 hover:bg-[#2a3942] active:scale-90 border border-white/15 text-white shadow-2xl backdrop-blur-xl transition-all cursor-pointer animate-scale-in flex items-center justify-center group"
+          title="Scroll to latest messages"
+          aria-label="Scroll to bottom"
+        >
+          <ChevronDown className="w-5 h-5 text-white group-hover:text-[#00a884] transition-colors" />
+        </button>
+      )}
     </div>
   );
 };

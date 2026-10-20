@@ -360,8 +360,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
 
         {/* In-Chat Message Search Bar */}
         {isSearchingMessages && (
-          <div className="h-14 px-4 bg-[#182229] border-b border-[#2e3b44] flex items-center justify-between gap-3 animate-slide-down z-20 select-none">
-            <div className="flex items-center gap-2 flex-1 max-w-xl bg-[#111b21] px-3 py-1.5 rounded-xl border border-[#2e3b44]">
+          <div className="h-14 px-3 sm:px-4 bg-[#182229]/95 backdrop-blur-2xl border-b border-white/10 flex items-center justify-between gap-2.5 animate-slide-down z-20 select-none shadow-md">
+            <div className="flex items-center gap-2 flex-1 max-w-xl bg-white/[0.06] hover:bg-white/[0.09] focus-within:bg-white/[0.12] border border-white/15 focus-within:border-[#00a884]/60 px-3 py-1.5 rounded-2xl transition-all shadow-inner">
               <Search className="w-4 h-4 text-[#8696a0] flex-shrink-0" />
               <input
                 type="text"
@@ -375,21 +375,21 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="text-[#8696a0] hover:text-white p-0.5 cursor-pointer"
+                  className="text-[#8696a0] hover:text-white p-0.5 cursor-pointer transition"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
 
-            <div className="flex items-center gap-1 sm:gap-2 text-xs text-[#8696a0]">
+            <div className="flex items-center gap-1 sm:gap-1.5 text-xs text-[#8696a0]">
               {searchQuery.trim() ? (
                 searchMatches.length > 0 ? (
-                  <span className="text-white font-mono text-xs whitespace-nowrap">
+                  <span className="text-white font-mono text-[11px] sm:text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold whitespace-nowrap">
                     {activeMatchIndex + 1} of {searchMatches.length}
                   </span>
                 ) : (
-                  <span className="text-red-400 text-xs whitespace-nowrap">No matches</span>
+                  <span className="text-red-400 text-[11px] sm:text-xs px-2 py-0.5 rounded-full bg-red-500/20 font-semibold whitespace-nowrap">No matches</span>
                 )
               ) : null}
 
@@ -397,7 +397,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
                 type="button"
                 onClick={handlePrevMatch}
                 disabled={searchMatches.length === 0}
-                className="p-1.5 rounded-lg hover:bg-[#202c33] hover:text-white disabled:opacity-30 transition cursor-pointer"
+                className="p-1.5 rounded-xl hover:bg-white/10 hover:text-white disabled:opacity-30 transition cursor-pointer active:scale-95"
                 title="Previous match"
               >
                 <ChevronUp className="w-4 h-4" />
@@ -407,7 +407,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
                 type="button"
                 onClick={handleNextMatch}
                 disabled={searchMatches.length === 0}
-                className="p-1.5 rounded-lg hover:bg-[#202c33] hover:text-white disabled:opacity-30 transition cursor-pointer"
+                className="p-1.5 rounded-xl hover:bg-white/10 hover:text-white disabled:opacity-30 transition cursor-pointer active:scale-95"
                 title="Next match"
               >
                 <ChevronDown className="w-4 h-4" />
@@ -420,7 +420,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
                   setSearchQuery('');
                   setSearchMatches([]);
                 }}
-                className="p-1.5 rounded-lg hover:bg-[#202c33] hover:text-white transition cursor-pointer ml-1"
+                className="p-1.5 rounded-xl hover:bg-white/10 hover:text-white transition cursor-pointer ml-1 active:scale-95"
                 title="Close search"
               >
                 <X className="w-4 h-4" />

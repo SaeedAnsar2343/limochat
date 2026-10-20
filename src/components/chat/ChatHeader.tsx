@@ -121,104 +121,97 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   const avatarUrl = chat.type === 'direct' ? otherUser?.photoURL || chat.avatar : chat.avatar;
 
   return (
-    <div className="h-16 px-4 bg-[#202c33] border-b border-[#2e3b44] flex items-center justify-between select-none z-10">
+    <div className="h-16 px-3 sm:px-4 bg-[#202c33]/90 dark:bg-[#202c33]/90 backdrop-blur-2xl border-b border-white/[0.08] flex items-center justify-between select-none z-10 shadow-sm transition-all">
       {/* Left: Back button & Info */}
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0 pr-2">
         <button
           onClick={onBack}
-          className="p-1 rounded-full text-[#8696a0] hover:text-white hover:bg-[#2a3942] transition md:hidden"
+          className="p-2 rounded-full text-[#8696a0] hover:text-white hover:bg-white/10 active:bg-white/20 active:scale-95 transition-all md:hidden -ml-1 cursor-pointer flex-shrink-0 touch-manipulation"
           title="Back to chats"
+          aria-label="Back to chats"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
 
         <div
           onClick={onToggleInfo}
-          className="flex items-center gap-3 cursor-pointer group min-w-0"
+          className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group min-w-0 active:opacity-80 transition"
         >
-          <Avatar
-            src={avatarUrl}
-            name={displayName}
-            size="md"
-            isOnline={chat.type === 'direct' ? otherUser?.isOnline : undefined}
-          />
+          <div className="relative flex-shrink-0">
+            <Avatar
+              src={avatarUrl}
+              name={displayName}
+              size="md"
+              isOnline={chat.type === 'direct' ? otherUser?.isOnline : undefined}
+            />
+          </div>
 
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <h3 className="font-semibold text-white text-sm truncate group-hover:underline">
+              <h3 className="font-semibold text-white text-sm sm:text-[15px] truncate group-hover:text-[#00a884] transition-colors">
                 {displayName}
               </h3>
               {chat.type === 'direct' && otherUser?.phoneNumber && (
-                <span className="text-[10px] text-[#8696a0] bg-[#111b21] px-1.5 py-0.5 rounded border border-[#2e3b44] font-mono hidden sm:inline">
+                <span className="text-[10px] text-[#8696a0] bg-[#111b21] px-1.5 py-0.5 rounded border border-[#2e3b44] font-mono hidden md:inline">
                   {otherUser.phoneNumber}
                 </span>
               )}
             </div>
-            <div className="text-xs truncate">{getSubtitle()}</div>
+            <div className="text-[11px] sm:text-xs truncate">{getSubtitle()}</div>
           </div>
         </div>
       </div>
 
-      {/* Right: Actions (Video, Audio call, info) */}
-      <div className="flex items-center gap-1 text-[#8696a0]">
+      {/* Right: Actions (Video Call, Audio Call, 3-Dots Menu) */}
+      <div className="flex items-center gap-1 sm:gap-1.5 text-[#8696a0]">
         <button
           onClick={isBlocked ? undefined : onStartVideoCall}
           disabled={isBlocked}
-          className={`p-2.5 rounded-full transition ${
-            isBlocked ? 'opacity-30 cursor-not-allowed' : 'hover:text-white hover:bg-[#2a3942] cursor-pointer'
+          className={`p-2 sm:p-2.5 rounded-full transition-all active:scale-95 ${
+            isBlocked ? 'opacity-30 cursor-not-allowed' : 'hover:text-white hover:bg-white/10 active:bg-white/15 cursor-pointer'
           }`}
           title={isBlocked ? "Calls disabled (Contact blocked)" : "Start Video Call"}
         >
-          <Video className="w-5 h-5" />
+          <Video className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
 
         <button
           onClick={isBlocked ? undefined : onStartAudioCall}
           disabled={isBlocked}
-          className={`p-2.5 rounded-full transition ${
-            isBlocked ? 'opacity-30 cursor-not-allowed' : 'hover:text-white hover:bg-[#2a3942] cursor-pointer'
+          className={`p-2 sm:p-2.5 rounded-full transition-all active:scale-95 ${
+            isBlocked ? 'opacity-30 cursor-not-allowed' : 'hover:text-white hover:bg-white/10 active:bg-white/15 cursor-pointer'
           }`}
           title={isBlocked ? "Calls disabled (Contact blocked)" : "Start Audio Call"}
         >
-          <Phone className="w-5 h-5" />
+          <Phone className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
 
-        {onOpenSearch && (
-          <button
-            onClick={onOpenSearch}
-            className="p-2.5 rounded-full hover:text-white hover:bg-[#2a3942] transition cursor-pointer"
-            title="Search Messages"
-          >
-            <Search className="w-5 h-5" />
-          </button>
-        )}
-
-        {/* 3-Dots More Menu Trigger */}
+        {/* 3-Dots More Menu Trigger (Search is accessible here) */}
         <div className="relative">
           <button
             onClick={() => setShowMoreMenu(!showMoreMenu)}
-            className="p-2.5 rounded-full hover:text-white hover:bg-[#2a3942] transition cursor-pointer"
+            className="p-2 sm:p-2.5 rounded-full hover:text-white hover:bg-white/10 active:bg-white/15 transition-all active:scale-95 cursor-pointer"
             title="More Options"
           >
-            <MoreVertical className="w-5 h-5" />
+            <MoreVertical className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
 
           {showMoreMenu && (
             <>
               {/* Outside Touch / Click Backdrop */}
               <div
-                className="fixed inset-0 z-20 cursor-default"
+                className="fixed inset-0 z-40 cursor-default"
                 onClick={() => setShowMoreMenu(false)}
               />
 
               {/* Dropdown Menu */}
               <div
-                className="absolute right-0 top-11 z-30 w-52 bg-[#233138] border border-[#2e3b44] rounded-2xl shadow-2xl py-1 text-xs text-[#d1d7db] animate-scale-in"
+                className="absolute right-0 top-11 z-50 w-52 bg-[#233138]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl py-1.5 text-xs text-[#d1d7db] animate-scale-in"
                 onClick={() => setShowMoreMenu(false)}
               >
                 <button
                   onClick={onToggleInfo}
-                  className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer"
+                  className="w-full px-3.5 py-2.5 text-left hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer"
                 >
                   <Info className="w-4 h-4 text-[#00a884]" />
                   <span>{chat.type === 'direct' ? 'Contact info' : 'Group info'}</span>
@@ -227,7 +220,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 {onOpenSearch && (
                   <button
                     onClick={onOpenSearch}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer"
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer"
                   >
                     <Search className="w-4 h-4 text-emerald-400" />
                     <span>Search messages</span>
@@ -237,7 +230,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 {onOpenJumpToDate && (
                   <button
                     onClick={onOpenJumpToDate}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer"
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer"
                   >
                     <Calendar className="w-4 h-4 text-blue-400" />
                     <span>Jump to date</span>
@@ -247,7 +240,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 {onToggleStarredFilter && (
                   <button
                     onClick={onToggleStarredFilter}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 text-amber-400 transition cursor-pointer"
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-white/10 flex items-center gap-2.5 text-amber-400 transition cursor-pointer"
                   >
                     <Star className={`w-4 h-4 ${isFilteringStarred ? 'fill-amber-400' : ''}`} />
                     <span>{isFilteringStarred ? 'Show all messages' : 'Starred messages'}</span>
@@ -257,7 +250,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 {onEnterSelectionMode && (
                   <button
                     onClick={onEnterSelectionMode}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer"
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer"
                   >
                     <CheckSquare className="w-4 h-4 text-cyan-400" />
                     <span>Select messages</span>
@@ -267,7 +260,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 {onClearChat && (
                   <button
                     onClick={onClearChat}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 text-amber-300 transition cursor-pointer"
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-white/10 flex items-center gap-2.5 text-amber-300 transition cursor-pointer"
                   >
                     <RotateCcw className="w-4 h-4" />
                     <span>Clear chat history</span>
@@ -277,14 +270,14 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 {onToggleBlock && chat.type === 'direct' && (
                   <button
                     onClick={onToggleBlock}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 text-red-400 transition cursor-pointer"
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-white/10 flex items-center gap-2.5 text-red-400 transition cursor-pointer"
                   >
                     <Ban className="w-4 h-4" />
                     <span>{isBlocked ? 'Unblock contact' : 'Block contact'}</span>
                   </button>
                 )}
 
-                <div className="border-t border-[#2e3b44] my-1" />
+                <div className="border-t border-white/10 my-1" />
 
                 {onDeleteChat && (
                   <button

@@ -253,10 +253,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   }
 
   return (
-    <div className="p-2 sm:p-3 bg-[#182229]/80 dark:bg-[#182229]/80 backdrop-blur-2xl backdrop-saturate-150 border-t border-white/[0.12] flex flex-col gap-2 relative message-input-bar shadow-[0_-8px_32px_rgba(0,0,0,0.35)]">
+    <div className="px-2.5 sm:px-4 py-2 sm:py-3 bg-[#182229]/90 dark:bg-[#182229]/90 backdrop-blur-2xl backdrop-saturate-150 border-t border-white/[0.1] flex flex-col gap-2 relative message-input-bar shadow-[0_-8px_32px_rgba(0,0,0,0.35)] transition-all">
       {/* Quoted Message Preview (Drag-to-reply or quote) */}
       {replyingTo && (
-        <div className="bg-[#111b21]/80 backdrop-blur-md border-l-4 border-[#00a884] rounded-r-xl p-2.5 flex items-start justify-between animate-fade-in text-xs shadow-md">
+        <div className="bg-[#111b21]/90 backdrop-blur-md border-l-4 border-[#00a884] rounded-r-2xl p-2.5 flex items-start justify-between animate-fade-in text-xs shadow-lg">
           <div className="flex items-start gap-2.5 min-w-0">
             <Reply className="w-4 h-4 text-[#00a884] flex-shrink-0 mt-0.5" />
             <div className="min-w-0">
@@ -270,7 +270,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           </div>
           <button
             onClick={onClearReply}
-            className="p-1 rounded-full text-[#8696a0] hover:text-white hover:bg-[#2a3942] transition"
+            className="p-1 rounded-full text-[#8696a0] hover:text-white hover:bg-white/10 transition cursor-pointer"
+            title="Cancel reply"
           >
             <X className="w-4 h-4" />
           </button>
@@ -322,7 +323,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         </div>
       )}
 
-      {/* Main Bar with Glassmorphic elements */}
+      {/* Main Send Bar Dock with Glassmorphic Capsule */}
       <div className="flex items-center gap-1.5 sm:gap-2">
         {/* Emoji Button */}
         <button
@@ -330,56 +331,70 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             setShowEmojiPicker(!showEmojiPicker);
             setShowAttachMenu(false);
           }}
-          className={`p-2 sm:p-2.5 rounded-full transition-all cursor-pointer ${
+          className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-90 touch-manipulation flex-shrink-0 ${
             showEmojiPicker 
               ? 'text-[#00a884] bg-[#00a884]/20 border border-[#00a884]/40 shadow-[0_0_12px_rgba(0,168,132,0.35)]' 
-              : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-white/[0.06]'
+              : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-white/[0.08]'
           }`}
-          title="Emojis"
+          title="Emojis, stickers & GIFs"
+          aria-label="Emojis and stickers"
         >
           <Smile className="w-5 h-5" />
         </button>
 
         {/* Attachment Button */}
-        <div className="relative">
+        <div className="relative flex-shrink-0">
           <button
             onClick={() => {
               setShowAttachMenu(!showAttachMenu);
               setShowEmojiPicker(false);
             }}
-            className={`p-2 sm:p-2.5 rounded-full transition-all cursor-pointer ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-90 touch-manipulation ${
               showAttachMenu 
                 ? 'text-[#00a884] bg-[#00a884]/20 border border-[#00a884]/40 shadow-[0_0_12px_rgba(0,168,132,0.35)]' 
-                : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-white/[0.06]'
+                : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-white/[0.08]'
             }`}
             title="Attach file or photo"
+            aria-label="Attach media"
           >
             <Paperclip className="w-5 h-5" />
           </button>
 
           {/* Attach Popup Menu */}
           {showAttachMenu && (
-            <div className="absolute bottom-14 left-0 z-30 bg-[#233138]/95 backdrop-blur-2xl border border-white/10 rounded-2xl p-3 shadow-2xl flex flex-col gap-2 w-48 animate-scale-in">
-              <button
-                onClick={() => imageInputRef.current?.click()}
-                className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.06] text-xs text-[#d1d7db] transition font-medium text-left cursor-pointer"
-              >
-                <div className="p-2 rounded-lg bg-purple-500/20 text-purple-400">
-                  <Image className="w-4 h-4" />
-                </div>
-                <span>Photos & Videos</span>
-              </button>
+            <>
+              <div 
+                className="fixed inset-0 z-30 cursor-default" 
+                onClick={() => setShowAttachMenu(false)} 
+              />
+              <div className="absolute bottom-14 left-0 z-40 bg-[#233138]/95 backdrop-blur-2xl border border-white/10 rounded-2xl p-2.5 shadow-2xl flex flex-col gap-1.5 w-52 animate-scale-in">
+                <button
+                  onClick={() => imageInputRef.current?.click()}
+                  className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/[0.08] text-xs text-[#d1d7db] hover:text-white transition font-medium text-left cursor-pointer group"
+                >
+                  <div className="p-2 rounded-xl bg-purple-500/20 text-purple-400 group-hover:scale-105 transition-transform">
+                    <Image className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-semibold">Photos & Videos</div>
+                    <div className="text-[10px] text-[#8696a0]">Share images or clips</div>
+                  </div>
+                </button>
 
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.06] text-xs text-[#d1d7db] transition font-medium text-left cursor-pointer"
-              >
-                <div className="p-2 rounded-lg bg-blue-500/20 text-blue-400">
-                  <FileText className="w-4 h-4" />
-                </div>
-                <span>Document</span>
-              </button>
-            </div>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/[0.08] text-xs text-[#d1d7db] hover:text-white transition font-medium text-left cursor-pointer group"
+                >
+                  <div className="p-2 rounded-xl bg-blue-500/20 text-blue-400 group-hover:scale-105 transition-transform">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-semibold">Document</div>
+                    <div className="text-[10px] text-[#8696a0]">PDF, Word, zip files</div>
+                  </div>
+                </button>
+              </div>
+            </>
           )}
         </div>
 
@@ -387,7 +402,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         <input
           type="file"
           ref={imageInputRef}
-          accept="image/*"
+          accept="image/*,video/*"
           className="hidden"
           onChange={handleImageSelect}
         />
@@ -400,7 +415,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         />
 
         {/* Text Input with Glassmorphic pill */}
-        <div className="flex-1 bg-white/[0.06] hover:bg-white/[0.09] focus-within:bg-white/[0.12] border border-white/10 focus-within:border-[#00a884]/60 rounded-2xl px-3.5 sm:px-4 py-1.5 sm:py-2 text-sm backdrop-blur-md transition-all flex items-center shadow-inner">
+        <div className="flex-1 bg-white/[0.07] dark:bg-white/[0.07] hover:bg-white/[0.1] focus-within:bg-white/[0.12] border border-white/15 focus-within:border-[#00a884]/70 rounded-2xl sm:rounded-3xl px-3.5 sm:px-4 py-2 sm:py-2.5 backdrop-blur-md transition-all flex items-center shadow-inner">
           <input
             ref={inputRef}
             type="text"
@@ -408,7 +423,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
-            className="w-full bg-transparent text-white placeholder-[#8696a0] text-xs sm:text-sm focus:outline-none message-input-field"
+            className="w-full bg-transparent text-white dark:text-white placeholder-gray-400 dark:placeholder-[#8696a0] text-sm sm:text-[15px] focus:outline-none message-input-field"
           />
         </div>
 
@@ -416,18 +431,20 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         {inputText.trim() ? (
           <button
             onClick={handleSend}
-            className="p-2 sm:p-2.5 rounded-full bg-gradient-to-tr from-[#00a884] to-[#05c49b] hover:brightness-110 active:scale-95 text-white transition shadow-[0_0_18px_rgba(0,168,132,0.45)] cursor-pointer flex items-center justify-center flex-shrink-0"
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-gradient-to-tr from-[#00a884] via-[#05c49b] to-[#14e2b0] hover:brightness-110 active:scale-90 text-white transition-all shadow-[0_0_20px_rgba(0,168,132,0.55)] cursor-pointer flex items-center justify-center flex-shrink-0 animate-scale-in touch-manipulation group"
             title="Send Message"
+            aria-label="Send message"
           >
-            <Send className="w-4 h-4 ml-0.5" />
+            <Send className="w-4 h-4 sm:w-5 sm:h-5 ml-0.5 group-hover:translate-x-0.5 transition-transform" />
           </button>
         ) : (
           <button
             onClick={() => setIsRecordingVoice(true)}
-            className="p-2 sm:p-2.5 rounded-full text-[#8696a0] hover:text-[#00a884] hover:bg-[#00a884]/15 active:scale-95 transition cursor-pointer flex-shrink-0"
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/[0.07] hover:bg-[#00a884]/20 text-[#8696a0] hover:text-[#00a884] active:scale-90 transition-all border border-white/10 hover:border-[#00a884]/40 cursor-pointer flex items-center justify-center flex-shrink-0 touch-manipulation group shadow-sm"
             title="Record Voice Note"
+            aria-label="Record voice note"
           >
-            <Mic className="w-5 h-5" />
+            <Mic className="w-5 h-5 group-hover:scale-110 transition-transform" />
           </button>
         )}
       </div>
