@@ -242,7 +242,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   if (isRecordingVoice) {
     return (
-      <div className="p-3 bg-[#202c33] border-t border-[#2e3b44] message-input-bar">
+      <div className="p-3 bg-[#182229]/80 backdrop-blur-2xl border-t border-white/10 shadow-[0_-8px_30px_rgba(0,0,0,0.35)] message-input-bar">
         <VoiceRecorder
           onSendVoice={handleSendVoiceNote}
           onCancel={() => setIsRecordingVoice(false)}
@@ -252,10 +252,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   }
 
   return (
-    <div className="p-3 bg-[#202c33] border-t border-[#2e3b44] flex flex-col gap-2 relative message-input-bar">
+    <div className="p-2 sm:p-3 bg-[#182229]/80 dark:bg-[#182229]/80 backdrop-blur-2xl backdrop-saturate-150 border-t border-white/[0.12] flex flex-col gap-2 relative message-input-bar shadow-[0_-8px_32px_rgba(0,0,0,0.35)]">
       {/* Quoted Message Preview (Drag-to-reply or quote) */}
       {replyingTo && (
-        <div className="bg-[#182229] border-l-4 border-[#00a884] rounded-r-xl p-2.5 flex items-start justify-between animate-fade-in text-xs shadow-md">
+        <div className="bg-[#111b21]/80 backdrop-blur-md border-l-4 border-[#00a884] rounded-r-xl p-2.5 flex items-start justify-between animate-fade-in text-xs shadow-md">
           <div className="flex items-start gap-2.5 min-w-0">
             <Reply className="w-4 h-4 text-[#00a884] flex-shrink-0 mt-0.5" />
             <div className="min-w-0">
@@ -278,8 +278,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
       {/* Group @ Mention Floating Tagging Sheet */}
       {showMentionList && filteredMembers.length > 0 && (
-        <div className="absolute bottom-full left-3 right-3 sm:left-4 sm:max-w-sm mb-2 bg-[#202c33] border border-[#2e3b44] rounded-2xl shadow-2xl overflow-hidden z-40 max-h-56 flex flex-col animate-scale-in">
-          <div className="px-3.5 py-2 bg-[#111b21] border-b border-[#2e3b44] flex items-center justify-between text-xs font-semibold text-[#8696a0]">
+        <div className="absolute bottom-full left-3 right-3 sm:left-4 sm:max-w-sm mb-2 bg-[#202c33]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-40 max-h-56 flex flex-col animate-scale-in">
+          <div className="px-3.5 py-2 bg-[#111b21]/90 border-b border-[#2e3b44] flex items-center justify-between text-xs font-semibold text-[#8696a0]">
             <div className="flex items-center gap-1.5 text-[#00a884]">
               <AtSign className="w-3.5 h-3.5" />
               <span>Tag Group Member</span>
@@ -321,16 +321,18 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         </div>
       )}
 
-      {/* Main Bar */}
-      <div className="flex items-center gap-2">
+      {/* Main Bar with Glassmorphic elements */}
+      <div className="flex items-center gap-1.5 sm:gap-2">
         {/* Emoji Button */}
         <button
           onClick={() => {
             setShowEmojiPicker(!showEmojiPicker);
             setShowAttachMenu(false);
           }}
-          className={`p-2.5 rounded-full transition ${
-            showEmojiPicker ? 'text-[#00a884] bg-[#2a3942]' : 'text-[#8696a0] hover:text-[#d1d7db]'
+          className={`p-2 sm:p-2.5 rounded-full transition-all cursor-pointer ${
+            showEmojiPicker 
+              ? 'text-[#00a884] bg-[#00a884]/20 border border-[#00a884]/40 shadow-[0_0_12px_rgba(0,168,132,0.35)]' 
+              : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-white/[0.06]'
           }`}
           title="Emojis"
         >
@@ -344,8 +346,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               setShowAttachMenu(!showAttachMenu);
               setShowEmojiPicker(false);
             }}
-            className={`p-2.5 rounded-full transition ${
-              showAttachMenu ? 'text-[#00a884] bg-[#2a3942]' : 'text-[#8696a0] hover:text-[#d1d7db]'
+            className={`p-2 sm:p-2.5 rounded-full transition-all cursor-pointer ${
+              showAttachMenu 
+                ? 'text-[#00a884] bg-[#00a884]/20 border border-[#00a884]/40 shadow-[0_0_12px_rgba(0,168,132,0.35)]' 
+                : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-white/[0.06]'
             }`}
             title="Attach file or photo"
           >
@@ -354,12 +358,12 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
           {/* Attach Popup Menu */}
           {showAttachMenu && (
-            <div className="absolute bottom-14 left-0 z-30 bg-[#233138] border border-[#2e3b44] rounded-2xl p-3 shadow-2xl flex flex-col gap-2 w-48 animate-scale-in">
+            <div className="absolute bottom-14 left-0 z-30 bg-[#233138]/95 backdrop-blur-2xl border border-white/10 rounded-2xl p-3 shadow-2xl flex flex-col gap-2 w-48 animate-scale-in">
               <button
                 onClick={() => imageInputRef.current?.click()}
-                className="flex items-center gap-3 p-2 rounded-xl hover:bg-[#182229] text-xs text-[#d1d7db] transition font-medium text-left"
+                className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.06] text-xs text-[#d1d7db] transition font-medium text-left cursor-pointer"
               >
-                <div className="p-2 rounded-lg bg-purple-500/15 text-purple-400">
+                <div className="p-2 rounded-lg bg-purple-500/20 text-purple-400">
                   <Image className="w-4 h-4" />
                 </div>
                 <span>Photos & Videos</span>
@@ -367,9 +371,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-3 p-2 rounded-xl hover:bg-[#182229] text-xs text-[#d1d7db] transition font-medium text-left"
+                className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.06] text-xs text-[#d1d7db] transition font-medium text-left cursor-pointer"
               >
-                <div className="p-2 rounded-lg bg-blue-500/15 text-blue-400">
+                <div className="p-2 rounded-lg bg-blue-500/20 text-blue-400">
                   <FileText className="w-4 h-4" />
                 </div>
                 <span>Document</span>
@@ -394,22 +398,24 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           onChange={handleFileSelect}
         />
 
-        {/* Text Input */}
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputText}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder="Type a message..."
-          className="flex-1 bg-[#2a3942] text-[#d1d7db] placeholder-[#8696a0] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#00a884] transition message-input-field"
-        />
+        {/* Text Input with Glassmorphic pill */}
+        <div className="flex-1 bg-white/[0.06] hover:bg-white/[0.09] focus-within:bg-white/[0.12] border border-white/10 focus-within:border-[#00a884]/60 rounded-2xl px-3.5 sm:px-4 py-1.5 sm:py-2 text-sm backdrop-blur-md transition-all flex items-center shadow-inner">
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputText}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Type a message..."
+            className="w-full bg-transparent text-white placeholder-[#8696a0] text-xs sm:text-sm focus:outline-none message-input-field"
+          />
+        </div>
 
         {/* Voice Note or Send Button */}
         {inputText.trim() ? (
           <button
             onClick={handleSend}
-            className="p-2.5 rounded-full bg-[#00a884] hover:bg-[#02906f] text-white transition shadow-md cursor-pointer flex items-center justify-center flex-shrink-0"
+            className="p-2 sm:p-2.5 rounded-full bg-gradient-to-tr from-[#00a884] to-[#05c49b] hover:brightness-110 active:scale-95 text-white transition shadow-[0_0_18px_rgba(0,168,132,0.45)] cursor-pointer flex items-center justify-center flex-shrink-0"
             title="Send Message"
           >
             <Send className="w-4 h-4 ml-0.5" />
@@ -417,7 +423,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         ) : (
           <button
             onClick={() => setIsRecordingVoice(true)}
-            className="p-2.5 rounded-full text-[#8696a0] hover:text-[#00a884] hover:bg-[#2a3942] transition flex-shrink-0"
+            className="p-2 sm:p-2.5 rounded-full text-[#8696a0] hover:text-[#00a884] hover:bg-[#00a884]/15 active:scale-95 transition cursor-pointer flex-shrink-0"
             title="Record Voice Note"
           >
             <Mic className="w-5 h-5" />

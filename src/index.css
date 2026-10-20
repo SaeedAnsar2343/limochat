@@ -669,3 +669,53 @@
 .light-theme .contact-info-drawer .text-\[\#8696a0\] {
   color: #64748b !important;
 }
+
+/* =========================================================================
+   ULTRA-MODERN GLASSMORPHISM MOBILE BARS (Floating Dock & Chat Input)
+   ========================================================================= */
+.mobile-glass-dock {
+  background: rgba(24, 34, 41, 0.78);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+}
+
+.message-input-bar {
+  background: rgba(24, 34, 41, 0.82);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+}
+
+.light-theme .mobile-glass-dock {
+  background: rgba(255, 255, 255, 0.82) !important;
+  backdrop-filter: blur(28px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(190%) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08), inset 0 1px 1px rgba(255, 255, 255, 0.9) !important;
+}
+
+.light-theme .mobile-glass-dock span {
+  color: #54656f;
+}
+
+.light-theme .mobile-glass-dock [class*="text-white"] {
+  color: #111b21 !important;
+}
+
+.light-theme .message-input-bar {
+  background: rgba(240, 242, 245, 0.88) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border-top-color: rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 -8px 25px rgba(0, 0, 0, 0.06) !important;
+}
+
+.light-theme .message-input-field {
+  color: #111b21 !important;
+}
+
+.light-theme .message-input-bar [class*="bg-white\/\[0\.06\]"],
+.light-theme .message-input-bar [class*="bg-white\/\[0\.07\]"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #111b21 !important;
+}

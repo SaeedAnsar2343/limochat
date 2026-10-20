@@ -564,70 +564,112 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
           </div>
         )}
 
-        {/* Mobile Glassy Bottom Navigation Bar (Apple Style) */}
-        <div className="md:hidden h-16 bg-[#182229]/85 backdrop-blur-2xl border-t border-white/10 flex items-center justify-around px-2 flex-shrink-0 z-30">
-          <button
-            onClick={() => {
-              setActiveRail('chats');
-              setViewingArchived(false);
-            }}
-            className={`flex flex-col items-center gap-1 transition cursor-pointer ${
-              activeRail === 'chats' ? 'text-[#00a884]' : 'text-[#8696a0]'
-            }`}
+        {/* Mobile Glassy Bottom Navigation Bar (Modern Apple / VisionOS Glassmorphism Dock) */}
+        <div className="md:hidden flex-shrink-0 z-30 px-3 pb-3 pt-1 pointer-events-none sticky bottom-0">
+          <nav 
+            aria-label="Mobile Navigation"
+            className="pointer-events-auto h-16 bg-[#182229]/80 dark:bg-[#182229]/80 backdrop-blur-2xl backdrop-saturate-150 border border-white/[0.12] rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.18)] flex items-center justify-around px-2 relative overflow-hidden mobile-glass-dock"
           >
-            <div className="relative">
-              <MessageSquare className="w-5 h-5" />
-              {totalUnreadCount > 0 && (
-                <span className="absolute -top-1 -right-2 bg-[#00a884] text-white text-[9px] font-bold px-1 rounded-full">
-                  {totalUnreadCount}
-                </span>
+            {/* Top Specular Ambient Highlight */}
+            <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/35 to-transparent pointer-events-none" />
+            <div className="absolute inset-x-0 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-[#00a884]/25 to-transparent pointer-events-none" />
+
+            {/* Chats */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveRail('chats');
+                setViewingArchived(false);
+              }}
+              className={`flex flex-col items-center justify-center transition-all duration-200 cursor-pointer active:scale-95 ${
+                activeRail === 'chats'
+                  ? 'bg-gradient-to-b from-[#00a884]/25 to-[#00a884]/10 border border-[#00a884]/40 shadow-[0_0_16px_rgba(0,168,132,0.35)] text-white px-3 py-1 rounded-2xl scale-105'
+                  : 'text-[#8696a0] hover:text-white px-2.5 py-1 rounded-2xl hover:bg-white/[0.04]'
+              }`}
+            >
+              <div className="relative">
+                <MessageSquare className={`w-5 h-5 transition-transform duration-200 ${activeRail === 'chats' ? 'text-[#00a884]' : ''}`} />
+                {totalUnreadCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2.5 bg-gradient-to-r from-[#00a884] to-[#02906f] text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full shadow-[0_2px_8px_rgba(0,168,132,0.6)] ring-2 ring-[#111b21]">
+                    {totalUnreadCount}
+                  </span>
+                )}
+              </div>
+              <span className={`text-[10px] font-semibold mt-0.5 ${activeRail === 'chats' ? 'text-white' : ''}`}>Chats</span>
+              {activeRail === 'chats' && (
+                <span className="w-1 h-1 rounded-full bg-[#00a884] shadow-[0_0_6px_#00a884] mt-0.5" />
               )}
-            </div>
-            <span className="text-[10px] font-medium">Chats</span>
-          </button>
+            </button>
 
-          <button
-            onClick={() => setActiveRail('calls')}
-            className={`flex flex-col items-center gap-1 transition cursor-pointer ${
-              activeRail === 'calls' ? 'text-[#00a884]' : 'text-[#8696a0]'
-            }`}
-          >
-            <Phone className="w-5 h-5" />
-            <span className="text-[10px] font-medium">Calls</span>
-          </button>
-
-          <button
-            onClick={() => setActiveRail('status')}
-            className={`flex flex-col items-center gap-1 transition cursor-pointer ${
-              activeRail === 'status' ? 'text-[#00a884]' : 'text-[#8696a0]'
-            }`}
-          >
-            <div className="relative">
-              <CircleDot className="w-5 h-5" />
-              {hasUnseenStatus && (
-                <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#00a884]" />
+            {/* Calls */}
+            <button
+              type="button"
+              onClick={() => setActiveRail('calls')}
+              className={`flex flex-col items-center justify-center transition-all duration-200 cursor-pointer active:scale-95 ${
+                activeRail === 'calls'
+                  ? 'bg-gradient-to-b from-[#00a884]/25 to-[#00a884]/10 border border-[#00a884]/40 shadow-[0_0_16px_rgba(0,168,132,0.35)] text-white px-3 py-1 rounded-2xl scale-105'
+                  : 'text-[#8696a0] hover:text-white px-2.5 py-1 rounded-2xl hover:bg-white/[0.04]'
+              }`}
+            >
+              <Phone className={`w-5 h-5 transition-transform duration-200 ${activeRail === 'calls' ? 'text-[#00a884]' : ''}`} />
+              <span className={`text-[10px] font-semibold mt-0.5 ${activeRail === 'calls' ? 'text-white' : ''}`}>Calls</span>
+              {activeRail === 'calls' && (
+                <span className="w-1 h-1 rounded-full bg-[#00a884] shadow-[0_0_6px_#00a884] mt-0.5" />
               )}
-            </div>
-            <span className="text-[10px] font-medium">Status</span>
-          </button>
+            </button>
 
-          <button
-            onClick={() => setActiveRail('communities')}
-            className={`flex flex-col items-center gap-1 transition cursor-pointer ${
-              activeRail === 'communities' ? 'text-[#00a884]' : 'text-[#8696a0]'
-            }`}
-          >
-            <Users2 className="w-5 h-5" />
-            <span className="text-[10px] font-medium">Communities</span>
-          </button>
+            {/* Status */}
+            <button
+              type="button"
+              onClick={() => setActiveRail('status')}
+              className={`flex flex-col items-center justify-center transition-all duration-200 cursor-pointer active:scale-95 ${
+                activeRail === 'status'
+                  ? 'bg-gradient-to-b from-[#00a884]/25 to-[#00a884]/10 border border-[#00a884]/40 shadow-[0_0_16px_rgba(0,168,132,0.35)] text-white px-3 py-1 rounded-2xl scale-105'
+                  : 'text-[#8696a0] hover:text-white px-2.5 py-1 rounded-2xl hover:bg-white/[0.04]'
+              }`}
+            >
+              <div className="relative">
+                <CircleDot className={`w-5 h-5 transition-transform duration-200 ${activeRail === 'status' ? 'text-[#00a884]' : ''}`} />
+                {hasUnseenStatus && (
+                  <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#00a884] ring-2 ring-[#111b21] animate-ping" />
+                )}
+                {hasUnseenStatus && (
+                  <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#00a884] ring-2 ring-[#111b21]" />
+                )}
+              </div>
+              <span className={`text-[10px] font-semibold mt-0.5 ${activeRail === 'status' ? 'text-white' : ''}`}>Status</span>
+              {activeRail === 'status' && (
+                <span className="w-1 h-1 rounded-full bg-[#00a884] shadow-[0_0_6px_#00a884] mt-0.5" />
+              )}
+            </button>
 
-          <button
-            onClick={() => setShowSettings(true)}
-            className="flex flex-col items-center gap-1 text-[#8696a0] hover:text-white transition cursor-pointer"
-          >
-            <Settings className="w-5 h-5" />
-            <span className="text-[10px] font-medium">Settings</span>
-          </button>
+            {/* Communities */}
+            <button
+              type="button"
+              onClick={() => setActiveRail('communities')}
+              className={`flex flex-col items-center justify-center transition-all duration-200 cursor-pointer active:scale-95 ${
+                activeRail === 'communities'
+                  ? 'bg-gradient-to-b from-[#00a884]/25 to-[#00a884]/10 border border-[#00a884]/40 shadow-[0_0_16px_rgba(0,168,132,0.35)] text-white px-3 py-1 rounded-2xl scale-105'
+                  : 'text-[#8696a0] hover:text-white px-2.5 py-1 rounded-2xl hover:bg-white/[0.04]'
+              }`}
+            >
+              <Users2 className={`w-5 h-5 transition-transform duration-200 ${activeRail === 'communities' ? 'text-[#00a884]' : ''}`} />
+              <span className={`text-[10px] font-semibold mt-0.5 ${activeRail === 'communities' ? 'text-white' : ''}`}>Groups</span>
+              {activeRail === 'communities' && (
+                <span className="w-1 h-1 rounded-full bg-[#00a884] shadow-[0_0_6px_#00a884] mt-0.5" />
+              )}
+            </button>
+
+            {/* Settings */}
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              className="flex flex-col items-center justify-center text-[#8696a0] hover:text-white px-2.5 py-1 rounded-2xl hover:bg-white/[0.04] transition-all duration-200 cursor-pointer active:scale-95"
+            >
+              <Settings className="w-5 h-5 transition-transform duration-200 hover:rotate-45" />
+              <span className="text-[10px] font-semibold mt-0.5">Settings</span>
+            </button>
+          </nav>
         </div>
       </div>
 
