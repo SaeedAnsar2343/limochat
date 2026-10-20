@@ -24,7 +24,7 @@ interface EmojiPickerDrawerProps {
 }
 
 // 🍋 1. LimoChat Exclusive Signature Emojis
-export const LIMO_EXCLUSIVE_EMOJIS = [
+const LIMO_EXCLUSIVE_EMOJIS = [
   { id: 'limo_lemon', name: 'Limo Lime', emoji: '🍋', subtitle: 'Official Mascot', badge: 'VIP Mascot', glow: 'from-emerald-500/30 to-lime-500/30', border: 'border-emerald-500/40', textColor: 'text-emerald-400' },
   { id: 'limo_vip', name: 'VIP Limousine', emoji: '🚗', subtitle: 'Luxury Sedan', badge: 'VIP Ride', glow: 'from-amber-500/30 to-yellow-500/30', border: 'border-amber-500/40', textColor: 'text-amber-400' },
   { id: 'limo_vault', name: 'Limo Vault', emoji: '🛡️', subtitle: 'End-to-End Vault', badge: 'Secured', glow: 'from-cyan-500/30 to-blue-500/30', border: 'border-cyan-500/40', textColor: 'text-cyan-400' },
@@ -44,7 +44,7 @@ export const LIMO_EXCLUSIVE_EMOJIS = [
 ];
 
 // ✨ 2. Animated Micro-Motion Emojis
-export const ANIMATED_EMOJIS = [
+const ANIMATED_EMOJIS = [
   { emoji: '🍋', name: 'Dancing Limo Lime', animClass: 'animate-emoji-pop', tag: 'limo lime fresh dance' },
   { emoji: '❤️', name: 'Beating Heart', animClass: 'animate-emoji-heartbeat', tag: 'love heart beat romance' },
   { emoji: '🔥', name: 'Dancing Flame', animClass: 'animate-emoji-wiggle', tag: 'fire hot lit hype' },
@@ -72,7 +72,7 @@ export const ANIMATED_EMOJIS = [
 ];
 
 // 🎬 3. Curated High-Speed CDN GIFs
-export const CURATED_GIFS = [
+const CURATED_GIFS = [
   // Trending / Reactions
   { id: 'g1', title: 'Iron Man Thumbs Up', category: 'Thumbs Up', url: 'https://media.giphy.com/media/111ebonMs90YLu/giphy.gif', tags: 'thumbs up good job approve yes ok great' },
   { id: 'g2', title: 'DiCaprio Cheers', category: 'Party', url: 'https://media.giphy.com/media/XreQmk7ETCak0/giphy.gif', tags: 'cheers toast wine party celebrate gatsby' },
@@ -110,7 +110,7 @@ export const CURATED_GIFS = [
 ];
 
 // Standard Emoji Categorized Packs
-export const STANDARD_EMOJI_CATEGORIES = [
+const STANDARD_EMOJI_CATEGORIES = [
   {
     id: 'smileys',
     name: 'Smileys & Emotion',
