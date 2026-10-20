@@ -23,8 +23,29 @@ import {
   getDocs
 } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase/config';
-import { UserProfile, UserPrivacy, UserPreferences, UserPunishment, PolicyWarning } from '../types';
+import { UserProfile, UserPrivacy, UserPreferences, UserPunishment, PolicyWarning, UserSession } from '../types';
 import { generateTemporaryNumber, getOrAssignLifetimeNumber } from '../utils/formatters';
+
+export const getClientDeviceInfo = () => {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  let browser = 'Chrome';
+  if (ua.includes('Firefox')) browser = 'Firefox';
+  else if (ua.includes('Edg')) browser = 'Microsoft Edge';
+  else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari';
+  else if (ua.includes('Opera') || ua.includes('OPR')) browser = 'Opera';
+
+  let os = 'Windows';
+  if (ua.includes('Macintosh') || ua.includes('Mac OS')) os = 'macOS';
+  else if (ua.includes('Android')) os = 'Android';
+  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+  else if (ua.includes('Linux')) os = 'Linux';
+
+  return {
+    browser,
+    os,
+    deviceName: `${os} (${browser})`,
+  };
+};
 
 const DEFAULT_ADMIN_EMAIL = 'saeed.samadelivery@gmail.com'.toLowerCase();
 
@@ -66,6 +87,7 @@ interface AuthContextType {
   applyUserPunishment: (targetUid: string, punishment: UserPunishment | null) => Promise<void>;
   issuePolicyWarning: (targetUid: string, reason: string, ruleName?: string) => Promise<void>;
   liftAdminSuspension: () => Promise<void>;
+  logOutOtherSessions: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -594,6 +616,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser((prev) => (prev ? { ...prev, punishment: undefined, isBanned: false, isAdmin: true } : null));
   };
 
+  const logOutOtherSessions = async () => {
+    if (!currentUser?.uid) return;
+    const clientDev = getClientDeviceInfo();
+    const currSession: UserSession = {
+      id: `sess_${Date.now()}`,
+      deviceName: clientDev.deviceName,
+      browser: clientDev.browser,
+      os: clientDev.os,
+      lastActive: Date.now(),
+      isCurrent: true,
+    };
+    await updateDoc(doc(db, 'users', currentUser.uid), {
+      activeSessions: [currSession],
+    }).catch(console.warn);
+    setCurrentUser((prev) => (prev ? { ...prev, activeSessions: [currSession] } : null));
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -621,6 +660,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         applyUserPunishment,
         issuePolicyWarning,
         liftAdminSuspension,
+        logOutOtherSessions,
       }}
     >
       {children}

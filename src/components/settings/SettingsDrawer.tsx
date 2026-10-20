@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   User, 
@@ -14,6 +14,7 @@ import {
   ShieldCheck, 
   KeyRound, 
   Download, 
+  Upload,
   Trash2, 
   Volume2, 
   VolumeX, 
@@ -41,12 +42,17 @@ import {
   Play,
   Square,
   CheckCheck,
-  AlertTriangle
+  AlertTriangle,
+  Radio,
+  Sliders,
+  Music,
+  Clock
 } from 'lucide-react';
-import { UserProfile, ChatWallpaper, AppTheme, UserPrivacy } from '../../types';
+import { UserProfile, ChatWallpaper, AppTheme, UserPrivacy, MessageToneType } from '../../types';
 import { Avatar } from '../common/Avatar';
 import { AvatarEditorModal } from './AvatarEditorModal';
 import { TwoStepModal } from './TwoStepModal';
+import { PasscodeModal } from './PasscodeModal';
 import { PrivacyPolicyModal } from '../pages/PrivacyPolicyModal';
 import { TermsConditionsModal } from '../pages/TermsConditionsModal';
 import { OperationalStatusModal } from '../pages/OperationalStatusModal';
@@ -54,7 +60,7 @@ import { WhatsNewModal } from '../pages/WhatsNewModal';
 import { QRCodeModal } from '../common/QRCodeModal';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { AdminPortalModal } from '../admin/AdminPortalModal';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, getClientDeviceInfo } from '../../context/AuthContext';
 import { useChat, SYSTEM_SUPPORT_USER } from '../../context/ChatContext';
 import { soundEngine } from '../../utils/sound';
 import { SUPPORTED_LANGUAGES, translateText } from '../../utils/translate';
@@ -68,7 +74,16 @@ interface SettingsDrawerProps {
 type SettingsSection = 'all' | 'profile' | 'security' | 'chats' | 'notifications' | 'storage' | 'language' | 'legal';
 
 export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, onClose }) => {
-  const { signOut, updateUserProfile, updatePrivacySettings, unblockUser, isAdmin } = useAuth();
+  const { 
+    signOut, 
+    updateUserProfile, 
+    updateUserPreferences,
+    updatePrivacySettings, 
+    unblockUser, 
+    logOutOtherSessions,
+    isAdmin 
+  } = useAuth();
+
   const { 
     theme, 
     setTheme, 
@@ -92,11 +107,11 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
   const [about, setAbout] = useState(user.about);
   const [isEditingAbout, setIsEditingAbout] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [isRegeneratingNumber, setIsRegeneratingNumber] = useState(false);
 
   // Sub-Modals
   const [showAvatarEditor, setShowAvatarEditor] = useState(false);
   const [showTwoStepModal, setShowTwoStepModal] = useState(false);
+  const [showPasscodeModal, setShowPasscodeModal] = useState(false);
   const [isPlayingRingtoneSample, setIsPlayingRingtoneSample] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [showPolicy, setShowPolicy] = useState(false);
@@ -116,21 +131,26 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
     onConfirm: () => void;
   } | null>(null);
 
+  // Hidden File Input Ref for Restoring Chat Backup
+  const backupFileInputRef = useRef<HTMLInputElement>(null);
+
   // Security & App Lock states
-  const [appLockEnabled, setAppLockEnabled] = useState(false);
-  const [autoLockTimeout, setAutoLockTimeout] = useState('1m');
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const isAppLockActive = !!user.preferences?.appLockEnabled && !!user.preferences?.appLockPin;
+  const autoLockTimeout = user.preferences?.appLockTimeout || '1m';
 
   // Preferences states initialized directly from user profile
   const [messageSound, setMessageSound] = useState(user.preferences?.notificationSound ?? true);
+  const [messageTone, setMessageTone] = useState<MessageToneType>(user.preferences?.messageTone || 'pop');
   const [ringtoneSound, setRingtoneSound] = useState(user.preferences?.ringtoneSound ?? true);
-  const [desktopNotifs, setDesktopNotifs] = useState(Notification.permission === 'granted');
+  const [desktopNotifs, setDesktopNotifs] = useState(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission === 'granted' : false
+  );
   const [twoStepEnabled, setTwoStepEnabled] = useState(!!user.preferences?.twoStepPin);
   const [securityNotifs, setSecurityNotifs] = useState(user.preferences?.securityNotifications ?? true);
-  const [inAppVibration, setInAppVibration] = useState(true);
-  const [highPriorityNotifs, setHighPriorityNotifs] = useState(true);
-  const [reactionNotifs, setReactionNotifs] = useState(true);
-  const [lowDataCalls, setLowDataCalls] = useState(false);
+  const [inAppVibration, setInAppVibration] = useState(user.preferences?.inAppVibration ?? true);
+  const [highPriorityNotifs, setHighPriorityNotifs] = useState(user.preferences?.highPriorityNotifs ?? true);
+  const [reactionNotifs, setReactionNotifs] = useState(user.preferences?.reactionNotifs ?? true);
+  const [lowDataCalls, setLowDataCalls] = useState(user.preferences?.lowDataCalls ?? false);
 
   const [disappearingTimer, setDisappearingTimer] = useState(
     user.preferences?.disappearingDuration === 24 
@@ -142,33 +162,112 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
       : 'off'
   );
 
+  // Calculate real storage stats from localStorage
+  const calculateStorageUsage = () => {
+    let messagesBytes = 0;
+    let mediaBytes = 0;
+    let cacheBytes = 0;
+    let otherBytes = 0;
+
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        const val = localStorage.getItem(key) || '';
+        const byteSize = (key.length + val.length) * 2;
+
+        if (key.startsWith('limochat_msgs_') || key.startsWith('limochat_chats')) {
+          messagesBytes += byteSize;
+        } else if (key.startsWith('limochat_cached_media_') || key.includes('avatar') || key.includes('wallpaper')) {
+          mediaBytes += byteSize;
+        } else if (key.startsWith('limochat_cached_') || key.startsWith('limochat_temp_') || key.startsWith('limochat_preview_')) {
+          cacheBytes += byteSize;
+        } else {
+          otherBytes += byteSize;
+        }
+      }
+    } catch {}
+
+    const totalBytes = messagesBytes + mediaBytes + cacheBytes + otherBytes;
+    return {
+      messagesBytes,
+      mediaBytes,
+      cacheBytes,
+      otherBytes,
+      totalBytes: Math.max(totalBytes, 2048),
+    };
+  };
+
+  const [storageStats, setStorageStats] = useState(calculateStorageUsage);
+
+  useEffect(() => {
+    if (isOpen) {
+      setStorageStats(calculateStorageUsage());
+    }
+  }, [isOpen]);
+
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
   const handleSaveAvatar = async (photoURL: string) => {
     await updateUserProfile({ photoURL });
   };
 
   const handleSaveTwoStep = async (pin: string, recoveryEmail?: string) => {
-    await updateUserProfile({
-      preferences: {
-        ...(user.preferences || {}),
-        twoStepPin: pin,
-        twoStepRecoveryEmail: recoveryEmail || '',
-      } as any,
+    await updateUserPreferences({
+      twoStepPin: pin,
+      twoStepRecoveryEmail: recoveryEmail || '',
     });
     setTwoStepEnabled(true);
+    showAlertNotice?.("Two-Step Verification Enabled", "Your account is protected with a 6-digit registration PIN.", "primary");
   };
 
   const handleDisableTwoStep = async () => {
-    await updateUserProfile({
-      preferences: {
-        ...(user.preferences || {}),
-        twoStepPin: '',
-      } as any,
+    await updateUserPreferences({
+      twoStepPin: '',
     });
     setTwoStepEnabled(false);
+    showAlertNotice?.("Two-Step Verification Disabled", "Two-step PIN verification has been turned off.", "warning");
   };
 
-  const handleTestMessageTone = () => {
-    soundEngine.playMessageReceived();
+  // Passcode Lock handlers
+  const handleSavePasscode = async (pin: string, timeout: 'immediately' | '1m' | '15m' | '1h', biometric: boolean) => {
+    await updateUserPreferences({
+      appLockEnabled: true,
+      appLockPin: pin,
+      appLockTimeout: timeout,
+      biometricEnabled: biometric,
+    });
+    sessionStorage.setItem(`limochat_unlocked_${user.uid}`, 'true');
+    showAlertNotice?.("Passcode Lock Enabled", "LimoChat is now secured with your passcode and timeout preferences.", "primary");
+  };
+
+  const handleDisablePasscode = async () => {
+    await updateUserPreferences({
+      appLockEnabled: false,
+      appLockPin: '',
+    });
+    sessionStorage.setItem(`limochat_unlocked_${user.uid}`, 'true');
+    showAlertNotice?.("Passcode Lock Disabled", "Screen lock has been deactivated.", "warning");
+  };
+
+  const handleLockNow = () => {
+    window.dispatchEvent(new Event('limochat_lock_now'));
+    onClose();
+  };
+
+  // Sound Engine Tone Selector & Toggles
+  const handleTestMessageTone = (tone?: MessageToneType) => {
+    soundEngine.playMessageReceived(tone || messageTone);
+  };
+
+  const handleSelectMessageTone = async (tone: MessageToneType) => {
+    setMessageTone(tone);
+    soundEngine.playMessageReceived(tone);
+    await updateUserPreferences({ messageTone: tone });
   };
 
   const handleToggleTestRingtone = () => {
@@ -188,13 +287,8 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
   const handleToggleMessageSound = async () => {
     const nextVal = !messageSound;
     setMessageSound(nextVal);
-    if (nextVal) soundEngine.playMessageReceived();
-    await updateUserProfile({
-      preferences: {
-        ...(user.preferences || {}),
-        notificationSound: nextVal,
-      } as any,
-    });
+    if (nextVal) soundEngine.playMessageReceived(messageTone);
+    await updateUserPreferences({ notificationSound: nextVal });
   };
 
   const handleToggleRingtoneSound = async () => {
@@ -204,34 +298,205 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
       soundEngine.startIncomingRingtone();
       setTimeout(() => soundEngine.stopRingtone(), 1500);
     }
-    await updateUserProfile({
-      preferences: {
-        ...(user.preferences || {}),
-        ringtoneSound: nextVal,
-      } as any,
-    });
+    await updateUserPreferences({ ringtoneSound: nextVal });
+  };
+
+  const handleToggleInAppVibration = async () => {
+    const nextVal = !inAppVibration;
+    setInAppVibration(nextVal);
+    if (nextVal && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try { navigator.vibrate(100); } catch {}
+    }
+    await updateUserPreferences({ inAppVibration: nextVal });
+  };
+
+  const handleToggleReactionNotifs = async () => {
+    const nextVal = !reactionNotifs;
+    setReactionNotifs(nextVal);
+    await updateUserPreferences({ reactionNotifs: nextVal });
+  };
+
+  const handleToggleHighPriorityNotifs = async () => {
+    const nextVal = !highPriorityNotifs;
+    setHighPriorityNotifs(nextVal);
+    await updateUserPreferences({ highPriorityNotifs: nextVal });
+  };
+
+  const handleToggleLowDataCalls = async () => {
+    const nextVal = !lowDataCalls;
+    setLowDataCalls(nextVal);
+    await updateUserPreferences({ lowDataCalls: nextVal });
   };
 
   const handleToggleSecurityNotifs = async () => {
     const nextVal = !securityNotifs;
     setSecurityNotifs(nextVal);
-    await updateUserProfile({
-      preferences: {
-        ...(user.preferences || {}),
-        securityNotifications: nextVal,
-      } as any,
-    });
+    await updateUserPreferences({ securityNotifications: nextVal });
   };
 
   const handleChangeDisappearing = async (val: string) => {
     setDisappearingTimer(val);
     const hours = val === '24h' ? 24 : val === '7d' ? 168 : val === '90d' ? 2160 : 0;
-    await updateUserProfile({
-      preferences: {
-        ...(user.preferences || {}),
-        disappearingDuration: hours,
-      } as any,
+    await updateUserPreferences({ disappearingDuration: hours });
+  };
+
+  // Active Sessions Management
+  const clientDevice = getClientDeviceInfo();
+  const activeSessionsList = (user.activeSessions && user.activeSessions.length > 0)
+    ? user.activeSessions
+    : [
+        {
+          id: 'current_session',
+          deviceName: clientDevice.deviceName,
+          browser: clientDevice.browser,
+          os: clientDevice.os,
+          lastActive: Date.now(),
+          isCurrent: true,
+        }
+      ];
+
+  const handleLogOutOtherSessions = async () => {
+    try {
+      await logOutOtherSessions();
+      showAlertNotice?.("Sessions Synchronized", "All other device sessions have been safely logged out.", "primary");
+    } catch (err: any) {
+      showAlertNotice?.("Action Failed", err.message || "Failed to log out other sessions", "danger");
+    }
+  };
+
+  // Cache & Storage Management
+  const handleClearCache = () => {
+    try {
+      let clearedBytes = 0;
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (
+          key.startsWith('limochat_cached_') ||
+          key.startsWith('limochat_temp_') ||
+          key.startsWith('limochat_preview_') ||
+          key.startsWith('limochat_media_blob_')
+        )) {
+          const val = localStorage.getItem(key) || '';
+          clearedBytes += (key.length + val.length) * 2;
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+      setStorageStats(calculateStorageUsage());
+      const freedStr = formatBytes(clearedBytes);
+      showAlertNotice?.("Cache Cleared", `Cleaned temporary buffers (${clearedBytes > 0 ? freedStr : '0 B'}). Chat history is untouched.`, "primary");
+    } catch {}
+  };
+
+  const handleClearAllChats = () => {
+    setConfirmConfig({
+      isOpen: true,
+      title: "Clear All Local Chat Data?",
+      description: "This will remove all locally cached messages from this browser. Your server account, profile, and contacts will remain safe.",
+      confirmText: "Clear All Chats",
+      cancelText: "Cancel",
+      variant: "danger",
+      onConfirm: () => {
+        try {
+          const keysToRemove: string[] = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('limochat_msgs_') || key.startsWith('limochat_chats'))) {
+              keysToRemove.push(key);
+            }
+          }
+          keysToRemove.forEach(k => localStorage.removeItem(k));
+          setStorageStats(calculateStorageUsage());
+          showAlertNotice?.("Chats Cleared", "Local message cache has been cleaned.", "warning");
+        } catch {}
+        setConfirmConfig(null);
+      }
     });
+  };
+
+  // Chat History Export & Restore
+  const handleExportData = () => {
+    const allMessages: any[] = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('limochat_msgs_')) {
+          const msgs = JSON.parse(localStorage.getItem(key) || '[]');
+          if (Array.isArray(msgs)) allMessages.push(...msgs);
+        }
+      }
+    } catch {}
+
+    const data = {
+      version: '2.0',
+      userProfile: {
+        uid: user.uid,
+        displayName: user.displayName,
+        phoneNumber: user.phoneNumber,
+        email: user.email,
+        preferences: user.preferences,
+        privacy: user.privacy,
+      },
+      activeChatsCount: chats.length,
+      chatsSummary: chats.map(c => ({ id: c.id, name: c.name, type: c.type, lastMessage: c.lastMessage })),
+      messagesCount: allMessages.length,
+      messages: allMessages,
+      exportedAt: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `limochat-backup-${(user.displayName || 'user').replace(/\s+/g, '_')}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showAlertNotice?.("Backup Exported", `Saved ${allMessages.length} messages and user profile to JSON file.`, "primary");
+  };
+
+  const handleRestoreBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const data = JSON.parse(text);
+
+        if (!data || (!data.userProfile && !data.chatsSummary && !data.messages)) {
+          throw new Error("Invalid backup JSON. Missing LimoChat metadata.");
+        }
+
+        let restoredCount = 0;
+        if (data.messages && Array.isArray(data.messages)) {
+          const grouped: Record<string, any[]> = {};
+          data.messages.forEach((m: any) => {
+            if (m.chatId) {
+              if (!grouped[m.chatId]) grouped[m.chatId] = [];
+              grouped[m.chatId].push(m);
+              restoredCount++;
+            }
+          });
+          Object.entries(grouped).forEach(([cid, msgs]) => {
+            try {
+              localStorage.setItem(`limochat_msgs_${cid}`, JSON.stringify(msgs));
+            } catch {}
+          });
+        }
+
+        if (data.userProfile?.preferences) {
+          await updateUserPreferences(data.userProfile.preferences);
+        }
+
+        setStorageStats(calculateStorageUsage());
+        showAlertNotice?.("Backup Restored", `Restored ${restoredCount} messages and user preferences successfully.`, "primary");
+      } catch (err: any) {
+        showAlertNotice?.("Restore Failed", err.message || "Failed to restore backup file.", "danger");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   // Language & Translation states
@@ -257,21 +522,9 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
   const handleSaveLanguageSettings = async (targetLang: string, appLang: string) => {
     setTranslateTargetLanguage(targetLang);
     setAppLanguage(appLang);
-    const updatedPrefs = {
-      ...(user.preferences || {
-        enterIsSend: true,
-        fontSize: 'base' as const,
-        notificationSound: true,
-        ringtoneSound: true,
-        mediaAutoDownload: true,
-        disappearingDuration: 0,
-        securityNotifications: true,
-      }),
+    await updateUserPreferences({
       appLanguage: appLang,
       translateTargetLanguage: targetLang,
-    };
-    await updateUserProfile({
-      preferences: updatedPrefs,
     });
   };
 
@@ -313,22 +566,6 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
     }
   };
 
-  const handleExportData = () => {
-    const data = {
-      userProfile: user,
-      activeChatsCount: chats.length,
-      chatsSummary: chats.map(c => ({ id: c.id, name: c.name, type: c.type, lastMessage: c.lastMessage })),
-      exportedAt: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `limochat-export-${user.displayName.replace(/\s+/g, '_')}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const statusPresets = [
     "Available",
     "Busy",
@@ -349,7 +586,20 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
     { id: 'blurred-mesh', label: 'Minimal Mesh', bgClass: 'bg-[#111b21]' },
   ];
 
+  const messageToneList: { id: MessageToneType; label: string; desc: string }[] = [
+    { id: 'pop', label: 'Classic Pop', desc: 'Light & snappy bubble' },
+    { id: 'chime', label: 'Crystal Chime', desc: 'Melodic dual-note chime' },
+    { id: 'submarine', label: 'Submarine Ping', desc: 'Sonar low-frequency echo' },
+    { id: 'aurora', label: 'Aurora Chord', desc: 'Harmonic atmospheric synth' },
+    { id: 'bell', label: 'Brass Bell', desc: 'Crisp traditional telephone bell' },
+  ];
+
   const shouldShow = (sec: SettingsSection) => filterTab === 'all' || filterTab === sec;
+
+  // Calculate breakdown percentages
+  const messagesPct = Math.round((storageStats.messagesBytes / storageStats.totalBytes) * 100);
+  const mediaPct = Math.round((storageStats.mediaBytes / storageStats.totalBytes) * 100);
+  const cachePct = Math.max(10, 100 - messagesPct - mediaPct);
 
   return (
     <>
@@ -379,7 +629,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
             </button>
           </div>
 
-          {/* Quick-Filter / Navigation Pills (Allows jumping or filtering on the single page) */}
+          {/* Quick-Filter Navigation Pills */}
           <div className="flex items-center gap-1.5 px-6 py-2.5 bg-[#182229] border-b border-[#2e3b44] overflow-x-auto text-xs whitespace-nowrap scrollbar-none flex-shrink-0">
             {[
               { id: 'all', label: '✨ All Sections' },
@@ -547,7 +797,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
             )}
 
             {/* =========================================================================
-                SECTION 2: SECURITY, PASSCODE LOCK & PRIVACY (ADMIN-ONLY FILTER ENFORCED!)
+                SECTION 2: SECURITY, PASSCODE LOCK & PRIVACY
                 ========================================================================= */}
             {shouldShow('security') && (
               <div className="space-y-3">
@@ -570,7 +820,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                     </div>
                   </div>
 
-                  {/* Active Sessions & Linked Devices (New Feature!) */}
+                  {/* Active Sessions & Linked Devices */}
                   <div className="pt-2 border-t border-[#2e3b44] space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
@@ -580,51 +830,97 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                         </div>
                         <div className="text-[11px] text-[#8696a0]">Current browser & connected devices</div>
                       </div>
-                      <span className="text-[10px] bg-[#00a884]/20 text-[#00a884] font-semibold px-2 py-0.5 rounded-full">
-                        1 Active Session
+                      <span className="text-[10px] bg-[#00a884]/20 text-[#00a884] font-semibold px-2 py-0.5 rounded-full border border-[#00a884]/30">
+                        {activeSessionsList.length} Active {activeSessionsList.length === 1 ? 'Device' : 'Devices'}
                       </span>
                     </div>
 
-                    <div className="p-2.5 bg-[#202c33] rounded-xl border border-[#2e3b44] flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <Smartphone className="w-4 h-4 text-[#8696a0]" />
-                        <div>
-                          <div className="font-medium text-white">Current Web Session (Active)</div>
-                          <div className="text-[10px] text-[#8696a0]">End-to-End Peer Authenticated</div>
-                        </div>
-                      </div>
+                    <div className="space-y-2">
+                      {activeSessionsList.map((sess) => {
+                        const isMobile = sess.os.includes('Android') || sess.os.includes('iOS') || sess.os.includes('iPhone');
+                        return (
+                          <div key={sess.id} className="p-2.5 bg-[#202c33] rounded-xl border border-[#2e3b44] flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="p-1.5 bg-[#111b21] rounded-lg text-[#00a884] flex-shrink-0">
+                                {isMobile ? <Smartphone className="w-4 h-4" /> : <Laptop className="w-4 h-4" />}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-medium text-white flex items-center gap-1.5 truncate">
+                                  <span>{sess.os} • {sess.browser}</span>
+                                  {sess.isCurrent && (
+                                    <span className="text-[9px] bg-emerald-500/20 text-[#00a884] px-1.5 py-0.5 rounded-md font-semibold">
+                                      This Device
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-[#8696a0] flex items-center gap-1 mt-0.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                  <span>Active now</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex justify-end pt-1">
                       <button
-                        onClick={() => {
-                          showAlertNotice?.("Sessions Synchronized", "All other device sessions have been safely logged out.", "primary");
-                        }}
-                        className="text-[11px] text-red-400 hover:text-red-300 font-medium px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 transition cursor-pointer"
+                        onClick={handleLogOutOtherSessions}
+                        className="text-[11px] text-red-400 hover:text-red-300 font-medium px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 transition cursor-pointer border border-red-500/20"
                       >
-                        Log out others
+                        Log out all other devices
                       </button>
                     </div>
                   </div>
 
-                  {/* App Lock / Passcode Simulation (New Feature!) */}
-                  <div className="pt-2 border-t border-[#2e3b44] flex items-center justify-between">
-                    <div>
-                      <div className="text-xs font-semibold text-white flex items-center gap-1.5">
-                        <Fingerprint className="w-3.5 h-3.5 text-[#00a884]" />
-                        <span>App Passcode & Biometric Lock</span>
+                  {/* App Passcode & Biometric Screen Lock */}
+                  <div className="pt-2 border-t border-[#2e3b44] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                          <Fingerprint className="w-3.5 h-3.5 text-[#00a884]" />
+                          <span>App Passcode & Screen Lock</span>
+                          {isAppLockActive && (
+                            <span className="text-[9px] bg-[#00a884]/20 text-[#00a884] font-semibold px-1.5 py-0.5 rounded-md border border-[#00a884]/30">
+                              ACTIVE
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-[#8696a0]">
+                          {isAppLockActive 
+                            ? `Secured with PIN (Auto-lock: ${autoLockTimeout === 'immediately' ? 'Instant' : autoLockTimeout})` 
+                            : 'Require passcode or Touch ID when idle'}
+                        </div>
                       </div>
-                      <div className="text-[11px] text-[#8696a0]">Require passcode or Touch ID when idle</div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setShowPasscodeModal(true)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shadow-sm ${
+                            isAppLockActive
+                              ? 'bg-[#202c33] hover:bg-[#2a3942] border border-[#2e3b44] text-[#00a884]'
+                              : 'bg-[#00a884] hover:bg-[#02906f] text-white'
+                          }`}
+                        >
+                          {isAppLockActive ? 'Manage' : 'Set Up'}
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => setAppLockEnabled(!appLockEnabled)}
-                      className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                        appLockEnabled ? 'bg-[#00a884]' : 'bg-[#3b4a54]'
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-                          appLockEnabled ? 'right-0.5' : 'left-0.5'
-                        }`}
-                      />
-                    </button>
+
+                    {/* Quick Lock Action if Active */}
+                    {isAppLockActive && (
+                      <div className="flex items-center justify-between bg-[#202c33] p-2.5 rounded-xl border border-[#2e3b44]">
+                        <div className="text-xs text-white">Need to step away right now?</div>
+                        <button
+                          onClick={handleLockNow}
+                          className="px-2.5 py-1 bg-[#00a884] hover:bg-[#02906f] text-white text-xs font-semibold rounded-lg transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <Lock className="w-3 h-3" />
+                          <span>Lock Now</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Two-Step Verification PIN */}
@@ -911,19 +1207,47 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                     </select>
                   </div>
 
-                  {/* Chat Backup & Export */}
-                  <div className="pt-2 border-t border-[#2e3b44] flex items-center justify-between">
+                  {/* Chat Backup, Restore & Clear Data */}
+                  <div className="pt-2 border-t border-[#2e3b44] space-y-3">
                     <div>
-                      <div className="text-xs font-semibold text-white">Chat History Export</div>
-                      <div className="text-[11px] text-[#8696a0]">Download secure local JSON backup of all chats</div>
+                      <div className="text-xs font-semibold text-white">Chat Data & Local Storage</div>
+                      <div className="text-[11px] text-[#8696a0]">Export, restore or purge cached conversations</div>
                     </div>
-                    <button
-                      onClick={handleExportData}
-                      className="px-3 py-1.5 rounded-xl bg-[#202c33] hover:bg-[#2a3942] border border-[#2e3b44] text-xs font-semibold text-[#00a884] transition flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Export</span>
-                    </button>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={handleExportData}
+                        className="px-3 py-1.5 rounded-xl bg-[#202c33] hover:bg-[#2a3942] border border-[#2e3b44] text-xs font-semibold text-[#00a884] transition flex items-center gap-1.5 cursor-pointer"
+                        title="Download JSON file containing your chats & messages"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Export Backup</span>
+                      </button>
+
+                      <button
+                        onClick={() => backupFileInputRef.current?.click()}
+                        className="px-3 py-1.5 rounded-xl bg-[#202c33] hover:bg-[#2a3942] border border-[#2e3b44] text-xs font-semibold text-blue-400 transition flex items-center gap-1.5 cursor-pointer"
+                        title="Import JSON backup to restore messages and preferences"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Restore from Backup</span>
+                      </button>
+                      <input
+                        type="file"
+                        ref={backupFileInputRef}
+                        accept=".json"
+                        onChange={handleRestoreBackup}
+                        className="hidden"
+                      />
+
+                      <button
+                        onClick={handleClearAllChats}
+                        className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-xs font-semibold text-red-400 transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Clear All Chats</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -948,9 +1272,9 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={handleTestMessageTone}
-                        className="p-1.5 rounded-lg bg-[#202c33] hover:bg-[#2a3942] text-[#00a884] text-xs transition"
-                        title="Test sound"
+                        onClick={() => handleTestMessageTone()}
+                        className="p-1.5 rounded-lg bg-[#202c33] hover:bg-[#2a3942] text-[#00a884] text-xs transition cursor-pointer"
+                        title="Test current message sound"
                       >
                         <Play className="w-3.5 h-3.5" />
                       </button>
@@ -969,6 +1293,54 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                     </div>
                   </div>
 
+                  {/* Customizable Tone Selector */}
+                  <div className="pt-2 border-t border-[#2e3b44] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                        <Music className="w-3.5 h-3.5 text-[#00a884]" />
+                        <span>Incoming Message Tone</span>
+                      </div>
+                      <span className="text-[10px] text-[#8696a0]">5 Synthesized Tones</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      {messageToneList.map((tone) => {
+                        const isSelected = messageTone === tone.id;
+                        return (
+                          <div
+                            key={tone.id}
+                            onClick={() => handleSelectMessageTone(tone.id)}
+                            className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition ${
+                              isSelected
+                                ? 'bg-[#00a884]/15 border-[#00a884] text-white'
+                                : 'bg-[#202c33] border-[#2e3b44] text-[#8696a0] hover:text-white hover:border-[#3b4a54]'
+                            }`}
+                          >
+                            <div className="min-w-0 pr-2">
+                              <div className="font-semibold text-xs flex items-center gap-1.5 truncate">
+                                <span>{tone.label}</span>
+                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                              </div>
+                              <div className="text-[10px] text-[#8696a0] truncate">{tone.desc}</div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                soundEngine.playMessageReceived(tone.id);
+                              }}
+                              className="p-1 rounded-lg bg-[#111b21] hover:bg-[#2a3942] text-[#00a884] transition flex-shrink-0 cursor-pointer"
+                              title={`Preview ${tone.label}`}
+                            >
+                              <Play className="w-3 h-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Ringtone Sound */}
                   <div className="pt-2 border-t border-[#2e3b44] flex items-center justify-between">
                     <div>
@@ -978,7 +1350,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                     <div className="flex items-center gap-2">
                       <button
                         onClick={handleToggleTestRingtone}
-                        className={`p-1.5 rounded-lg text-xs transition ${
+                        className={`p-1.5 rounded-lg text-xs transition cursor-pointer ${
                           isPlayingRingtoneSample ? 'bg-red-500 text-white' : 'bg-[#202c33] hover:bg-[#2a3942] text-[#00a884]'
                         }`}
                         title="Preview ringtone"
@@ -1004,10 +1376,10 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                   <div className="pt-2 border-t border-[#2e3b44] flex items-center justify-between">
                     <div>
                       <div className="text-xs font-semibold text-white">In-App Vibration</div>
-                      <div className="text-[11px] text-[#8696a0]">Haptic feedback on incoming items</div>
+                      <div className="text-[11px] text-[#8696a0]">Haptic feedback on incoming messages & reactions</div>
                     </div>
                     <button
-                      onClick={() => setInAppVibration(!inAppVibration)}
+                      onClick={handleToggleInAppVibration}
                       className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
                         inAppVibration ? 'bg-[#00a884]' : 'bg-[#3b4a54]'
                       }`}
@@ -1027,7 +1399,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                       <div className="text-[11px] text-[#8696a0]">Notify when someone reacts to your messages</div>
                     </div>
                     <button
-                      onClick={() => setReactionNotifs(!reactionNotifs)}
+                      onClick={handleToggleReactionNotifs}
                       className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
                         reactionNotifs ? 'bg-[#00a884]' : 'bg-[#3b4a54]'
                       }`}
@@ -1035,6 +1407,26 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                       <span
                         className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
                           reactionNotifs ? 'right-0.5' : 'left-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* High Priority Alerts */}
+                  <div className="pt-2 border-t border-[#2e3b44] flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-semibold text-white">High Priority Alerts</div>
+                      <div className="text-[11px] text-[#8696a0]">Show urgent preview banners for direct DMs</div>
+                    </div>
+                    <button
+                      onClick={handleToggleHighPriorityNotifs}
+                      className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                        highPriorityNotifs ? 'bg-[#00a884]' : 'bg-[#3b4a54]'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                          highPriorityNotifs ? 'right-0.5' : 'left-0.5'
                         }`}
                       />
                     </button>
@@ -1072,25 +1464,46 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                 </div>
 
                 <div className="p-4 bg-[#111b21] rounded-2xl border border-[#2e3b44] space-y-4">
-                  {/* Visual Storage Meter Graphic (New Feature!) */}
+                  {/* Dynamic Visual Storage Breakdown Meter */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-white">Storage Breakdown</span>
-                      <span className="text-[#8696a0]">~42.4 MB Used</span>
+                      <span className="font-semibold text-white">Browser Storage Usage</span>
+                      <span className="text-[#00a884] font-mono font-semibold">
+                        ~{formatBytes(storageStats.totalBytes)} Used
+                      </span>
                     </div>
 
                     <div className="h-3 w-full bg-[#202c33] rounded-full overflow-hidden flex">
-                      <div className="h-full bg-[#00a884]" style={{ width: '45%' }} title="Media: 19 MB" />
-                      <div className="h-full bg-blue-500" style={{ width: '25%' }} title="Voice Notes: 10 MB" />
-                      <div className="h-full bg-purple-500" style={{ width: '15%' }} title="Documents: 6 MB" />
-                      <div className="h-full bg-amber-500" style={{ width: '15%' }} title="Cache: 6 MB" />
+                      <div 
+                        className="h-full bg-[#00a884] transition-all duration-300" 
+                        style={{ width: `${Math.max(15, messagesPct)}%` }} 
+                        title={`Messages: ${formatBytes(storageStats.messagesBytes)}`} 
+                      />
+                      <div 
+                        className="h-full bg-blue-500 transition-all duration-300" 
+                        style={{ width: `${Math.max(10, mediaPct)}%` }} 
+                        title={`Media & Avatars: ${formatBytes(storageStats.mediaBytes)}`} 
+                      />
+                      <div 
+                        className="h-full bg-amber-500 transition-all duration-300" 
+                        style={{ width: `${Math.max(15, cachePct)}%` }} 
+                        title={`Cache: ${formatBytes(storageStats.cacheBytes)}`} 
+                      />
                     </div>
 
                     <div className="flex items-center justify-between text-[10px] text-[#8696a0] pt-1">
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#00a884]" /> Photos & Video</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> Voice Notes</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500" /> Documents</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> Temp Cache</span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-[#00a884]" /> 
+                        Messages ({formatBytes(storageStats.messagesBytes)})
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-blue-500" /> 
+                        Media ({formatBytes(storageStats.mediaBytes)})
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-amber-500" /> 
+                        Temp Cache ({formatBytes(storageStats.cacheBytes)})
+                      </span>
                     </div>
                   </div>
 
@@ -1098,12 +1511,10 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                   <div className="pt-2 border-t border-[#2e3b44] flex items-center justify-between">
                     <div>
                       <div className="text-xs font-semibold text-white">Local Cache & Media Buffers</div>
-                      <div className="text-[11px] text-[#8696a0]">Free up space without deleting chat history</div>
+                      <div className="text-[11px] text-[#8696a0]">Free up disk space without deleting chat messages</div>
                     </div>
                     <button
-                      onClick={() => {
-                        showAlertNotice?.("Cache Cleared", "Temporary buffers and image thumbnails have been cleaned.", "primary");
-                      }}
+                      onClick={handleClearCache}
                       className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-xs transition border border-red-500/20 cursor-pointer"
                     >
                       Clear Cache
@@ -1114,10 +1525,10 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                   <div className="pt-2 border-t border-[#2e3b44] flex items-center justify-between">
                     <div>
                       <div className="text-xs font-semibold text-white">Low Data Usage for Calls</div>
-                      <div className="text-[11px] text-[#8696a0]">Reduce WebRTC bitrates on cellular connections</div>
+                      <div className="text-[11px] text-[#8696a0]">Optimize WebRTC bandwidth on metered networks</div>
                     </div>
                     <button
-                      onClick={() => setLowDataCalls(!lowDataCalls)}
+                      onClick={handleToggleLowDataCalls}
                       className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
                         lowDataCalls ? 'bg-[#00a884]' : 'bg-[#3b4a54]'
                       }`}
@@ -1206,7 +1617,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
             )}
 
             {/* =========================================================================
-                SECTION 7: LEGAL, POLICIES & COMPLIANCE (FULL-PAGE INTEGRATED ACCESS)
+                SECTION 7: LEGAL, POLICIES & COMPLIANCE
                 ========================================================================= */}
             {shouldShow('legal') && (
               <div className="space-y-3">
@@ -1327,6 +1738,17 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
           currentUser={user}
           onSaveTwoStep={handleSaveTwoStep}
           onDisableTwoStep={handleDisableTwoStep}
+        />
+      )}
+
+      {showPasscodeModal && (
+        <PasscodeModal
+          isOpen={showPasscodeModal}
+          currentUser={user}
+          onClose={() => setShowPasscodeModal(false)}
+          onSavePasscode={handleSavePasscode}
+          onDisablePasscode={handleDisablePasscode}
+          onLockNow={handleLockNow}
         />
       )}
 

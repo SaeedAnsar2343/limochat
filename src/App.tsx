@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ChatProvider, useChat } from './context/ChatContext';
 import { CallProvider, useCall } from './context/CallContext';
@@ -9,12 +9,67 @@ import { IncomingCallModal } from './components/calls/IncomingCallModal';
 import { ActiveCallModal } from './components/calls/ActiveCallModal';
 import { OnboardingModal } from './components/auth/OnboardingModal';
 import { SuspensionScreen } from './components/common/SuspensionScreen';
+import { AppLockScreen } from './components/auth/AppLockScreen';
 import { MessageSquare, Lock, ShieldCheck, Sparkles, Ban } from 'lucide-react';
 
 const MainLayout: React.FC = () => {
   const { currentUser, loading, signOut, isAdmin } = useAuth();
   const { activeChat, setActiveChat } = useChat();
   const [mobileView, setMobileView] = useState<'sidebar' | 'chat'>('sidebar');
+
+  // App Passcode Lock state & active enforcement
+  const isLockConfigured = !!currentUser?.preferences?.appLockEnabled && !!currentUser?.preferences?.appLockPin;
+  const [isAppLocked, setIsAppLocked] = useState<boolean>(() => {
+    if (!currentUser?.preferences?.appLockEnabled || !currentUser?.preferences?.appLockPin) return false;
+    return sessionStorage.getItem(`limochat_unlocked_${currentUser.uid}`) !== 'true';
+  });
+
+  // Listen for manual lock trigger from Settings
+  useEffect(() => {
+    const handleManualLock = () => {
+      if (currentUser?.uid) {
+        sessionStorage.removeItem(`limochat_unlocked_${currentUser.uid}`);
+      }
+      setIsAppLocked(true);
+    };
+    window.addEventListener('limochat_lock_now', handleManualLock);
+    return () => window.removeEventListener('limochat_lock_now', handleManualLock);
+  }, [currentUser?.uid]);
+
+  // Handle auto-lock on idle or timeout
+  useEffect(() => {
+    if (!isLockConfigured || isAppLocked || !currentUser?.uid) return;
+
+    const timeoutSetting = currentUser.preferences?.appLockTimeout || '1m';
+    if (timeoutSetting === 'immediately') {
+      const handleBlur = () => {
+        sessionStorage.removeItem(`limochat_unlocked_${currentUser.uid}`);
+        setIsAppLocked(true);
+      };
+      window.addEventListener('blur', handleBlur);
+      return () => window.removeEventListener('blur', handleBlur);
+    }
+
+    const timeoutMs = timeoutSetting === '1m' ? 60000 : timeoutSetting === '15m' ? 15 * 60000 : 60 * 60000;
+    let timer: any = null;
+
+    const resetIdleTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        sessionStorage.removeItem(`limochat_unlocked_${currentUser.uid}`);
+        setIsAppLocked(true);
+      }, timeoutMs);
+    };
+
+    resetIdleTimer();
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll'];
+    events.forEach((e) => window.addEventListener(e, resetIdleTimer));
+
+    return () => {
+      clearTimeout(timer);
+      events.forEach((e) => window.removeEventListener(e, resetIdleTimer));
+    };
+  }, [isLockConfigured, isAppLocked, currentUser?.uid, currentUser?.preferences?.appLockTimeout]);
 
   // Auto-switch to chat view on mobile when an active chat is selected
   React.useEffect(() => {
@@ -47,6 +102,20 @@ const MainLayout: React.FC = () => {
 
   if (!isAdmin && (currentUser.isBanned || isSuspendedActive)) {
     return <SuspensionScreen currentUser={currentUser} onSignOut={signOut} />;
+  }
+
+  // App Passcode Lock Screen
+  if (isLockConfigured && isAppLocked) {
+    return (
+      <AppLockScreen
+        currentUser={currentUser}
+        onUnlock={() => {
+          sessionStorage.setItem(`limochat_unlocked_${currentUser.uid}`, 'true');
+          setIsAppLocked(false);
+        }}
+        onSignOut={signOut}
+      />
+    );
   }
 
   return (

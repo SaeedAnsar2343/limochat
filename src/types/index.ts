@@ -1,20 +1,44 @@
+export type PrivacyScope = 'everyone' | 'contacts' | 'nobody';
+
 export type UserPrivacy = {
-  lastSeen: 'everyone' | 'nobody';
-  profilePhoto: 'everyone' | 'nobody';
+  lastSeen: PrivacyScope;
+  profilePhoto: PrivacyScope;
   readReceipts: boolean;
-  about?: 'everyone' | 'nobody';
-  status?: 'everyone' | 'nobody';
+  about?: PrivacyScope;
+  status?: PrivacyScope;
 };
+
+export type UserSession = {
+  id: string;
+  deviceName: string;
+  browser: string;
+  os: string;
+  ip?: string;
+  lastActive: number;
+  isCurrent?: boolean;
+};
+
+export type MessageToneType = 'pop' | 'chime' | 'submarine' | 'aurora' | 'bell';
 
 export type UserPreferences = {
   enterIsSend: boolean;
   fontSize: 'sm' | 'base' | 'lg';
   notificationSound: boolean;
   ringtoneSound: boolean;
+  messageTone?: MessageToneType;
+  inAppVibration?: boolean;
+  reactionNotifs?: boolean;
+  highPriorityNotifs?: boolean;
   mediaAutoDownload: boolean;
+  lowDataCalls?: boolean;
   disappearingDuration: number; // in hours, 0 = off
   securityNotifications: boolean;
   twoStepPin?: string;
+  twoStepRecoveryEmail?: string;
+  appLockEnabled?: boolean;
+  appLockPin?: string;
+  appLockTimeout?: 'immediately' | '1m' | '15m' | '1h';
+  biometricEnabled?: boolean;
   appLanguage?: string;
   translateTargetLanguage?: string;
   appTheme?: 'dark' | 'light' | 'whatsapp-classic';
@@ -114,6 +138,7 @@ export type UserProfile = {
   blockedUsers: string[];
   deletedContactUids?: string[];
   pinnedChatIds?: string[];
+  activeSessions?: UserSession[];
   isBanned?: boolean;
   isAdmin?: boolean;
   allowSupportCalls?: boolean;

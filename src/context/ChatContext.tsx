@@ -359,7 +359,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (msgList.length > messages.length && messages.length > 0) {
         const last = msgList[msgList.length - 1];
         if (last && last.senderId !== currentUser?.uid) {
-          soundEngine.playMessageReceived();
+          if (currentUser?.preferences?.notificationSound !== false) {
+            soundEngine.playMessageReceived(currentUser?.preferences?.messageTone || 'pop');
+          }
+          if (currentUser?.preferences?.inAppVibration !== false && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+            try {
+              navigator.vibrate(100);
+            } catch {}
+          }
         }
       }
 
