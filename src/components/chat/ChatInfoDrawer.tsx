@@ -956,22 +956,22 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
                       onBlockUser(targetUser.uid);
                     }
                   }}
-                  className={`w-full py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold transition cursor-pointer border ${
+                  className={`w-full py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition cursor-pointer border ${
                     isTargetBlocked
-                      ? 'bg-[#202c33] text-[#00a884] hover:bg-[#2a3942] border-[#2e3b44]'
-                      : 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border-red-500/20'
+                      ? 'bg-gray-100 dark:bg-[#202c33] text-[#00a884] hover:bg-gray-200 dark:hover:bg-[#2a3942] border-gray-200 dark:border-[#2e3b44]'
+                      : 'bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/20 shadow-sm'
                   }`}
                 >
-                  <Ban className="w-4 h-4" />
+                  <Ban className="w-4 h-4 text-red-600 dark:text-red-400" />
                   <span>{isTargetBlocked ? 'Unblock Contact' : 'Block Contact'}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleDeleteContact}
-                  className="w-full py-2.5 px-3 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center justify-center gap-2 text-xs font-semibold transition cursor-pointer border border-red-500/20"
+                  className="w-full py-2.5 px-3 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 flex items-center justify-center gap-2 text-xs font-bold transition cursor-pointer border border-red-200 dark:border-red-500/20 shadow-sm"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
                   <span>Delete Contact</span>
                 </button>
               </>
@@ -980,9 +980,9 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
             <button
               type="button"
               onClick={handleDeleteChat}
-              className="w-full py-2.5 px-3 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center justify-center gap-2 text-xs font-semibold transition cursor-pointer border border-red-500/20"
+              className="w-full py-2.5 px-3 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 flex items-center justify-center gap-2 text-xs font-bold transition cursor-pointer border border-red-200 dark:border-red-500/20 shadow-sm"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
               <span>Delete Conversation</span>
             </button>
           </>
@@ -992,9 +992,9 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
           <button
             type="button"
             onClick={handleLeaveGroup}
-            className="w-full py-2.5 px-3 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center justify-center gap-2 text-xs font-semibold transition cursor-pointer border border-red-500/20"
+            className="w-full py-2.5 px-3 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 flex items-center justify-center gap-2 text-xs font-bold transition cursor-pointer border border-red-200 dark:border-red-500/20 shadow-sm"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-4 h-4 text-red-600 dark:text-red-400" />
             <span>Exit Group</span>
           </button>
         )}

@@ -867,7 +867,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                     <div className="flex justify-end pt-1">
                       <button
                         onClick={handleLogOutOtherSessions}
-                        className="text-[11px] text-red-400 hover:text-red-300 font-medium px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 transition cursor-pointer border border-red-500/20"
+                        className="text-[11px] text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-bold px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 transition cursor-pointer border border-red-200 dark:border-red-500/20"
                       >
                         Log out all other devices
                       </button>
@@ -1242,9 +1242,9 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
 
                       <button
                         onClick={handleClearAllChats}
-                        className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-xs font-semibold text-red-400 transition flex items-center gap-1.5 cursor-pointer"
+                        className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 border border-red-200 dark:border-red-500/20 text-xs font-bold text-red-600 dark:text-red-400 transition flex items-center gap-1.5 cursor-pointer"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
                         <span>Clear All Chats</span>
                       </button>
                     </div>
@@ -1515,7 +1515,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                     </div>
                     <button
                       onClick={handleClearCache}
-                      className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-xs transition border border-red-500/20 cursor-pointer"
+                      className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-bold text-xs transition border border-red-200 dark:border-red-500/20 cursor-pointer"
                     >
                       Clear Cache
                     </button>
@@ -1711,9 +1711,9 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
             <div className="pt-2">
               <button
                 onClick={signOut}
-                className="w-full py-3 rounded-2xl bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer border border-red-500/20 shadow-sm"
+                className="w-full py-3 rounded-2xl bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer border border-red-200 dark:border-red-500/20 shadow-sm"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-4 h-4 text-red-600 dark:text-red-400" />
                 <span>Log Out of LimoChat</span>
               </button>
             </div>

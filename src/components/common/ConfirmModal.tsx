@@ -65,17 +65,17 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
       />
 
       {/* Glass Card */}
-      <div className="relative z-50 w-full max-w-sm bg-[#202c33]/95 backdrop-blur-2xl border border-[#2e3b44] rounded-2xl p-5 shadow-2xl animate-scale-in">
+      <div className="relative z-50 w-full max-w-sm bg-white dark:bg-[#202c33]/95 backdrop-blur-2xl border border-gray-200 dark:border-[#2e3b44] rounded-2xl p-5 shadow-2xl animate-scale-in">
         <div className="flex items-start gap-3.5 mb-3.5">
           <div className={`p-2.5 rounded-xl flex-shrink-0 ${vStyles.iconBg}`}>
             {icon || vStyles.defaultIcon}
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-white mb-1 leading-snug">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1 leading-snug">
               {title}
             </h3>
             {description && (
-              <p className="text-xs text-[#8696a0] leading-relaxed">
+              <p className="text-xs text-gray-600 dark:text-[#8696a0] leading-relaxed">
                 {description}
               </p>
             )}
@@ -87,7 +87,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             <button
               type="button"
               onClick={handleClose}
-              className="px-4 py-2 rounded-xl text-xs font-medium text-[#8696a0] hover:text-white hover:bg-[#182229] transition cursor-pointer"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-700 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#182229] transition cursor-pointer"
             >
               {cancelText}
             </button>

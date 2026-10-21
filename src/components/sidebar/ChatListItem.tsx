@@ -286,12 +286,12 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
             }}
           />
           <div
-            className="absolute right-3 top-10 z-50 w-52 bg-[#233138] border border-[#2e3b44] rounded-xl shadow-2xl py-1.5 text-xs text-[#d1d7db] animate-scale-in"
+            className="absolute right-3 top-10 z-50 w-52 bg-white dark:bg-[#233138] border border-gray-200 dark:border-[#2e3b44] rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.18)] dark:shadow-2xl py-1.5 text-xs text-gray-800 dark:text-[#d1d7db] animate-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
           <button
             onClick={handleTogglePin}
-            className="w-full px-3 py-2 text-left hover:bg-[#182229] flex items-center gap-2.5 transition"
+            className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
           >
             <Pin className="w-3.5 h-3.5 text-[#00a884]" />
             <span>{isPinned ? 'Unpin chat' : 'Pin chat'}</span>
@@ -299,11 +299,11 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
 
           <button
             onClick={handleMarkReadUnread}
-            className="w-full px-3 py-2 text-left hover:bg-[#182229] flex items-center gap-2.5 transition"
+            className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
           >
             {unread > 0 ? (
               <>
-                <MailOpen className="w-3.5 h-3.5 text-[#8696a0]" />
+                <MailOpen className="w-3.5 h-3.5 text-gray-500 dark:text-[#8696a0]" />
                 <span>Mark as read</span>
               </>
             ) : (
@@ -316,23 +316,23 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
 
           <button
             onClick={handleToggleFavourite}
-            className="w-full px-3 py-2 text-left hover:bg-[#182229] flex items-center gap-2.5 transition"
+            className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
           >
-            <Star className={`w-3.5 h-3.5 ${isFavourite ? 'text-amber-400 fill-amber-400' : 'text-[#8696a0]'}`} />
+            <Star className={`w-3.5 h-3.5 ${isFavourite ? 'text-amber-500 fill-amber-500' : 'text-gray-500 dark:text-[#8696a0]'}`} />
             <span>{isFavourite ? 'Remove Favourite' : 'Add to Favourites'}</span>
           </button>
 
           <button
             onClick={handleToggleArchive}
-            className="w-full px-3 py-2 text-left hover:bg-[#182229] flex items-center gap-2.5 transition"
+            className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
           >
-            <Archive className="w-3.5 h-3.5 text-[#8696a0]" />
+            <Archive className="w-3.5 h-3.5 text-gray-500 dark:text-[#8696a0]" />
             <span>{chat.isArchived ? 'Unarchive chat' : 'Archive chat'}</span>
           </button>
 
           <button
             onClick={handleClearHistory}
-            className="w-full px-3 py-2 text-left hover:bg-[#182229] flex items-center gap-2.5 text-amber-300 transition"
+            className="w-full px-3.5 py-2.5 text-left hover:bg-amber-50 dark:hover:bg-[#182229] flex items-center gap-2.5 text-amber-600 dark:text-amber-300 transition cursor-pointer font-medium"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Clear messages</span>
@@ -340,13 +340,13 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
 
           {!isSupportChat && (
             <>
-              <div className="border-t border-[#2e3b44] my-1" />
+              <div className="border-t border-gray-200 dark:border-[#2e3b44] my-1" />
 
               <button
                 onClick={handleDeleteChat}
-                className="w-full px-3 py-2 text-left hover:bg-red-500/20 text-red-400 flex items-center gap-2.5 transition"
+                className="w-full px-3.5 py-2.5 text-left hover:bg-red-50 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 flex items-center gap-2.5 transition cursor-pointer font-semibold"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
                 <span>Delete chat</span>
               </button>
             </>

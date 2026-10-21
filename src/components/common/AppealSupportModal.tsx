@@ -127,7 +127,7 @@ export const AppealSupportModal: React.FC<AppealSupportModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in select-none">
       <div 
-        className="relative z-50 w-full max-w-2xl h-[92vh] sm:h-[85vh] bg-[#202c33] border border-[#2e3b44] rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-scale-in"
+        className="relative z-50 w-full max-w-2xl h-[92vh] sm:h-[85vh] bg-[#202c33] border border-[#2e3b44] rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-scale-in modal-content"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Support Header */}
@@ -186,7 +186,7 @@ export const AppealSupportModal: React.FC<AppealSupportModalProps> = ({
         </div>
 
         {/* Messages Stream */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#0b141a]">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#0b141a] whatsapp-bg">
           {/* Welcome / Guidance card if empty */}
           {messages.length === 0 && !loading && (
             <div className="max-w-md mx-auto my-6 p-4 rounded-2xl bg-[#111b21] border border-[#2e3b44] text-center space-y-2">
@@ -220,10 +220,10 @@ export const AppealSupportModal: React.FC<AppealSupportModalProps> = ({
                   <div
                     className={`p-3 rounded-2xl text-xs leading-relaxed shadow-md ${
                       isMe
-                        ? 'bg-[#005c4b] text-white rounded-br-sm'
+                        ? 'bg-[#005c4b] text-white rounded-br-sm message-bubble-out'
                         : isSupport
-                        ? 'bg-[#202c33] text-[#e9edef] border border-[#2e3b44] rounded-bl-sm'
-                        : 'bg-[#182229] text-[#d1d7db] rounded-bl-sm'
+                        ? 'bg-[#202c33] text-[#e9edef] border border-[#2e3b44] rounded-bl-sm message-bubble-in'
+                        : 'bg-[#182229] text-[#d1d7db] rounded-bl-sm message-bubble-in'
                     }`}
                   >
                     {!isMe && (

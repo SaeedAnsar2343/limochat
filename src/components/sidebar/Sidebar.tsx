@@ -166,9 +166,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
               setViewingArchived(false);
             }}
             className={`relative p-2.5 rounded-xl transition cursor-pointer ${
-              activeRail === 'chats'
-                ? 'bg-[#2a3942] text-[#00a884] rail-active'
-                : 'text-[#8696a0] hover:text-white hover:bg-[#2a3942]'
+              activeRail === 'chats' && !viewingArchived
+                ? 'bg-white dark:bg-[#2a3942] text-[#00a884] shadow-sm rail-active'
+                : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/60 dark:hover:bg-[#2a3942]'
             }`}
             title="Chats"
           >
@@ -185,8 +185,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
             onClick={() => setActiveRail('calls')}
             className={`p-2.5 rounded-xl transition cursor-pointer ${
               activeRail === 'calls'
-                ? 'bg-[#2a3942] text-[#00a884] rail-active'
-                : 'text-[#8696a0] hover:text-white hover:bg-[#2a3942]'
+                ? 'bg-white dark:bg-[#2a3942] text-[#00a884] shadow-sm rail-active'
+                : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/60 dark:hover:bg-[#2a3942]'
             }`}
             title="Call History"
           >
@@ -198,8 +198,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
             onClick={() => setActiveRail('status')}
             className={`relative p-2.5 rounded-xl transition cursor-pointer ${
               activeRail === 'status'
-                ? 'bg-[#2a3942] text-[#00a884] rail-active'
-                : 'text-[#8696a0] hover:text-white hover:bg-[#2a3942]'
+                ? 'bg-white dark:bg-[#2a3942] text-[#00a884] shadow-sm rail-active'
+                : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/60 dark:hover:bg-[#2a3942]'
             }`}
             title="Status Updates"
           >
@@ -214,8 +214,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
             onClick={() => setActiveRail('communities')}
             className={`p-2.5 rounded-xl transition cursor-pointer ${
               activeRail === 'communities'
-                ? 'bg-[#2a3942] text-[#00a884] rail-active'
-                : 'text-[#8696a0] hover:text-white hover:bg-[#2a3942]'
+                ? 'bg-white dark:bg-[#2a3942] text-[#00a884] shadow-sm rail-active'
+                : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/60 dark:hover:bg-[#2a3942]'
             }`}
             title="Communities"
           >
@@ -228,13 +228,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
               setActiveRail('chats');
               setActiveFilter('all');
             }}
-            className="p-2.5 rounded-xl text-[#8696a0] hover:text-white hover:bg-[#2a3942] transition cursor-pointer"
+            className="p-2.5 rounded-xl text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/60 dark:hover:bg-[#2a3942] transition cursor-pointer"
             title="Channels & Broadcasts"
           >
             <Megaphone className="w-5 h-5" />
           </button>
 
-          <div className="w-8 border-t border-[#2e3b44] my-1" />
+          <div className="w-8 border-t border-gray-300 dark:border-[#2e3b44] my-1" />
         </div>
 
         {/* Bottom Icons */}
@@ -247,8 +247,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
             }}
             className={`p-2.5 rounded-xl transition cursor-pointer ${
               activeFilter === 'favourites' && activeRail === 'chats'
-                ? 'bg-[#2a3942] text-amber-400 rail-active'
-                : 'text-[#8696a0] hover:text-white hover:bg-[#2a3942]'
+                ? 'bg-white dark:bg-[#2a3942] text-amber-500 dark:text-amber-400 shadow-sm rail-active'
+                : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/60 dark:hover:bg-[#2a3942]'
             }`}
             title="Starred / Favourites"
           >
@@ -258,7 +258,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
           {/* Settings */}
           <button
             onClick={() => setShowSettings(true)}
-            className="p-2.5 rounded-xl text-[#8696a0] hover:text-white hover:bg-[#2a3942] transition cursor-pointer"
+            className="p-2.5 rounded-xl text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/60 dark:hover:bg-[#2a3942] transition cursor-pointer"
             title="Settings & Privacy"
           >
             <Settings className="w-5 h-5" />
@@ -268,10 +268,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
           {isAdmin && (
             <button
               onClick={() => setShowAdminPortal(true)}
-              className="p-2.5 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/15 transition cursor-pointer"
+              className="p-2.5 rounded-xl text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/15 transition cursor-pointer"
               title="Admin Control Portal"
             >
-              <ShieldCheck className="w-5 h-5 text-red-400" />
+              <ShieldCheck className="w-5 h-5 text-red-600 dark:text-red-400" />
             </button>
           )}
 
@@ -342,12 +342,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
                         onClick={() => setShowMoreMenu(false)}
                       />
                       <div
-                        className="absolute right-0 top-10 z-30 w-48 bg-[#233138] border border-[#2e3b44] rounded-2xl shadow-2xl py-1 text-xs text-[#d1d7db] animate-scale-in"
+                        className="absolute right-0 top-10 z-30 w-52 bg-white dark:bg-[#233138] border border-gray-200 dark:border-[#2e3b44] rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.18)] dark:shadow-2xl py-1.5 text-xs text-gray-800 dark:text-[#d1d7db] animate-scale-in"
                         onClick={() => setShowMoreMenu(false)}
                       >
                       <button
                         onClick={() => setShowNewGroup(true)}
-                        className="w-full px-3.5 py-2 text-left hover:bg-[#182229] flex items-center gap-2.5"
+                        className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
                       >
                         <UserPlus className="w-4 h-4 text-[#00a884]" />
                         <span>New Group</span>
@@ -355,9 +355,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
 
                       <button
                         onClick={() => setActiveRail('communities')}
-                        className="w-full px-3.5 py-2 text-left hover:bg-[#182229] flex items-center gap-2.5"
+                        className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
                       >
-                        <Users2 className="w-4 h-4 text-cyan-400" />
+                        <Users2 className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
                         <span>New Community</span>
                       </button>
 
@@ -366,27 +366,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
                           setActiveFilter('favourites');
                           setViewingArchived(false);
                         }}
-                        className="w-full px-3.5 py-2 text-left hover:bg-[#182229] flex items-center gap-2.5"
+                        className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
                       >
-                        <Star className="w-4 h-4 text-amber-400" />
+                        <Star className="w-4 h-4 text-amber-500 dark:text-amber-400" />
                         <span>Starred messages</span>
                       </button>
 
                       <button
                         onClick={() => setViewingArchived(!viewingArchived)}
-                        className="w-full px-3.5 py-2 text-left hover:bg-[#182229] flex items-center gap-2.5"
+                        className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
                       >
-                        <Archive className="w-4 h-4 text-purple-400" />
+                        <Archive className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                         <span>Archived chats ({archivedChatsCount})</span>
                       </button>
 
-                      <div className="border-t border-[#2e3b44] my-1" />
+                      <div className="border-t border-gray-200 dark:border-[#2e3b44] my-1" />
 
                       <button
                         onClick={() => setShowSettings(true)}
-                        className="w-full px-3.5 py-2 text-left hover:bg-[#182229] flex items-center gap-2.5"
+                        className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
                       >
-                        <Settings className="w-4 h-4 text-[#8696a0]" />
+                        <Settings className="w-4 h-4 text-gray-600 dark:text-[#8696a0]" />
                         <span>Settings</span>
                       </button>
 
@@ -396,9 +396,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
                             setShowMoreMenu(false);
                             setShowAdminPortal(true);
                           }}
-                          className="w-full px-3.5 py-2 text-left hover:bg-red-500/10 flex items-center gap-2.5 text-red-400 font-semibold"
+                          className="w-full px-3.5 py-2.5 text-left hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center gap-2.5 text-red-600 dark:text-red-400 font-semibold transition cursor-pointer"
                         >
-                          <ShieldCheck className="w-4 h-4 text-red-400" />
+                          <ShieldCheck className="w-4 h-4 text-red-600 dark:text-red-400" />
                           <span>Admin Control Portal</span>
                         </button>
                       )}

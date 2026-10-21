@@ -167,7 +167,7 @@ export const SuspensionScreen: React.FC<SuspensionScreenProps> = ({ currentUser,
           <button
             type="button"
             onClick={onSignOut}
-            className="w-full py-2.5 text-[#8696a0] hover:text-white rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-2.5 text-gray-700 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl text-xs sm:text-sm font-medium transition flex items-center justify-center gap-2 cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
             <span>Sign Out</span>

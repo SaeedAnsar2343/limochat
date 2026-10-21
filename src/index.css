@@ -573,7 +573,7 @@
   color: #008069 !important;
 }
 
-/* CRITICAL: PRESERVE CRISP WHITE TEXT ON COLORED BUTTONS & BADGES */
+/* CRITICAL: PRESERVE CRISP WHITE TEXT ONLY ON SOLID OPAQUE BUTTONS & BADGES */
 .light-theme button[class*="bg-[#00a884]"],
 .light-theme button[class*="bg-[#00a884]"] *,
 .light-theme button[class*="bg-[#02906f]"],
@@ -582,22 +582,110 @@
 .light-theme button.bg-red-600 *,
 .light-theme button.bg-red-500,
 .light-theme button.bg-red-500 *,
-.light-theme button[class*="bg-red-"],
-.light-theme button[class*="bg-red-"] *,
-.light-theme button[class*="bg-emerald-"],
-.light-theme button[class*="bg-emerald-"] *,
-.light-theme button[class*="bg-blue-"],
-.light-theme button[class*="bg-blue-"] *,
+.light-theme button.bg-red-700,
+.light-theme button.bg-red-700 *,
+.light-theme button[class*="bg-emerald-600"],
+.light-theme button[class*="bg-emerald-600"] *,
+.light-theme button[class*="bg-blue-600"],
+.light-theme button[class*="bg-blue-600"] *,
 .light-theme span[class*="bg-[#00a884]"],
 .light-theme span[class*="bg-[#00a884]"] *,
 .light-theme span.bg-red-600,
 .light-theme span.bg-red-600 *,
 .light-theme span.bg-red-500,
 .light-theme span.bg-red-500 *,
-.light-theme .text-white-fixed,
-.light-theme [class*="bg-[#00a884]"] > span.text-white,
-.light-theme [class*="bg-red-"] > span.text-white {
+.light-theme .text-white-fixed {
   color: #ffffff !important;
+}
+
+/* Translucent & Tinted Red/Danger Buttons across the system in Light Mode */
+.light-theme button[class*="bg-red-500/10"],
+.light-theme button[class*="bg-red-500/15"],
+.light-theme button[class*="bg-red-500/20"],
+.light-theme button[class*="bg-red-50"],
+.light-theme button[class*="hover:bg-red-500/10"]:hover,
+.light-theme button[class*="hover:bg-red-500/20"]:hover {
+  background-color: #fef2f2 !important;
+  border-color: #fecaca !important;
+}
+
+.light-theme button[class*="bg-red-500/10"]:hover,
+.light-theme button[class*="bg-red-500/15"]:hover,
+.light-theme button[class*="bg-red-500/20"]:hover,
+.light-theme button[class*="bg-red-50"]:hover {
+  background-color: #fee2e2 !important;
+}
+
+.light-theme button[class*="bg-red-500/10"] *,
+.light-theme button[class*="bg-red-500/15"] *,
+.light-theme button[class*="bg-red-500/20"] *,
+.light-theme button[class*="bg-red-50"] *,
+.light-theme button[class*="text-red-400"]:not(.bg-red-600):not(.bg-red-500),
+.light-theme button[class*="text-red-400"]:not(.bg-red-600):not(.bg-red-500) *,
+.light-theme button[class*="text-red-500"]:not(.bg-red-600):not(.bg-red-500),
+.light-theme button[class*="text-red-500"]:not(.bg-red-600):not(.bg-red-500) *,
+.light-theme button[class*="text-red-600"]:not(.bg-red-600):not(.bg-red-500),
+.light-theme button[class*="text-red-600"]:not(.bg-red-600):not(.bg-red-500) *,
+.light-theme span[class*="text-red-400"]:not(.bg-red-600):not(.bg-red-500),
+.light-theme [class*="text-red-400"]:not(.bg-red-600):not(.bg-red-500) {
+  color: #dc2626 !important;
+}
+
+/* Fix hover states in Light Mode so text doesn't turn invisible white */
+.light-theme button:not([class*="bg-[#00a884]"]):not([class*="bg-emerald-"]):not([class*="bg-red-600"]):not([class*="bg-red-500"]):not([class*="bg-blue-"])[class*="hover:text-white"]:hover,
+.light-theme div:not([class*="bg-[#00a884]"]):not([class*="bg-emerald-"]):not([class*="bg-red-600"]):not([class*="bg-red-500"]):not([class*="bg-blue-"])[class*="hover:text-white"]:hover,
+.light-theme a:not([class*="bg-[#00a884]"])[class*="hover:text-white"]:hover {
+  color: #111b21 !important;
+}
+
+.light-theme [class*="hover:bg-white/10"]:hover,
+.light-theme [class*="hover:bg-white/15"]:hover,
+.light-theme [class*="hover:bg-white/20"]:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.light-theme [class*="active:bg-white/15"]:active,
+.light-theme [class*="active:bg-white/20"]:active {
+  background-color: rgba(0, 0, 0, 0.09) !important;
+}
+
+/* Global Dropdown Menus in Light Mode */
+.light-theme [class*="bg-[#233138]"],
+.light-theme [class*="bg-[#233138]/95"],
+.light-theme [class*="bg-[#202c33]"].dropdown-menu {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #111b21 !important;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.04) !important;
+}
+
+.light-theme [class*="bg-[#233138]"] button,
+.light-theme [class*="bg-[#233138]/95"] button {
+  color: #111b21 !important;
+}
+
+.light-theme [class*="bg-[#233138]"] button:hover,
+.light-theme [class*="bg-[#233138]/95"] button:hover {
+  background-color: #f0f2f5 !important;
+}
+
+.light-theme [class*="bg-[#233138]"] button span,
+.light-theme [class*="bg-[#233138]/95"] button span {
+  color: #111b21 !important;
+}
+
+.light-theme [class*="bg-[#233138]"] button[class*="text-red-"],
+.light-theme [class*="bg-[#233138]/95"] button[class*="text-red-"],
+.light-theme [class*="bg-[#233138]"] button[class*="text-red-"] *,
+.light-theme [class*="bg-[#233138]/95"] button[class*="text-red-"] * {
+  color: #dc2626 !important;
+}
+
+.light-theme [class*="bg-[#233138]"] button[class*="text-amber-"],
+.light-theme [class*="bg-[#233138]/95"] button[class*="text-amber-"],
+.light-theme [class*="bg-[#233138]"] button[class*="text-amber-"] *,
+.light-theme [class*="bg-[#233138]/95"] button[class*="text-amber-"] * {
+  color: #d97706 !important;
 }
 
 /* Preserve black text on yellow/amber buttons */
@@ -661,6 +749,7 @@
 .light-theme .contact-info-drawer {
   background-color: #ffffff !important;
   border-left-color: #e2e8f0 !important;
+  color: #111b21 !important;
 }
 
 .light-theme .contact-info-drawer .drawer-header {
@@ -674,9 +763,15 @@
 
 .light-theme .contact-info-drawer [class*="bg-[#111b21]"] {
   background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
 }
 
 .light-theme .contact-info-drawer [class*="bg-[#202c33]"] {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light-theme .contact-info-drawer [class*="bg-[#182229]"] {
   background-color: #f0f2f5 !important;
   border-color: #e2e8f0 !important;
 }
@@ -687,7 +782,7 @@
   color: #111b21 !important;
 }
 
-.light-theme .contact-info-drawer [class*="text-white"] {
+.light-theme .contact-info-drawer [class*="text-white"]:not([class*="bg-[#00a884]"]):not(.bg-red-600) {
   color: #111b21 !important;
 }
 
@@ -725,18 +820,42 @@
   border-color: #e2e8f0 !important;
 }
 
-.light-theme .contact-info-drawer [class*="bg-[#182229]"] {
-  background-color: #f8fafc !important;
-  border-color: #e2e8f0 !important;
+/* Encryption Banner in Drawer */
+.light-theme .contact-info-drawer [class*="bg-emerald-500/10"] {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
 }
 
-.light-theme .contact-info-drawer span,
-.light-theme .contact-info-drawer p {
+.light-theme .contact-info-drawer [class*="bg-emerald-500/10"] h4 {
+  color: #065f46 !important;
+}
+
+.light-theme .contact-info-drawer [class*="bg-emerald-500/10"] p {
+  color: #047857 !important;
+}
+
+/* Action & Danger Buttons in Contact Info Drawer */
+.light-theme .contact-info-drawer button[class*="bg-red-"] {
+  background-color: #fef2f2 !important;
+  border-color: #fecaca !important;
+}
+
+.light-theme .contact-info-drawer button[class*="bg-red-"]:hover {
+  background-color: #fee2e2 !important;
+}
+
+.light-theme .contact-info-drawer button[class*="bg-red-"] span,
+.light-theme .contact-info-drawer button[class*="bg-red-"] svg {
+  color: #dc2626 !important;
+}
+
+.light-theme .contact-info-drawer span:not([class*="text-red-"]):not([class*="text-emerald-"]):not([class*="text-[#00a884]"]):not([class*="bg-"]),
+.light-theme .contact-info-drawer p:not([class*="text-red-"]):not([class*="text-emerald-"]):not([class*="text-[#00a884]"]) {
   color: #111b21;
 }
 
 .light-theme .contact-info-drawer .text-\[\#8696a0\] {
-  color: #64748b !important;
+  color: #54656f !important;
 }
 
 /* =========================================================================

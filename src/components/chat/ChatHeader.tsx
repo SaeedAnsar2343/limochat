@@ -206,12 +206,12 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
 
               {/* Dropdown Menu */}
               <div
-                className="absolute right-0 top-11 z-50 w-52 bg-[#233138]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl py-1.5 text-xs text-[#d1d7db] animate-scale-in"
+                className="absolute right-0 top-11 z-50 w-52 bg-white dark:bg-[#233138]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.18)] dark:shadow-2xl py-1.5 text-xs text-gray-800 dark:text-[#d1d7db] animate-scale-in"
                 onClick={() => setShowMoreMenu(false)}
               >
                 <button
                   onClick={onToggleInfo}
-                  className="w-full px-3.5 py-2.5 text-left hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer"
+                  className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
                 >
                   <Info className="w-4 h-4 text-[#00a884]" />
                   <span>{chat.type === 'direct' ? 'Contact info' : 'Group info'}</span>
@@ -220,9 +220,9 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 {onOpenSearch && (
                   <button
                     onClick={onOpenSearch}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer"
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
                   >
-                    <Search className="w-4 h-4 text-emerald-400" />
+                    <Search className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                     <span>Search messages</span>
                   </button>
                 )}
@@ -230,9 +230,9 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 {onOpenJumpToDate && (
                   <button
                     onClick={onOpenJumpToDate}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer"
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
                   >
-                    <Calendar className="w-4 h-4 text-blue-400" />
+                    <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                     <span>Jump to date</span>
                   </button>
                 )}
@@ -240,9 +240,9 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 {onToggleStarredFilter && (
                   <button
                     onClick={onToggleStarredFilter}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-white/10 flex items-center gap-2.5 text-amber-400 transition cursor-pointer"
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-white/10 flex items-center gap-2.5 text-amber-600 dark:text-amber-400 transition cursor-pointer font-medium"
                   >
-                    <Star className={`w-4 h-4 ${isFilteringStarred ? 'fill-amber-400' : ''}`} />
+                    <Star className={`w-4 h-4 ${isFilteringStarred ? 'fill-amber-500 text-amber-500' : 'text-amber-500'}`} />
                     <span>{isFilteringStarred ? 'Show all messages' : 'Starred messages'}</span>
                   </button>
                 )}
@@ -250,9 +250,9 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 {onEnterSelectionMode && (
                   <button
                     onClick={onEnterSelectionMode}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer"
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
                   >
-                    <CheckSquare className="w-4 h-4 text-cyan-400" />
+                    <CheckSquare className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
                     <span>Select messages</span>
                   </button>
                 )}
@@ -260,7 +260,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 {onClearChat && (
                   <button
                     onClick={onClearChat}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-white/10 flex items-center gap-2.5 text-amber-300 transition cursor-pointer"
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-amber-50 dark:hover:bg-white/10 flex items-center gap-2.5 text-amber-600 dark:text-amber-300 transition cursor-pointer font-medium"
                   >
                     <RotateCcw className="w-4 h-4" />
                     <span>Clear chat history</span>
@@ -270,19 +270,19 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 {onToggleBlock && chat.type === 'direct' && (
                   <button
                     onClick={onToggleBlock}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-white/10 flex items-center gap-2.5 text-red-400 transition cursor-pointer"
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-red-50 dark:hover:bg-white/10 flex items-center gap-2.5 text-red-600 dark:text-red-400 transition cursor-pointer font-medium"
                   >
                     <Ban className="w-4 h-4" />
                     <span>{isBlocked ? 'Unblock contact' : 'Block contact'}</span>
                   </button>
                 )}
 
-                <div className="border-t border-white/10 my-1" />
+                <div className="border-t border-gray-200 dark:border-white/10 my-1" />
 
                 {onDeleteChat && (
                   <button
                     onClick={onDeleteChat}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-red-500/20 text-red-400 flex items-center gap-2.5 transition cursor-pointer"
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-red-50 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 flex items-center gap-2.5 transition cursor-pointer font-semibold"
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>Delete chat</span>
