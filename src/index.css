@@ -422,23 +422,32 @@
   border-left-color: #008069 !important;
 }
 
-/* Message Input Bar in Light Mode */
-.light-theme .message-input-bar,
-.light-theme [class*="p-3"][class*="bg-[#202c33]"][class*="border-t"] {
-  background-color: #f0f2f5 !important;
-  border-color: #e2e8f0 !important;
+/* Message Input Bar in Light Mode (Ultra-Modern Glassmorphism Dock) */
+.light-theme .message-input-bar {
+  background-color: rgba(240, 242, 245, 0.94) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.04) !important;
 }
 
-.light-theme input[placeholder="Type a message..."],
-.light-theme .message-input-field {
+.light-theme .message-input-pill {
   background-color: #ffffff !important;
-  color: #111b21 !important;
-  border: 1px solid #e2e8f0 !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
 }
 
-.light-theme input[placeholder="Type a message..."]::placeholder,
+.light-theme .message-input-field {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  color: #111b21 !important;
+}
+
 .light-theme .message-input-field::placeholder {
-  color: #667781 !important;
+  color: #8696a0 !important;
 }
 
 /* Filter Chips in Sidebar */
@@ -758,24 +767,5 @@
 }
 
 .light-theme .mobile-glass-dock [class*="text-white"] {
-  color: #111b21 !important;
-}
-
-.light-theme .message-input-bar {
-  background: rgba(240, 242, 245, 0.88) !important;
-  backdrop-filter: blur(24px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
-  border-top-color: rgba(0, 0, 0, 0.08) !important;
-  box-shadow: 0 -8px 25px rgba(0, 0, 0, 0.06) !important;
-}
-
-.light-theme .message-input-field {
-  color: #111b21 !important;
-}
-
-.light-theme .message-input-bar [class*="bg-white\/\[0\.06\]"],
-.light-theme .message-input-bar [class*="bg-white\/\[0\.07\]"] {
-  background-color: #ffffff !important;
-  border-color: #e2e8f0 !important;
   color: #111b21 !important;
 }

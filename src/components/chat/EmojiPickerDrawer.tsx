@@ -14,6 +14,7 @@ import {
   Zap,
   Check
 } from 'lucide-react';
+import { LimoCraftEmoji, LIMO_CRAFT_EMOJIS, LimoEmojiDef } from './LimoCraftEmoji';
 
 interface EmojiPickerDrawerProps {
   isOpen: boolean;
@@ -22,26 +23,6 @@ interface EmojiPickerDrawerProps {
   onSelectGif?: (gifUrl: string, caption?: string) => void;
   onSendAnimatedEmoji?: (emoji: string, name: string) => void;
 }
-
-// 🍋 1. LimoChat Exclusive Signature Emojis
-const LIMO_EXCLUSIVE_EMOJIS = [
-  { id: 'limo_lemon', name: 'Limo Lime', emoji: '🍋', subtitle: 'Official Mascot', badge: 'VIP Mascot', glow: 'from-emerald-500/30 to-lime-500/30', border: 'border-emerald-500/40', textColor: 'text-emerald-400' },
-  { id: 'limo_vip', name: 'VIP Limousine', emoji: '🚗', subtitle: 'Luxury Sedan', badge: 'VIP Ride', glow: 'from-amber-500/30 to-yellow-500/30', border: 'border-amber-500/40', textColor: 'text-amber-400' },
-  { id: 'limo_vault', name: 'Limo Vault', emoji: '🛡️', subtitle: 'End-to-End Vault', badge: 'Secured', glow: 'from-cyan-500/30 to-blue-500/30', border: 'border-cyan-500/40', textColor: 'text-cyan-400' },
-  { id: 'limo_crown', name: 'Limo Royal', emoji: '👑', subtitle: 'Elite Club Member', badge: 'Royal', glow: 'from-amber-500/30 to-orange-500/30', border: 'border-amber-500/40', textColor: 'text-amber-300' },
-  { id: 'limo_diamond', name: 'Limo Diamond', emoji: '💎', subtitle: 'Crystal Luxury', badge: 'Diamond', glow: 'from-sky-500/30 to-indigo-500/30', border: 'border-sky-500/40', textColor: 'text-sky-300' },
-  { id: 'limo_spark', name: 'Limo Speed', emoji: '⚡', subtitle: 'Instant Sync', badge: 'Hyper', glow: 'from-yellow-500/30 to-amber-500/30', border: 'border-yellow-500/40', textColor: 'text-yellow-400' },
-  { id: 'limo_rocket', name: 'Limo Rocket', emoji: '🚀', subtitle: 'Galactic Messenger', badge: 'Boosted', glow: 'from-purple-500/30 to-pink-500/30', border: 'border-purple-500/40', textColor: 'text-purple-400' },
-  { id: 'limo_bubble', name: 'Limo Chat', emoji: '💬', subtitle: 'Crystal Speech', badge: 'Neon Chat', glow: 'from-teal-500/30 to-emerald-500/30', border: 'border-teal-500/40', textColor: 'text-teal-400' },
-  { id: 'limo_star', name: 'Limo Star', emoji: '🌟', subtitle: 'Top Tier VIP', badge: 'Superstar', glow: 'from-amber-500/30 to-yellow-500/30', border: 'border-amber-400/40', textColor: 'text-amber-300' },
-  { id: 'limo_chill', name: 'Limo Lounge', emoji: '🍸', subtitle: 'VIP Chill Lounge', badge: 'Cheers', glow: 'from-blue-500/30 to-violet-500/30', border: 'border-blue-500/40', textColor: 'text-blue-400' },
-  { id: 'limo_hype', name: 'Limo Fire', emoji: '🔥', subtitle: 'Peak Hype Wave', badge: 'Maximum Hype', glow: 'from-red-500/30 to-orange-500/30', border: 'border-red-500/40', textColor: 'text-red-400' },
-  { id: 'limo_agent', name: 'Limo Agent', emoji: '🕶️', subtitle: 'Stealth Shield', badge: 'Secret VIP', glow: 'from-slate-500/30 to-zinc-500/30', border: 'border-slate-500/40', textColor: 'text-slate-300' },
-  { id: 'limo_toast', name: 'Limo Pop', emoji: '🍾', subtitle: 'Grand Celebrate', badge: 'Toast', glow: 'from-pink-500/30 to-rose-500/30', border: 'border-pink-500/40', textColor: 'text-pink-400' },
-  { id: 'limo_future', name: 'Hover Limo', emoji: '🛸', subtitle: 'Cyber Spacecraft', badge: 'Future', glow: 'from-indigo-500/30 to-cyan-500/30', border: 'border-indigo-500/40', textColor: 'text-indigo-300' },
-  { id: 'limo_trophy', name: 'Limo Trophy', emoji: '🏆', subtitle: 'Winner Circle', badge: 'Champion', glow: 'from-amber-500/30 to-yellow-500/30', border: 'border-amber-500/40', textColor: 'text-amber-400' },
-  { id: 'limo_key', name: 'Master Key', emoji: '🔒', subtitle: 'Hardware Token', badge: 'Encrypted', glow: 'from-emerald-500/30 to-teal-500/30', border: 'border-emerald-500/40', textColor: 'text-emerald-300' },
-];
 
 // ✨ 2. Animated Micro-Motion Emojis
 const ANIMATED_EMOJIS = [
@@ -194,6 +175,7 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
   onSendAnimatedEmoji
 }) => {
   const [activeTab, setActiveTab] = useState<'limo' | 'animated' | 'gifs' | 'standard'>('limo');
+  const [animateAll, setAnimateAll] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [gifCategory, setGifCategory] = useState<string>('All');
   const [recentEmojis, setRecentEmojis] = useState<string[]>([]);
@@ -259,21 +241,22 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
     return ANIMATED_EMOJIS.filter(e => e.name.toLowerCase().includes(q) || e.tag.toLowerCase().includes(q));
   }, [searchQuery]);
 
-  // Filtered Limo exclusive
+  // Filtered LimoCraft exclusive emojis
   const filteredLimo = useMemo(() => {
-    if (!searchQuery.trim()) return LIMO_EXCLUSIVE_EMOJIS;
+    if (!searchQuery.trim()) return LIMO_CRAFT_EMOJIS;
     const q = searchQuery.toLowerCase();
-    return LIMO_EXCLUSIVE_EMOJIS.filter(e => 
+    return LIMO_CRAFT_EMOJIS.filter(e => 
       e.name.toLowerCase().includes(q) || 
       e.subtitle.toLowerCase().includes(q) ||
-      e.badge.toLowerCase().includes(q)
+      e.badge.toLowerCase().includes(q) ||
+      e.tag.toLowerCase().includes(q)
     );
   }, [searchQuery]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="bg-white/95 dark:bg-[#182229]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-3xl shadow-[0_12px_45px_rgba(0,0,0,0.3)] dark:shadow-[0_12px_45px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col z-40 transition-all select-none animate-scale-in max-h-[420px] sm:max-h-[460px]">
+    <div className="bg-white/95 dark:bg-[#182229]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-3xl shadow-[0_12px_45px_rgba(0,0,0,0.3)] dark:shadow-[0_12px_45px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col z-40 transition-all select-none animate-scale-in max-h-[440px] sm:max-h-[480px]">
       {/* Top Header & Search Bar */}
       <div className="p-3 bg-gray-50/90 dark:bg-[#111b21]/90 border-b border-gray-200 dark:border-white/10 flex items-center justify-between gap-2.5">
         <div className="flex-1 relative flex items-center">
@@ -287,7 +270,7 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
                 ? 'Search animated GIFs...'
                 : activeTab === 'animated'
                 ? 'Search animated stickers...'
-                : 'Search emojis & Limo stickers...'
+                : 'Search emojis & LimoCraft...'
             }
             className="w-full pl-9 pr-3 py-1.5 bg-gray-100 dark:bg-white/[0.06] hover:bg-gray-200/60 dark:hover:bg-white/[0.09] focus:bg-white dark:focus:bg-white/[0.12] border border-gray-300 dark:border-white/10 focus:border-[#00a884] dark:focus:border-[#00a884]/60 rounded-xl text-xs text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-[#8696a0] focus:outline-none transition-all"
           />
@@ -300,6 +283,22 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
             </button>
           )}
         </div>
+
+        {/* Live Animation Toggle Switch */}
+        <button
+          type="button"
+          onClick={() => setAnimateAll((prev) => !prev)}
+          className={`px-2 sm:px-2.5 py-1 rounded-xl text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer flex-shrink-0 active:scale-95 ${
+            animateAll
+              ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 shadow-sm'
+              : 'bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-[#8696a0]'
+          }`}
+          title="Toggle continuous motion animation for all emojis"
+        >
+          <Sparkles className={`w-3.5 h-3.5 text-amber-500 ${animateAll ? 'animate-spin-slow' : ''}`} />
+          <span className="hidden sm:inline">Motion</span>
+          <span className="text-[10px] font-mono font-bold uppercase">{animateAll ? 'ON' : 'OFF'}</span>
+        </button>
 
         <button
           onClick={onClose}
@@ -395,20 +394,47 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
               {filteredLimo.map((item) => (
                 <div
                   key={item.id}
-                  onClick={() => handleEmojiClick(item.emoji)}
-                  className={`group relative p-2.5 rounded-2xl bg-gradient-to-br ${item.glow} bg-gray-50/80 dark:bg-[#1f2c34]/70 border ${item.border} hover:scale-[1.03] active:scale-95 transition-all cursor-pointer flex flex-col items-center justify-center text-center shadow-sm dark:shadow-lg hover:shadow-md`}
+                  className={`group relative p-3 rounded-2xl bg-gradient-to-br ${item.glow} bg-gray-50/80 dark:bg-[#1f2c34]/70 border ${item.border} hover:scale-[1.02] transition-all flex flex-col items-center justify-center text-center shadow-sm dark:shadow-lg`}
                 >
-                  <div className="text-3xl mb-1 filter drop-shadow-md group-hover:scale-125 transition-transform">
-                    {item.emoji}
+                  <div 
+                    onClick={() => onSelectEmoji(item.tag)}
+                    className="py-1 cursor-pointer hover:scale-120 transition-transform select-none"
+                    title={`Tap to insert ${item.name}`}
+                  >
+                    <LimoCraftEmoji id={item.id} size={50} animated={animateAll} />
                   </div>
-                  <div className="font-semibold text-xs text-gray-900 dark:text-white truncate w-full">
+                  <div className="font-semibold text-xs text-gray-900 dark:text-white truncate w-full mt-1">
                     {item.name}
                   </div>
                   <div className="text-[10px] text-gray-500 dark:text-[#8696a0] truncate w-full">
                     {item.subtitle}
                   </div>
-                  <div className={`mt-1.5 text-[9px] font-bold px-2 py-0.5 rounded-full bg-black/5 dark:bg-white/10 ${item.textColor} uppercase tracking-wider`}>
+                  <div className={`my-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-black/5 dark:bg-white/10 ${item.textColor} uppercase tracking-wider`}>
                     {item.badge}
+                  </div>
+                  <div className="flex items-center gap-1 w-full mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onSelectEmoji(item.tag)}
+                      className="flex-1 py-1 px-1 rounded-lg bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-[10px] font-medium text-gray-700 dark:text-white transition cursor-pointer"
+                      title="Insert into text message"
+                    >
+                      Insert
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onSendAnimatedEmoji) {
+                          onSendAnimatedEmoji(item.tag, item.name);
+                        } else {
+                          onSelectEmoji(item.tag);
+                        }
+                      }}
+                      className="flex-1 py-1 px-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-[10px] font-medium text-white transition cursor-pointer shadow-sm"
+                      title="Send as custom sticker"
+                    >
+                      Send
+                    </button>
                   </div>
                 </div>
               ))}
@@ -578,7 +604,12 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
                       <button
                         key={idx}
                         onClick={() => handleEmojiClick(emoji)}
-                        className="text-2xl p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/[0.08] active:scale-125 transition flex items-center justify-center cursor-pointer"
+                        className={`text-2xl p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/[0.08] active:scale-125 transition flex items-center justify-center cursor-pointer hover:scale-140 hover:-rotate-6 ${
+                          animateAll ? 'animate-emoji-pop' : ''
+                        }`}
+                        style={{
+                          animationDelay: animateAll ? `${(idx % 12) * 0.08}s` : undefined
+                        }}
                       >
                         {emoji}
                       </button>

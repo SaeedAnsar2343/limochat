@@ -28,6 +28,7 @@ import { Message, UserProfile } from '../../types';
 import { formatTime, formatDuration } from '../../utils/formatters';
 import { useChat } from '../../context/ChatContext';
 import { useCall } from '../../context/CallContext';
+import { LimoCraftEmoji, LIMO_CRAFT_EMOJIS } from './LimoCraftEmoji';
 import { translateText, SUPPORTED_LANGUAGES } from '../../utils/translate';
 import { ReportMessageModal } from './ReportMessageModal';
 
@@ -122,31 +123,46 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const { startCall } = useCall();
   const fontClass = fontSize === 'lg' ? 'text-base' : fontSize === 'base' ? 'text-sm' : 'text-xs';
 
-  // Detect 1-3 emojis message for animated stickers / large animated display
+  // Detect handcrafted LimoCraft custom emoji sticker
+  const limoCraftSticker = useMemo(() => {
+    if (!message.text || message.type !== 'text') return null;
+    const clean = message.text.trim();
+    return LIMO_CRAFT_EMOJIS.find(e => e.tag === clean || e.id === clean) || null;
+  }, [message.text, message.type]);
+
+  // Detect 1-4 emojis message for animated stickers / large animated display
   const isEmojiOnly = useMemo(() => {
     if (!message.text || message.type !== 'text') return false;
     const clean = message.text.trim();
-    const emojiRegex = /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Emoji_Modifier_Base}|\u200d|\ufe0f|\u20e3){1,3}$/u;
+    const emojiRegex = /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Emoji_Modifier_Base}|\u200d|\ufe0f|\u20e3){1,4}$/u;
     return emojiRegex.test(clean);
   }, [message.text, message.type]);
 
   const getEmojiAnimationClass = (emojiStr: string) => {
     const clean = emojiStr.trim();
-    if (clean.includes('❤️') || clean.includes('💖') || clean.includes('💓') || clean.includes('💎')) return 'animate-emoji-heartbeat';
-    if (clean.includes('🔥') || clean.includes('🎉') || clean.includes('👋') || clean.includes('🍾') || clean.includes('🕺') || clean.includes('🐱') || clean.includes('🐶')) return 'animate-emoji-wiggle';
-    if (clean.includes('🚀') || clean.includes('👻') || clean.includes('👑') || clean.includes('😎')) return 'animate-emoji-float';
-    if (clean.includes('🌟') || clean.includes('✨')) return 'animate-emoji-spin-slow';
-    if (clean.includes('🍋') || clean.includes('⚡') || clean.includes('😂') || clean.includes('🤯') || clean.includes('💯') || clean.includes('🚗')) return 'animate-emoji-pop';
-    return '';
+    if (clean.includes('❤️') || clean.includes('💖') || clean.includes('💓') || clean.includes('💎') || clean.includes('🥰') || clean.includes('😍')) return 'animate-emoji-heartbeat';
+    if (clean.includes('🔥') || clean.includes('🎉') || clean.includes('👋') || clean.includes('🍾') || clean.includes('🕺') || clean.includes('🐱') || clean.includes('🐶') || clean.includes('🥳') || clean.includes('💃')) return 'animate-emoji-wiggle';
+    if (clean.includes('🚀') || clean.includes('👻') || clean.includes('👑') || clean.includes('😎') || clean.includes('🛸') || clean.includes('☁️') || clean.includes('🕊️')) return 'animate-emoji-float';
+    if (clean.includes('🌟') || clean.includes('✨') || clean.includes('💫') || clean.includes('🌀')) return 'animate-emoji-spin-slow';
+    // All other emojis get animated micro-motion
+    return 'animate-emoji-pop';
   };
 
   const renderMessageContent = (content: string) => {
-    const parts = content.split(/(@[a-zA-Z0-9_\s]{1,30}?(?=\s|$|[.,!?]))/g);
-    return parts.map((part, idx) => {
+    const parts = content.split(/(@[a-zA-Z0-9_\s]{1,30}?(?=\s|$|[.,!?]))|(::limo_[a-z_]+::)/g);
+    return parts.filter(Boolean).map((part, idx) => {
       if (part.startsWith('@')) {
         return (
           <span key={idx} className="text-[#53bdeb] font-semibold bg-[#53bdeb]/10 px-1 py-0.5 rounded">
             {part}
+          </span>
+        );
+      }
+      if (part.startsWith('::limo_') && part.endsWith('::')) {
+        const id = part.slice(2, -2);
+        return (
+          <span key={idx} className="inline-flex align-middle mx-1">
+            <LimoCraftEmoji id={id} size={22} animated={true} />
           </span>
         );
       }
@@ -653,10 +669,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </div>
             )}
 
-            {/* Text Message with Real-Time Translation or Large Animated Emojis */}
+            {/* Text Message with Real-Time Translation, Large Animated Emojis, or LimoCraft Sticker */}
             {message.text && message.type !== 'call_log' && (
               <div className="relative">
-                {isEmojiOnly ? (
+                {limoCraftSticker ? (
+                  <div className="py-2 px-1 select-none flex flex-col items-center">
+                    <LimoCraftEmoji id={limoCraftSticker.id} size={82} animated={true} />
+                    <span className="text-[10px] text-emerald-500 dark:text-emerald-400 font-mono mt-1 font-semibold tracking-wider">
+                      {limoCraftSticker.name}
+                    </span>
+                  </div>
+                ) : isEmojiOnly ? (
                   <div className="py-1 px-0.5 select-none flex items-center">
                     <span className={`text-4xl sm:text-5xl inline-block ${getEmojiAnimationClass(message.text)} transition-transform filter drop-shadow-sm`}>
                       {message.text}
