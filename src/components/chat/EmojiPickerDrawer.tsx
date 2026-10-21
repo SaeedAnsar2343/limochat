@@ -1,20 +1,20 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Search, 
   X, 
-  Sparkles, 
   Smile, 
   Film, 
-  Flame, 
   Heart, 
   Clock, 
-  Car, 
+  Flame, 
   Coffee, 
-  Send,
-  Zap,
-  Check
+  Car, 
+  Smartphone, 
+  Compass,
+  Check, 
+  Send
 } from 'lucide-react';
-import { LimoCraftEmoji, LIMO_CRAFT_EMOJIS, LimoEmojiDef } from './LimoCraftEmoji';
+import { LimoCraftEmoji, LIMO_CRAFT_EMOJIS } from './LimoCraftEmoji';
 
 interface EmojiPickerDrawerProps {
   isOpen: boolean;
@@ -24,35 +24,7 @@ interface EmojiPickerDrawerProps {
   onSendAnimatedEmoji?: (emoji: string, name: string) => void;
 }
 
-// ✨ 2. Animated Micro-Motion Emojis
-const ANIMATED_EMOJIS = [
-  { emoji: '🍋', name: 'Dancing Limo Lime', animClass: 'animate-emoji-pop', tag: 'limo lime fresh dance' },
-  { emoji: '❤️', name: 'Beating Heart', animClass: 'animate-emoji-heartbeat', tag: 'love heart beat romance' },
-  { emoji: '🔥', name: 'Dancing Flame', animClass: 'animate-emoji-wiggle', tag: 'fire hot lit hype' },
-  { emoji: '🚀', name: 'Blasting Rocket', animClass: 'animate-emoji-float', tag: 'rocket launch fast space' },
-  { emoji: '🎉', name: 'Popping Party', animClass: 'animate-emoji-wiggle', tag: 'party celebrate tada celebrate' },
-  { emoji: '🌟', name: 'Spinning Star', animClass: 'animate-emoji-spin-slow', tag: 'star spin shine gold' },
-  { emoji: '😂', name: 'Laughing Tears', animClass: 'animate-emoji-pop', tag: 'joy lol haha laugh tears' },
-  { emoji: '👋', name: 'Waving Hand', animClass: 'animate-emoji-wiggle', tag: 'wave hi hello bye handshake' },
-  { emoji: '🥳', name: 'Party Blower', animClass: 'animate-emoji-wiggle', tag: 'party yay celebration' },
-  { emoji: '🤯', name: 'Mind Blown', animClass: 'animate-emoji-pop', tag: 'mind blown shock exploded' },
-  { emoji: '👻', name: 'Floating Ghost', animClass: 'animate-emoji-float', tag: 'ghost boo spooky halloween' },
-  { emoji: '💎', name: 'Pulsing Diamond', animClass: 'animate-emoji-heartbeat', tag: 'diamond gem rich luxury' },
-  { emoji: '⚡', name: 'Spark Zap', animClass: 'animate-emoji-pop', tag: 'lightning bolt electricity zap' },
-  { emoji: '👑', name: 'Floating Crown', animClass: 'animate-emoji-float', tag: 'crown king queen royal' },
-  { emoji: '🍾', name: 'Popping Bottle', animClass: 'animate-emoji-wiggle', tag: 'champagne celebration toast' },
-  { emoji: '🕺', name: 'Disco Groover', animClass: 'animate-emoji-wiggle', tag: 'dance music disco groove' },
-  { emoji: '🐱', name: 'Wiggly Cat', animClass: 'animate-emoji-wiggle', tag: 'cat kitty pet cute meow' },
-  { emoji: '🐶', name: 'Happy Puppy', animClass: 'animate-emoji-wiggle', tag: 'dog puppy cute woof' },
-  { emoji: '🌈', name: 'Magic Rainbow', animClass: 'animate-emoji-heartbeat', tag: 'rainbow sky color pride' },
-  { emoji: '💯', name: 'Keep It 100', animClass: 'animate-emoji-pop', tag: '100 percent perfect real' },
-  { emoji: '✨', name: 'Sparkles Wave', animClass: 'animate-emoji-spin-slow', tag: 'sparkles magic glow clean' },
-  { emoji: '🚗', name: 'Bouncing Limo', animClass: 'animate-emoji-pop', tag: 'car limo drive luxury' },
-  { emoji: '😍', name: 'Heart Eyes Beat', animClass: 'animate-emoji-heartbeat', tag: 'heart eyes love crush' },
-  { emoji: '😎', name: 'Cool Shades', animClass: 'animate-emoji-float', tag: 'cool shades boss swag' }
-];
-
-// 🎬 3. Curated High-Speed CDN GIFs
+// 🎬 Curated High-Speed CDN GIFs
 const CURATED_GIFS = [
   // Trending / Reactions
   { id: 'g1', title: 'Iron Man Thumbs Up', category: 'Thumbs Up', url: 'https://media.giphy.com/media/111ebonMs90YLu/giphy.gif', tags: 'thumbs up good job approve yes ok great' },
@@ -90,7 +62,7 @@ const CURATED_GIFS = [
   { id: 'g26', title: 'Homer Bush Fade', category: 'Bye', url: 'https://media.giphy.com/media/dzaUX7CAG0Ihi/giphy.gif', tags: 'bye disappear bush homer hide quiet' }
 ];
 
-// Standard Emoji Categorized Packs
+// Full Pack Categorized Standard Emojis
 const STANDARD_EMOJI_CATEGORIES = [
   {
     id: 'smileys',
@@ -109,7 +81,7 @@ const STANDARD_EMOJI_CATEGORIES = [
   },
   {
     id: 'people',
-    name: 'People & Hands',
+    name: 'People & Gestures',
     icon: Heart,
     emojis: [
       '👋', '🤚', '🖐️', '✋', '🖖', '🫱', '🫲', '🫳', '🫴', '👌', '🤌', '🤏', '✌️',
@@ -121,7 +93,7 @@ const STANDARD_EMOJI_CATEGORIES = [
   },
   {
     id: 'hearts',
-    name: 'Hearts & Vibes',
+    name: 'Hearts & Love',
     icon: Flame,
     emojis: [
       '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞',
@@ -143,7 +115,7 @@ const STANDARD_EMOJI_CATEGORIES = [
   },
   {
     id: 'food',
-    name: 'Food & Drinks',
+    name: 'Food & Drink',
     icon: Coffee,
     emojis: [
       '🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑',
@@ -156,13 +128,32 @@ const STANDARD_EMOJI_CATEGORIES = [
   },
   {
     id: 'activities',
-    name: 'Activities & Travel',
+    name: 'Activities & Sports',
     icon: Car,
     emojis: [
       '⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', '🏓', '🏸', '🏒',
       '🥊', '🥋', '🛹', '🛼', '⛷️', '🏂', '🏋️', '🚴', '🏆', '🥇', '🥈', '🥉', '🎮',
-      '🎲', '🎧', '🎤', '🎬', '🚗', '🚕', '🚙', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻',
-      '🚚', '🚜', '🛵', '🏍️', '🚲', '🚨', '✈️', '🚀', '🛸', '🚁', '⛵', '🚤', '🚢'
+      '🎲', '🎧', '🎤', '🎬'
+    ]
+  },
+  {
+    id: 'travel',
+    name: 'Travel & Places',
+    icon: Compass,
+    emojis: [
+      '🚗', '🚕', '🚙', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚜', '🛵', '🏍️',
+      '🚲', '🚨', '✈️', '🚀', '🛸', '🚁', '⛵', '🚤', '🚢', '⚓', '⛽', '🏰', '🗽',
+      '🗼', '🏔️', '🌋', '🏕️', '🏖️', '🏝️', '🌅', '🌄', '🌃', '🏙️'
+    ]
+  },
+  {
+    id: 'objects',
+    name: 'Objects & Tech',
+    icon: Smartphone,
+    emojis: [
+      '💻', '📱', '🖥️', '⌚', '📷', '📹', '🔍', '💡', '🔦', '🔑', '🔒', '🔓', '🎁',
+      '💎', '📦', '💰', '💳', '✉️', '📝', '📁', '📊', '📈', '🛠️', '⚙️', '🧪', '🔮',
+      '📌', '📎', '✏️', '📚', '🔔', '📣', '🔥', '⭐', '⚡', '🎯'
     ]
   }
 ];
@@ -174,12 +165,13 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
   onSelectGif,
   onSendAnimatedEmoji
 }) => {
-  const [activeTab, setActiveTab] = useState<'limo' | 'animated' | 'gifs' | 'standard'>('limo');
-  const [animateAll, setAnimateAll] = useState(true);
+  // STRICTLY 3 TABS: 'limo' | 'gifs' | 'standard'
+  const [activeTab, setActiveTab] = useState<'limo' | 'gifs' | 'standard'>('limo');
   const [searchQuery, setSearchQuery] = useState('');
   const [gifCategory, setGifCategory] = useState<string>('All');
   const [recentEmojis, setRecentEmojis] = useState<string[]>([]);
-  const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
+  const [notification, setNotification] = useState<string | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // Load recents on mount
   useEffect(() => {
@@ -201,19 +193,22 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
     } catch (e) {}
   };
 
-  const handleAnimatedEmojiClick = (item: typeof ANIMATED_EMOJIS[0]) => {
-    if (onSendAnimatedEmoji) {
-      onSendAnimatedEmoji(item.emoji, item.name);
-      setCopiedNotification(`Sent ${item.name}!`);
-      setTimeout(() => setCopiedNotification(null), 1800);
-    } else {
-      handleEmojiClick(item.emoji);
-    }
+  const handleLimoSelect = (item: typeof LIMO_CRAFT_EMOJIS[0]) => {
+    onSelectEmoji(item.tag);
+    setNotification(`Selected ${item.name}`);
+    setTimeout(() => setNotification(null), 1200);
   };
 
   const handleGifClick = (gif: typeof CURATED_GIFS[0]) => {
     if (onSelectGif) {
       onSelectGif(gif.url, gif.title);
+    }
+  };
+
+  const scrollToCategory = (catId: string) => {
+    const el = document.getElementById(`emoji-cat-${catId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
 
@@ -234,13 +229,6 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
     return list;
   }, [gifCategory, searchQuery]);
 
-  // Filtered animated emojis
-  const filteredAnimated = useMemo(() => {
-    if (!searchQuery.trim()) return ANIMATED_EMOJIS;
-    const q = searchQuery.toLowerCase();
-    return ANIMATED_EMOJIS.filter(e => e.name.toLowerCase().includes(q) || e.tag.toLowerCase().includes(q));
-  }, [searchQuery]);
-
   // Filtered LimoCraft exclusive emojis
   const filteredLimo = useMemo(() => {
     if (!searchQuery.trim()) return LIMO_CRAFT_EMOJIS;
@@ -256,7 +244,8 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="bg-white/95 dark:bg-[#182229]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-3xl shadow-[0_12px_45px_rgba(0,0,0,0.3)] dark:shadow-[0_12px_45px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col z-40 transition-all select-none animate-scale-in max-h-[440px] sm:max-h-[480px]">
+    <div className="bg-white/95 dark:bg-[#182229]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-3xl shadow-[0_12px_45px_rgba(0,0,0,0.25)] dark:shadow-[0_12px_45px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col z-40 transition-all select-none animate-scale-in max-h-[440px] sm:max-h-[480px]">
+      
       {/* Top Header & Search Bar */}
       <div className="p-3 bg-gray-50/90 dark:bg-[#111b21]/90 border-b border-gray-200 dark:border-white/10 flex items-center justify-between gap-2.5">
         <div className="flex-1 relative flex items-center">
@@ -266,255 +255,142 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={
-              activeTab === 'gifs'
+              activeTab === 'limo'
+                ? 'Search LimoCraft emojis...'
+                : activeTab === 'gifs'
                 ? 'Search animated GIFs...'
-                : activeTab === 'animated'
-                ? 'Search animated stickers...'
-                : 'Search emojis & LimoCraft...'
+                : 'Search full emoji pack...'
             }
-            className="w-full pl-9 pr-3 py-1.5 bg-gray-100 dark:bg-white/[0.06] hover:bg-gray-200/60 dark:hover:bg-white/[0.09] focus:bg-white dark:focus:bg-white/[0.12] border border-gray-300 dark:border-white/10 focus:border-[#00a884] dark:focus:border-[#00a884]/60 rounded-xl text-xs text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-[#8696a0] focus:outline-none transition-all"
+            className="w-full pl-9 pr-8 py-2 bg-gray-100 dark:bg-white/[0.06] hover:bg-gray-200/60 dark:hover:bg-white/[0.09] focus:bg-white dark:focus:bg-white/[0.12] border border-gray-300 dark:border-white/10 focus:border-[#00a884] dark:focus:border-[#00a884]/60 rounded-xl text-xs text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-[#8696a0] focus:outline-none transition-all shadow-inner"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 text-gray-500 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white transition cursor-pointer"
+              className="absolute right-2.5 text-gray-500 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white transition cursor-pointer p-0.5"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
 
-        {/* Live Animation Toggle Switch */}
-        <button
-          type="button"
-          onClick={() => setAnimateAll((prev) => !prev)}
-          className={`px-2 sm:px-2.5 py-1 rounded-xl text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer flex-shrink-0 active:scale-95 ${
-            animateAll
-              ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 shadow-sm'
-              : 'bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-[#8696a0]'
-          }`}
-          title="Toggle continuous motion animation for all emojis"
-        >
-          <Sparkles className={`w-3.5 h-3.5 text-amber-500 ${animateAll ? 'animate-spin-slow' : ''}`} />
-          <span className="hidden sm:inline">Motion</span>
-          <span className="text-[10px] font-mono font-bold uppercase">{animateAll ? 'ON' : 'OFF'}</span>
-        </button>
-
         <button
           onClick={onClose}
-          className="p-1.5 rounded-full text-gray-500 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/60 dark:hover:bg-white/10 transition cursor-pointer"
-          title="Close drawer"
+          className="p-2 rounded-xl text-gray-500 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/60 dark:hover:bg-white/10 active:scale-90 transition cursor-pointer flex-shrink-0"
+          title="Close picker"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Main Tab Switcher Ribbon */}
-      <div className="px-3 py-2 bg-gray-50/70 dark:bg-[#182229] border-b border-gray-200 dark:border-white/5 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-        {/* Limo Exclusive Tab */}
-        <button
-          onClick={() => setActiveTab('limo')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex-shrink-0 ${
-            activeTab === 'limo'
-              ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/50 text-emerald-600 dark:text-emerald-400 shadow-[0_0_12px_rgba(0,168,132,0.25)]'
-              : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/50 dark:hover:bg-white/[0.05]'
-          }`}
-        >
-          <span className="text-sm">🍋</span>
-          <span>LimoChat</span>
-          <span className="text-[9px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold px-1.5 py-0.2 rounded-full uppercase tracking-wider">
-            VIP
-          </span>
-        </button>
+      {/* Main Tab Switcher Ribbon (Strictly 3 Tabs) */}
+      <div className="px-3 py-2 bg-gray-50/70 dark:bg-[#182229] border-b border-gray-200 dark:border-white/5 flex items-center justify-between gap-1.5 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1.5 w-full">
+          {/* TAB 1: Limo Emoji */}
+          <button
+            onClick={() => setActiveTab('limo')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
+              activeTab === 'limo'
+                ? 'bg-gradient-to-r from-emerald-500/15 to-teal-500/15 border border-emerald-500/50 text-emerald-600 dark:text-emerald-400 shadow-[0_2px_12px_rgba(0,168,132,0.2)] font-bold'
+                : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/50 dark:hover:bg-white/[0.05]'
+            }`}
+          >
+            <span className="text-sm">🍋</span>
+            <span>Limo Emoji</span>
+            <span className="text-[9px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold px-1.5 py-0.2 rounded-full uppercase tracking-wider hidden sm:inline">
+              Exclusive
+            </span>
+          </button>
 
-        {/* Animated Stickers Tab */}
-        <button
-          onClick={() => setActiveTab('animated')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex-shrink-0 ${
-            activeTab === 'animated'
-              ? 'bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/50 text-purple-600 dark:text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
-              : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/50 dark:hover:bg-white/[0.05]'
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
-          <span>Animated</span>
-          <span className="text-[9px] bg-purple-500/20 text-purple-700 dark:text-purple-300 font-bold px-1.5 py-0.2 rounded-full uppercase tracking-wider">
-            Live
-          </span>
-        </button>
+          {/* TAB 2: GIFs */}
+          <button
+            onClick={() => setActiveTab('gifs')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
+              activeTab === 'gifs'
+                ? 'bg-gradient-to-r from-blue-500/15 to-indigo-500/15 border border-blue-500/50 text-blue-600 dark:text-blue-300 shadow-[0_2px_12px_rgba(59,130,246,0.2)] font-bold'
+                : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/50 dark:hover:bg-white/[0.05]'
+            }`}
+          >
+            <Film className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
+            <span>GIFs</span>
+          </button>
 
-        {/* GIFs Tab */}
-        <button
-          onClick={() => setActiveTab('gifs')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex-shrink-0 ${
-            activeTab === 'gifs'
-              ? 'bg-gradient-to-r from-blue-500/20 to-indigo-500/20 border border-blue-500/50 text-blue-600 dark:text-blue-300 shadow-[0_0_12px_rgba(59,130,246,0.25)]'
-              : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/50 dark:hover:bg-white/[0.05]'
-          }`}
-        >
-          <Film className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
-          <span>GIFs</span>
-        </button>
-
-        {/* Full Standard Pack Tab */}
-        <button
-          onClick={() => setActiveTab('standard')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex-shrink-0 ${
-            activeTab === 'standard'
-              ? 'bg-gray-200 dark:bg-white/[0.12] border border-gray-300 dark:border-white/20 text-gray-900 dark:text-white shadow-sm'
-              : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/50 dark:hover:bg-white/[0.05]'
-          }`}
-        >
-          <Smile className="w-3.5 h-3.5" />
-          <span>Full Pack</span>
-        </button>
+          {/* TAB 3: Full Pack */}
+          <button
+            onClick={() => setActiveTab('standard')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
+              activeTab === 'standard'
+                ? 'bg-gray-200/90 dark:bg-white/[0.14] border border-gray-300 dark:border-white/20 text-gray-900 dark:text-white shadow-sm font-bold'
+                : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/50 dark:hover:bg-white/[0.05]'
+            }`}
+          >
+            <Smile className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
+            <span>Full Pack</span>
+          </button>
+        </div>
       </div>
 
-      {/* Copied/Sent Toast Banner */}
-      {copiedNotification && (
-        <div className="bg-emerald-500/20 border-b border-emerald-500/30 px-3 py-1 text-center text-xs text-emerald-300 font-medium flex items-center justify-center gap-1.5 animate-fade-in">
-          <Check className="w-3.5 h-3.5 text-emerald-400" />
-          <span>{copiedNotification}</span>
+      {/* Subtle feedback toast */}
+      {notification && (
+        <div className="bg-emerald-500/15 border-b border-emerald-500/30 px-3 py-1 text-center text-xs text-emerald-700 dark:text-emerald-300 font-medium flex items-center justify-center gap-1.5 animate-fade-in">
+          <Check className="w-3.5 h-3.5 text-emerald-500" />
+          <span>{notification}</span>
         </div>
       )}
 
       {/* Content Body */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-4">
-        {/* ======================= TAB 1: LIMO EXCLUSIVES ======================= */}
+      <div ref={contentRef} className="flex-1 overflow-y-auto p-3 space-y-4">
+        
+        {/* ======================= TAB 1: LIMO EMOJI (CLEAN TAP-TO-SELECT GRID) ======================= */}
         {activeTab === 'limo' && (
           <div className="space-y-3">
             <div className="flex items-center justify-between text-xs text-gray-500 dark:text-[#8696a0] px-1">
               <span className="font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
-                <span className="text-base">🍋</span> LimoChat Official Signature Emojis
+                <span className="text-base">🍋</span> Tap an emoji to insert
               </span>
-              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono font-medium">Exclusive Pack</span>
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono font-medium">
+                {filteredLimo.length} Exclusive Designs
+              </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            {/* Direct Tap-To-Select Sticker Grid - Clean & Modern */}
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-2.5">
               {filteredLimo.map((item) => (
-                <div
+                <button
                   key={item.id}
-                  className={`group relative p-3 rounded-2xl bg-gradient-to-br ${item.glow} bg-gray-50/80 dark:bg-[#1f2c34]/70 border ${item.border} hover:scale-[1.02] transition-all flex flex-col items-center justify-center text-center shadow-sm dark:shadow-lg`}
+                  type="button"
+                  onClick={() => handleLimoSelect(item)}
+                  className="group relative p-2.5 rounded-2xl bg-gray-50/90 hover:bg-emerald-50/70 dark:bg-white/[0.04] dark:hover:bg-white/[0.09] border border-gray-200/90 dark:border-white/10 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 active:scale-90 transition-all flex flex-col items-center justify-center text-center cursor-pointer shadow-sm hover:shadow-md select-none touch-manipulation"
+                  title={`Tap to select ${item.name}`}
                 >
-                  <div 
-                    onClick={() => onSelectEmoji(item.tag)}
-                    className="py-1 cursor-pointer hover:scale-120 transition-transform select-none"
-                    title={`Tap to insert ${item.name}`}
-                  >
-                    <LimoCraftEmoji id={item.id} size={50} animated={animateAll} />
+                  <div className="py-1 transform group-hover:scale-120 group-hover:-rotate-3 group-active:scale-95 transition-transform duration-200">
+                    <LimoCraftEmoji id={item.id} size={50} animated={true} />
                   </div>
-                  <div className="font-semibold text-xs text-gray-900 dark:text-white truncate w-full mt-1">
+                  
+                  <span className="text-[11px] font-semibold text-gray-800 dark:text-[#e9edef] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 truncate w-full mt-1.5">
                     {item.name}
-                  </div>
-                  <div className="text-[10px] text-gray-500 dark:text-[#8696a0] truncate w-full">
+                  </span>
+
+                  <span className="text-[9px] text-gray-500 dark:text-[#8696a0] truncate w-full">
                     {item.subtitle}
+                  </span>
+
+                  {/* Subtle instant insert indicator on hover */}
+                  <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full p-0.5">
+                    <Check className="w-2.5 h-2.5" />
                   </div>
-                  <div className={`my-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-black/5 dark:bg-white/10 ${item.textColor} uppercase tracking-wider`}>
-                    {item.badge}
-                  </div>
-                  <div className="flex items-center gap-1 w-full mt-1.5">
-                    <button
-                      type="button"
-                      onClick={() => onSelectEmoji(item.tag)}
-                      className="flex-1 py-1 px-1 rounded-lg bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-[10px] font-medium text-gray-700 dark:text-white transition cursor-pointer"
-                      title="Insert into text message"
-                    >
-                      Insert
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (onSendAnimatedEmoji) {
-                          onSendAnimatedEmoji(item.tag, item.name);
-                        } else {
-                          onSelectEmoji(item.tag);
-                        }
-                      }}
-                      className="flex-1 py-1 px-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-[10px] font-medium text-white transition cursor-pointer shadow-sm"
-                      title="Send as custom sticker"
-                    >
-                      Send
-                    </button>
-                  </div>
-                </div>
+                </button>
               ))}
             </div>
 
-            {recentEmojis.length > 0 && (
-              <div className="pt-2 border-t border-gray-200 dark:border-white/10">
-                <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-[#8696a0] font-semibold mb-2 px-1">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>Recently Used</span>
-                </div>
-                <div className="grid grid-cols-8 gap-1.5">
-                  {recentEmojis.map((emoji, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleEmojiClick(emoji)}
-                      className="text-2xl p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/[0.08] active:scale-125 transition flex items-center justify-center cursor-pointer"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
+            {filteredLimo.length === 0 && (
+              <div className="py-8 text-center text-xs text-gray-500 dark:text-[#8696a0]">
+                No LimoCraft emojis matching "{searchQuery}".
               </div>
             )}
           </div>
         )}
 
-        {/* ======================= TAB 2: ANIMATED EMOJIS ======================= */}
-        {activeTab === 'animated' && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs text-gray-500 dark:text-[#8696a0] px-1">
-              <span className="font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-purple-500 dark:text-purple-400" />
-                Live Animated Emojis & Stickers
-              </span>
-              <span className="text-[11px] text-purple-600 dark:text-purple-400 font-mono font-medium">Micro-Motion</span>
-            </div>
-
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
-              {filteredAnimated.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-2xl bg-gray-50/80 dark:bg-[#1f2c34]/70 hover:bg-gray-100 dark:hover:bg-[#2a3942] border border-gray-200 dark:border-white/10 hover:border-purple-500/40 transition-all flex flex-col items-center justify-center text-center group shadow-sm dark:shadow-md"
-                >
-                  <div 
-                    onClick={() => handleAnimatedEmojiClick(item)}
-                    className={`text-4xl py-1.5 ${item.animClass} select-none cursor-pointer hover:scale-125 transition-transform`}
-                    title="Tap to send sticker"
-                  >
-                    {item.emoji}
-                  </div>
-                  <span className="text-[11px] font-medium text-gray-800 dark:text-white/90 truncate w-full mt-1 group-hover:text-purple-600 dark:group-hover:text-purple-300 transition">
-                    {item.name}
-                  </span>
-                  
-                  <div className="flex items-center gap-1 mt-2 w-full">
-                    <button
-                      type="button"
-                      onClick={() => handleEmojiClick(item.emoji)}
-                      className="flex-1 py-1 px-1 rounded-lg bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-[10px] font-medium text-gray-700 dark:text-white transition cursor-pointer"
-                      title="Insert emoji into text"
-                    >
-                      Insert
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleAnimatedEmojiClick(item)}
-                      className="flex-1 py-1 px-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-[10px] font-medium text-white transition cursor-pointer shadow-sm"
-                      title="Send as animated message"
-                    >
-                      Send
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ======================= TAB 3: GIFS ======================= */}
+        {/* ======================= TAB 2: GIFS ======================= */}
         {activeTab === 'gifs' && (
           <div className="space-y-3">
             {/* Quick Category Filter Pills */}
@@ -523,7 +399,7 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
                 <button
                   key={cat}
                   onClick={() => setGifCategory(cat)}
-                  className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                  className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer active:scale-95 ${
                     gifCategory === cat
                       ? 'bg-blue-600 text-white shadow-md'
                       : 'bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/[0.1]'
@@ -541,6 +417,7 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
                   key={gif.id}
                   onClick={() => handleGifClick(gif)}
                   className="group relative rounded-2xl overflow-hidden aspect-video bg-gray-200 dark:bg-[#111b21] border border-gray-200 dark:border-white/10 hover:border-blue-500/60 transition cursor-pointer shadow-md hover:scale-[1.02] active:scale-95"
+                  title={`Send GIF: ${gif.title}`}
                 >
                   <img
                     src={gif.url}
@@ -560,18 +437,39 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
 
             {filteredGifs.length === 0 && (
               <div className="py-8 text-center text-xs text-gray-500 dark:text-[#8696a0]">
-                No GIFs matching "{searchQuery}". Try "thumbs up", "laugh", or "fire".
+                No GIFs matching "{searchQuery}". Try "thumbs up", "laugh", or "party".
               </div>
             )}
           </div>
         )}
 
-        {/* ======================= TAB 4: FULL STANDARD PACK ======================= */}
+        {/* ======================= TAB 3: FULL PACK ======================= */}
         {activeTab === 'standard' && (
           <div className="space-y-4">
+            
+            {/* Quick Category Icons Strip */}
+            {!searchQuery && (
+              <div className="flex items-center justify-between gap-1 px-1 py-1.5 bg-gray-100/70 dark:bg-white/[0.04] rounded-2xl border border-gray-200/60 dark:border-white/5 overflow-x-auto no-scrollbar sticky top-0 backdrop-blur-md z-20">
+                {STANDARD_EMOJI_CATEGORIES.map((cat) => {
+                  const Icon = cat.icon;
+                  return (
+                    <button
+                      key={cat.id}
+                      onClick={() => scrollToCategory(cat.id)}
+                      className="p-1.5 rounded-xl hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-[#8696a0] hover:text-emerald-600 dark:hover:text-emerald-400 active:scale-90 transition flex-shrink-0 cursor-pointer"
+                      title={cat.name}
+                    >
+                      <Icon className="w-4 h-4" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Recently Used Emojis */}
             {recentEmojis.length > 0 && !searchQuery && (
-              <div>
-                <div className="text-xs text-gray-500 dark:text-[#8696a0] font-semibold mb-2 px-1 flex items-center gap-1.5">
+              <div className="space-y-1.5">
+                <div className="text-xs text-gray-500 dark:text-[#8696a0] font-semibold px-1 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5" />
                   <span>Recently Used</span>
                 </div>
@@ -580,7 +478,7 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
                     <button
                       key={idx}
                       onClick={() => handleEmojiClick(emoji)}
-                      className="text-2xl p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/[0.08] active:scale-125 transition flex items-center justify-center cursor-pointer"
+                      className="text-2xl p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/[0.08] active:scale-125 transition flex items-center justify-center cursor-pointer hover:scale-130 select-none"
                     >
                       {emoji}
                     </button>
@@ -589,27 +487,24 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
               </div>
             )}
 
+            {/* Categorized Emojis */}
             {STANDARD_EMOJI_CATEGORIES.map((category) => {
-              const matches = searchQuery.trim()
-                ? category.emojis
+              const list = searchQuery.trim()
+                ? category.emojis.filter(() => true) // search through full pack
                 : category.emojis;
 
               return (
-                <div key={category.id} className="space-y-1.5">
-                  <div className="text-xs font-semibold text-gray-600 dark:text-[#8696a0] px-1 sticky top-0 bg-white/95 dark:bg-[#182229]/95 backdrop-blur-md py-1 z-10">
-                    {category.name}
+                <div key={category.id} id={`emoji-cat-${category.id}`} className="space-y-1.5 pt-1">
+                  <div className="text-xs font-semibold text-gray-700 dark:text-[#d1d7db] px-1 flex items-center gap-1.5">
+                    <span>{category.name}</span>
                   </div>
                   <div className="grid grid-cols-8 sm:grid-cols-10 gap-1">
-                    {matches.map((emoji, idx) => (
+                    {list.map((emoji, idx) => (
                       <button
                         key={idx}
                         onClick={() => handleEmojiClick(emoji)}
-                        className={`text-2xl p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/[0.08] active:scale-125 transition flex items-center justify-center cursor-pointer hover:scale-140 hover:-rotate-6 ${
-                          animateAll ? 'animate-emoji-pop' : ''
-                        }`}
-                        style={{
-                          animationDelay: animateAll ? `${(idx % 12) * 0.08}s` : undefined
-                        }}
+                        className="text-2xl p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/[0.08] active:scale-90 transition-transform duration-150 flex items-center justify-center cursor-pointer hover:scale-135 hover:-rotate-6 select-none"
+                        title={emoji}
                       >
                         {emoji}
                       </button>
@@ -620,6 +515,7 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
             })}
           </div>
         )}
+
       </div>
     </div>
   );
