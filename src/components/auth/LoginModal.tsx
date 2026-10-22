@@ -11,16 +11,25 @@ import {
   User, 
   KeyRound, 
   ArrowRight,
+  ArrowLeft,
   Sun,
   Moon,
   Eye,
-  EyeOff
+  EyeOff,
+  Check,
+  Smartphone,
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useChat } from '../../context/ChatContext';
 import { PrivacyPolicyModal } from '../pages/PrivacyPolicyModal';
 import { TermsConditionsModal } from '../pages/TermsConditionsModal';
 import { OperationalStatusModal } from '../pages/OperationalStatusModal';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth, db } from '../../firebase/config';
+import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { RealtimeCoordinator } from '../../utils/realtimeCoordinator';
+import { verifyTotpToken, verifyRecoveryCode } from '../../utils/totp';
 
 export const LoginModal: React.FC = () => {
   const { 
@@ -38,11 +47,22 @@ export const LoginModal: React.FC = () => {
 
   const isBusy = loading || isAuthenticating;
 
-  const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
+  const [activeTab, setActiveTab] = useState<'signin' | 'signup' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [fullName, setFullName] = useState('');
+
+  // Forgot Password with Authenticator states
+  const [forgotInput, setForgotInput] = useState('');
+  const [forgotStep, setForgotStep] = useState<'find' | 'verify_totp' | 'new_password' | 'done'>('find');
+  const [forgotUser, setForgotUser] = useState<any | null>(null);
+  const [totpCode, setTotpCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [forgotSuccessNotice, setForgotSuccessNotice] = useState<string | null>(null);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+  const [isForgotLoading, setIsForgotLoading] = useState(false);
 
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
@@ -60,6 +80,144 @@ export const LoginModal: React.FC = () => {
     } else {
       if (!fullName.trim() || !email.trim()) return;
       await signUpWithEmail(fullName.trim(), email.trim(), password || 'Password123!');
+    }
+  };
+
+  // Step 1: Find Account
+  const handleFindForgotAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotInput.trim()) return;
+    try {
+      setIsForgotLoading(true);
+      setForgotError(null);
+
+      // 1. Try Supabase lookup
+      let user = await RealtimeCoordinator.findUserByEmailOrPhone(forgotInput.trim());
+
+      // 2. Fallback to Firestore lookup
+      if (!user) {
+        const clean = forgotInput.trim().toLowerCase();
+        const emailSnap = await getDocs(query(collection(db, 'users'), where('email', '==', clean))).catch(() => null);
+        if (emailSnap && !emailSnap.empty) {
+          user = emailSnap.docs[0].data();
+          user.uid = emailSnap.docs[0].id;
+        } else {
+          const phoneSnap = await getDocs(query(collection(db, 'users'), where('phoneNumber', '==', forgotInput.trim()))).catch(() => null);
+          if (phoneSnap && !phoneSnap.empty) {
+            user = phoneSnap.docs[0].data();
+            user.uid = phoneSnap.docs[0].id;
+          }
+        }
+      }
+
+      if (!user) {
+        setForgotError('No account found with this email or virtual phone number.');
+        return;
+      }
+
+      setForgotUser(user);
+
+      const hasAuth = !!(user.authenticator_enabled || user.authenticatorEnabled || user.preferences?.authenticatorEnabled);
+      if (hasAuth) {
+        setForgotStep('verify_totp');
+      } else {
+        // Fallback: send password reset email
+        const targetEmail = user.email;
+        if (targetEmail) {
+          await sendPasswordResetEmail(auth, targetEmail).catch(() => {});
+          setForgotSuccessNotice(`Password reset link sent to ${targetEmail}. Please check your inbox.`);
+          setForgotStep('done');
+        } else {
+          setForgotError('Account does not have an email or authenticator connected. Please contact support.');
+        }
+      }
+    } catch (err: any) {
+      setForgotError(err.message || 'Error finding account.');
+    } finally {
+      setIsForgotLoading(false);
+    }
+  };
+
+  // Step 2: Verify TOTP Code
+  const handleVerifyForgotTotp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!totpCode.trim()) return;
+    try {
+      setIsForgotLoading(true);
+      setForgotError(null);
+
+      const secret = forgotUser.authenticator_secret || forgotUser.authenticatorSecret || forgotUser.preferences?.authenticatorSecret;
+      const recoveryCodes = forgotUser.recovery_codes || forgotUser.recoveryCodes || forgotUser.preferences?.recoveryCodes || [];
+
+      // Try 6-digit TOTP
+      let isValid = false;
+      if (secret && totpCode.replace(/\D/g, '').length === 6) {
+        isValid = await verifyTotpToken(totpCode, secret);
+      }
+
+      // Try backup recovery code
+      if (!isValid && recoveryCodes.length > 0) {
+        const recResult = verifyRecoveryCode(totpCode, recoveryCodes);
+        if (recResult.valid) {
+          isValid = true;
+          // Update remaining recovery codes in both databases
+          if (forgotUser.uid) {
+            await RealtimeCoordinator.updateUserAuthenticator(forgotUser.uid, true, secret, recResult.remainingCodes).catch(() => {});
+            await updateDoc(doc(db, 'users', forgotUser.uid), { recoveryCodes: recResult.remainingCodes }).catch(() => {});
+          }
+        }
+      }
+
+      if (!isValid) {
+        setForgotError('Invalid code. Please enter the current 6-digit Authenticator code or a valid backup recovery code.');
+        return;
+      }
+
+      // Valid Authenticator code! Move to set new password
+      setForgotStep('new_password');
+    } catch (err: any) {
+      setForgotError(err.message || 'Verification failed.');
+    } finally {
+      setIsForgotLoading(false);
+    }
+  };
+
+  // Step 3: Set New Password & Sign In
+  const handleSaveNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      setForgotError('Password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setForgotError('Passwords do not match.');
+      return;
+    }
+
+    try {
+      setIsForgotLoading(true);
+      setForgotError(null);
+
+      // Sign in or update password
+      await signInWithEmail(forgotUser.email, newPassword);
+      setForgotSuccessNotice('Password successfully reset! Logging you in...');
+      setTimeout(() => {
+        setActiveTab('signin');
+        setForgotStep('find');
+      }, 1500);
+    } catch (err: any) {
+      // If sign-in with new password fails (e.g. Firebase password needs direct reset), show notification
+      try {
+        if (forgotUser.email) {
+          await sendPasswordResetEmail(auth, forgotUser.email);
+          setForgotSuccessNotice(`Identity verified via Authenticator! A password update link has been dispatched to ${forgotUser.email}.`);
+          setForgotStep('done');
+        }
+      } catch {
+        setForgotError(err.message || 'Failed to update password.');
+      }
+    } finally {
+      setIsForgotLoading(false);
     }
   };
 
@@ -123,32 +281,8 @@ export const LoginModal: React.FC = () => {
           Private messaging, encrypted voice & video calls, and instant virtual lines.
         </p>
 
-        {/* Virtual Phone Highlight Box */}
-        <div className="virtual-number-card w-full rounded-2xl p-3.5 mb-5 transition-all duration-300 relative overflow-hidden bg-emerald-500/5 border border-emerald-500/20">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-[#00a884] flex-shrink-0 mt-0.5">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-0.5">
-                <h4 className="text-xs font-bold text-gray-900 dark:text-white">
-                  Encrypted Virtual Line Included
-                </h4>
-                <span className="text-[10px] px-2 py-0.2 rounded-full font-mono font-bold bg-emerald-600/10 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">
-                  FREE
-                </span>
-              </div>
-              <p className="text-[11px] text-gray-600 dark:text-[#8696a0] leading-relaxed">
-                A private lifetime number starting with{' '}
-                <strong className="text-emerald-600 dark:text-[#00a884] font-mono font-bold">+991</strong>{' '}
-                is allocated automatically. Your personal phone number is never exposed.
-              </p>
-            </div>
-          </div>
-        </div>
-
         {/* Error / Warning Alert Banner */}
-        {authError && (
+        {authError && activeTab !== 'forgot' && (
           <div className="w-full bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3.5 mb-5 text-xs text-amber-900 dark:text-amber-200 space-y-2 animate-fade-in shadow-xs">
             <div className="flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
@@ -166,135 +300,332 @@ export const LoginModal: React.FC = () => {
           </div>
         )}
 
-        {/* Google Sign-In Action Button */}
-        <button
-          type="button"
-          onClick={signInWithGoogle}
-          disabled={isBusy}
-          className="login-google-btn w-full py-3.5 px-5 rounded-2xl font-bold text-sm flex items-center justify-center gap-3 transition cursor-pointer active:scale-[0.98] mb-4 disabled:opacity-60 bg-[#00a884] hover:bg-[#02906f] text-white shadow-lg shadow-[#00a884]/25"
-        >
-          <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
-            <path
-              fill="#ffffff"
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-            />
-            <path
-              fill="#ffffff"
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-            />
-            <path
-              fill="#ffffff"
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-            />
-            <path
-              fill="#ffffff"
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-            />
-          </svg>
-          <span className="font-semibold tracking-wide">
-            {isBusy ? 'Connecting with Google...' : 'Continue with Google'}
-          </span>
-        </button>
-
-        {/* Divider */}
-        <div className="flex items-center w-full my-3">
-          <div className="flex-1 border-t border-gray-200 dark:border-[#222e35]" />
-          <span className="px-3 text-[11px] font-semibold text-gray-500 dark:text-[#8696a0] uppercase tracking-wider">
-            or with email
-          </span>
-          <div className="flex-1 border-t border-gray-200 dark:border-[#222e35]" />
-        </div>
-
-        {/* Segmented Tab Switcher (Sign In vs Create Account) */}
-        <div className="login-tabs-wrap flex w-full p-1 rounded-2xl my-2 bg-gray-100 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] shadow-xs">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('signin');
-              setAuthError(null);
-            }}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-              activeTab === 'signin'
-                ? 'bg-[#00a884] text-white shadow-sm'
-                : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('signup');
-              setAuthError(null);
-            }}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-              activeTab === 'signup'
-                ? 'bg-[#00a884] text-white shadow-sm'
-                : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            Create Account
-          </button>
-        </div>
-
-        {/* Email & Password Form */}
-        <form onSubmit={handleEmailSubmit} className="w-full space-y-3 mt-2">
-          {activeTab === 'signup' && (
-            <div className="relative flex items-center animate-fade-in">
-              <User className="w-4 h-4 login-input-icon absolute left-3.5 pointer-events-none text-gray-400 dark:text-[#8696a0]" />
-              <input
-                type="text"
-                placeholder="Full Name (e.g. John Doe)"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-                className="login-form-input w-full rounded-xl pl-10 pr-3.5 py-3 text-sm focus:outline-none transition-all bg-gray-50 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] text-gray-900 dark:text-white focus:border-[#00a884]"
-              />
-            </div>
-          )}
-
-          <div className="relative flex items-center">
-            <Mail className="w-4 h-4 login-input-icon absolute left-3.5 pointer-events-none text-gray-400 dark:text-[#8696a0]" />
-            <input
-              type="email"
-              placeholder="Email address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="login-form-input w-full rounded-xl pl-10 pr-3.5 py-3 text-sm focus:outline-none transition-all bg-gray-50 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] text-gray-900 dark:text-white focus:border-[#00a884]"
-            />
-          </div>
-
-          <div className="relative flex items-center">
-            <KeyRound className="w-4 h-4 login-input-icon absolute left-3.5 pointer-events-none text-gray-400 dark:text-[#8696a0]" />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Password (optional for quick login)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="login-form-input w-full rounded-xl pl-10 pr-10 py-3 text-sm focus:outline-none transition-all bg-gray-50 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] text-gray-900 dark:text-white focus:border-[#00a884]"
-            />
+        {/* =========================================================================
+            VIEW A: SIGN IN & CREATE ACCOUNT
+            ========================================================================= */}
+        {activeTab !== 'forgot' && (
+          <>
+            {/* Google Sign-In Action Button */}
             <button
               type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              className="absolute right-3.5 p-1 text-gray-400 hover:text-gray-600 dark:text-[#8696a0] dark:hover:text-white transition cursor-pointer"
+              onClick={signInWithGoogle}
+              disabled={isBusy}
+              className="login-google-btn w-full py-3.5 px-5 rounded-2xl font-bold text-sm flex items-center justify-center gap-3 transition cursor-pointer active:scale-[0.98] mb-4 disabled:opacity-60 bg-[#00a884] hover:bg-[#02906f] text-white shadow-lg shadow-[#00a884]/25"
             >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
+                <path
+                  fill="#ffffff"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                />
+                <path
+                  fill="#ffffff"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                />
+                <path
+                  fill="#ffffff"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                />
+                <path
+                  fill="#ffffff"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                />
+              </svg>
+              <span className="font-semibold tracking-wide">
+                {isBusy ? 'Connecting with Google...' : 'Continue with Google'}
+              </span>
             </button>
-          </div>
 
-          <button
-            type="submit"
-            disabled={isBusy}
-            className="w-full py-3 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer mt-1 bg-[#00a884] hover:bg-[#02906f] text-white shadow-md shadow-[#00a884]/20 transition active:scale-95 disabled:opacity-50"
-          >
-            <span>
-              {activeTab === 'signin' ? 'Sign In to LimoChat' : 'Create Account & Get +991 Number'}
-            </span>
-            <ArrowRight className="w-4 h-4 text-white" />
-          </button>
-        </form>
+            {/* Divider */}
+            <div className="flex items-center w-full my-3">
+              <div className="flex-1 border-t border-gray-200 dark:border-[#222e35]" />
+              <span className="px-3 text-[11px] font-semibold text-gray-500 dark:text-[#8696a0] uppercase tracking-wider">
+                or with email
+              </span>
+              <div className="flex-1 border-t border-gray-200 dark:border-[#222e35]" />
+            </div>
+
+            {/* Segmented Tab Switcher (Sign In vs Create Account) */}
+            <div className="login-tabs-wrap flex w-full p-1 rounded-2xl my-2 bg-gray-100 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] shadow-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('signin');
+                  setAuthError(null);
+                }}
+                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                  activeTab === 'signin'
+                    ? 'bg-[#00a884] text-white shadow-sm'
+                    : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('signup');
+                  setAuthError(null);
+                }}
+                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                  activeTab === 'signup'
+                    ? 'bg-[#00a884] text-white shadow-sm'
+                    : 'text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                Create Account
+              </button>
+            </div>
+
+            {/* Email & Password Form */}
+            <form onSubmit={handleEmailSubmit} className="w-full space-y-3 mt-2">
+              {activeTab === 'signup' && (
+                <div className="relative flex items-center animate-fade-in">
+                  <User className="w-4 h-4 login-input-icon absolute left-3.5 pointer-events-none text-gray-400 dark:text-[#8696a0]" />
+                  <input
+                    type="text"
+                    placeholder="Full Name (e.g. John Doe)"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required
+                    className="login-form-input w-full rounded-xl pl-10 pr-3.5 py-3 text-sm focus:outline-none transition-all bg-gray-50 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] text-gray-900 dark:text-white focus:border-[#00a884]"
+                  />
+                </div>
+              )}
+
+              <div className="relative flex items-center">
+                <Mail className="w-4 h-4 login-input-icon absolute left-3.5 pointer-events-none text-gray-400 dark:text-[#8696a0]" />
+                <input
+                  type="email"
+                  placeholder="Email address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="login-form-input w-full rounded-xl pl-10 pr-3.5 py-3 text-sm focus:outline-none transition-all bg-gray-50 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] text-gray-900 dark:text-white focus:border-[#00a884]"
+                />
+              </div>
+
+              <div className="relative flex items-center">
+                <KeyRound className="w-4 h-4 login-input-icon absolute left-3.5 pointer-events-none text-gray-400 dark:text-[#8696a0]" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Password (optional for quick login)"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="login-form-input w-full rounded-xl pl-10 pr-10 py-3 text-sm focus:outline-none transition-all bg-gray-50 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] text-gray-900 dark:text-white focus:border-[#00a884]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-3.5 p-1 text-gray-400 hover:text-gray-600 dark:text-[#8696a0] dark:hover:text-white transition cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+
+              {/* Forgot Password link */}
+              {activeTab === 'signin' && (
+                <div className="flex justify-end pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('forgot');
+                      setForgotStep('find');
+                      setForgotError(null);
+                      setForgotSuccessNotice(null);
+                      setForgotInput(email);
+                    }}
+                    className="text-xs text-[#00a884] hover:underline cursor-pointer font-medium"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isBusy}
+                className="w-full py-3 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer mt-1 bg-[#00a884] hover:bg-[#02906f] text-white shadow-md shadow-[#00a884]/20 transition active:scale-95 disabled:opacity-50"
+              >
+                <span>
+                  {activeTab === 'signin' ? 'Sign In to LimoChat' : 'Create Account & Get +991 Number'}
+                </span>
+                <ArrowRight className="w-4 h-4 text-white" />
+              </button>
+            </form>
+          </>
+        )}
+
+        {/* =========================================================================
+            VIEW B: FORGOT PASSWORD FLOW (WITH AUTHENTICATOR APP & EMAIL)
+            ========================================================================= */}
+        {activeTab === 'forgot' && (
+          <div className="w-full space-y-4 animate-fade-in">
+            <div className="flex items-center gap-2 mb-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('signin');
+                  setForgotError(null);
+                }}
+                className="p-1 rounded-lg text-gray-500 dark:text-[#8696a0] hover:text-white hover:bg-white/10 transition cursor-pointer"
+                title="Back to Sign In"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <h3 className="font-bold text-sm text-gray-900 dark:text-white">
+                Account Recovery & Password Reset
+              </h3>
+            </div>
+
+            {forgotError && (
+              <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{forgotError}</span>
+              </div>
+            )}
+
+            {forgotSuccessNotice && (
+              <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+                <Check className="w-4 h-4 flex-shrink-0" />
+                <span>{forgotSuccessNotice}</span>
+              </div>
+            )}
+
+            {/* STEP 1: Find Account */}
+            {forgotStep === 'find' && (
+              <form onSubmit={handleFindForgotAccount} className="space-y-3">
+                <p className="text-xs text-gray-500 dark:text-[#8696a0] leading-relaxed">
+                  Enter your registered email address or your permanent <strong className="text-[#00a884]">+991</strong> virtual number:
+                </p>
+                <div className="relative flex items-center">
+                  <Mail className="w-4 h-4 absolute left-3.5 text-gray-400 dark:text-[#8696a0] pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Email or +991 virtual number"
+                    value={forgotInput}
+                    onChange={(e) => setForgotInput(e.target.value)}
+                    required
+                    className="login-form-input w-full rounded-xl pl-10 pr-3.5 py-3 text-sm focus:outline-none transition-all bg-gray-50 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] text-gray-900 dark:text-white focus:border-[#00a884]"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isForgotLoading || !forgotInput.trim()}
+                  className="w-full py-3 px-4 rounded-xl bg-[#00a884] hover:bg-[#02906f] active:scale-95 disabled:opacity-50 text-white font-semibold text-xs transition cursor-pointer shadow-md flex items-center justify-center gap-2"
+                >
+                  {isForgotLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <span>Continue</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {/* STEP 2: Verify Authenticator Code */}
+            {forgotStep === 'verify_totp' && (
+              <form onSubmit={handleVerifyForgotTotp} className="space-y-3">
+                <div className="p-2.5 rounded-xl bg-[#00a884]/10 border border-[#00a884]/20 flex items-center gap-2 text-xs text-[#00a884]">
+                  <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+                  <span>Authenticator Connected Account</span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-[#8696a0] leading-relaxed">
+                  Enter the 6-digit code from your <strong className="text-white">Google Authenticator</strong> or <strong className="text-white">Microsoft Authenticator</strong> app (or an unused backup recovery code):
+                </p>
+                <div className="flex justify-center my-2">
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="000000"
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value)}
+                    required
+                    className="w-full text-center text-xl font-mono font-bold tracking-widest py-3 bg-gray-50 dark:bg-[#111b21] border-2 border-[#00a884] rounded-xl text-gray-900 dark:text-white focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isForgotLoading || !totpCode.trim()}
+                  className="w-full py-3 px-4 rounded-xl bg-[#00a884] hover:bg-[#02906f] active:scale-95 disabled:opacity-50 text-white font-semibold text-xs transition cursor-pointer shadow-md flex items-center justify-center gap-2"
+                >
+                  {isForgotLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <KeyRound className="w-4 h-4" />
+                      <span>Verify Authenticator</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {/* STEP 3: Set New Password */}
+            {forgotStep === 'new_password' && (
+              <form onSubmit={handleSaveNewPassword} className="space-y-3">
+                <p className="text-xs text-gray-500 dark:text-[#8696a0] leading-relaxed">
+                  Identity confirmed! Choose a new password for your account:
+                </p>
+                <div className="relative flex items-center">
+                  <KeyRound className="w-4 h-4 absolute left-3.5 text-gray-400 dark:text-[#8696a0] pointer-events-none" />
+                  <input
+                    type="password"
+                    placeholder="New password (min 6 characters)"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    className="login-form-input w-full rounded-xl pl-10 pr-3.5 py-3 text-sm focus:outline-none transition-all bg-gray-50 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] text-gray-900 dark:text-white focus:border-[#00a884]"
+                  />
+                </div>
+                <div className="relative flex items-center">
+                  <KeyRound className="w-4 h-4 absolute left-3.5 text-gray-400 dark:text-[#8696a0] pointer-events-none" />
+                  <input
+                    type="password"
+                    placeholder="Confirm new password"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    required
+                    className="login-form-input w-full rounded-xl pl-10 pr-3.5 py-3 text-sm focus:outline-none transition-all bg-gray-50 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] text-gray-900 dark:text-white focus:border-[#00a884]"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isForgotLoading || !newPassword || !confirmNewPassword}
+                  className="w-full py-3 px-4 rounded-xl bg-[#00a884] hover:bg-[#02906f] active:scale-95 disabled:opacity-50 text-white font-semibold text-xs transition cursor-pointer shadow-md flex items-center justify-center gap-2"
+                >
+                  {isForgotLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Update Password & Log In</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {/* STEP 4: Done / Sent */}
+            {forgotStep === 'done' && (
+              <div className="space-y-3 pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('signin');
+                    setForgotStep('find');
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-[#00a884] hover:bg-[#02906f] text-white text-xs font-semibold transition cursor-pointer"
+                >
+                  Return to Sign In
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Feature Highlights Grid */}
         <div className="grid grid-cols-3 gap-3 w-full mt-6 pt-5 border-t border-gray-200 dark:border-[#222e35] text-center">

@@ -28,6 +28,7 @@ import {
 } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase/config';
 import { UserProfile, UserPrivacy, UserPreferences, UserPunishment, PolicyWarning, UserSession } from '../types';
+import { supabase } from '../supabase/config';
 import { RealtimeCoordinator } from '../utils/realtimeCoordinator';
 import { generateTemporaryNumber, getOrAssignLifetimeNumber } from '../utils/formatters';
 
@@ -94,6 +95,7 @@ interface AuthContextType {
   issuePolicyWarning: (targetUid: string, reason: string, ruleName?: string) => Promise<void>;
   liftAdminSuspension: () => Promise<void>;
   logOutOtherSessions: () => Promise<void>;
+  setAuthenticator: (enabled: boolean, secret: string | null, recoveryCodes?: string[]) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -446,13 +448,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await updateDoc(doc(db, 'users', currentUser.uid), {
           isOnline: false,
           lastSeen: Date.now()
-        });
+        }).catch(() => {});
+        await supabase
+          .from('users')
+          .update({ is_online: false, last_seen: Date.now() })
+          .eq('uid', currentUser.uid);
+        await supabase.auth.signOut().catch(() => {});
       } catch {}
     }
     try {
       await fbSignOut(auth);
     } catch {}
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.clear();
+    }
     setCurrentUser(null);
+  };
+
+  const setAuthenticator = async (enabled: boolean, secret: string | null, recoveryCodes: string[] = []) => {
+    if (!currentUser?.uid) return;
+    const userRef = doc(db, 'users', currentUser.uid);
+    const updatedPrefs = {
+      ...(currentUser.preferences || {}),
+      authenticatorEnabled: enabled,
+      authenticatorSecret: secret || undefined,
+      recoveryCodes,
+    };
+    await updateDoc(userRef, {
+      authenticatorEnabled: enabled,
+      authenticatorSecret: secret,
+      recoveryCodes,
+      preferences: updatedPrefs,
+    }).catch(() => {});
+
+    await RealtimeCoordinator.updateUserAuthenticator(currentUser.uid, enabled, secret, recoveryCodes).catch(() => {});
+
+    setCurrentUser((prev) =>
+      prev
+        ? {
+            ...prev,
+            authenticatorEnabled: enabled,
+            authenticatorSecret: secret || undefined,
+            recoveryCodes,
+            preferences: updatedPrefs as any,
+          }
+        : null
+    );
   };
 
   const updateUserProfile = async (updates: Partial<UserProfile>) => {
@@ -728,6 +769,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         issuePolicyWarning,
         liftAdminSuspension,
         logOutOtherSessions,
+        setAuthenticator,
       }}
     >
       {children}

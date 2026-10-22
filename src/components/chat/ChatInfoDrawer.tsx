@@ -43,6 +43,7 @@ import { doc, getDoc, updateDoc, arrayRemove, arrayUnion } from 'firebase/firest
 import { db } from '../../firebase/config';
 import { useChat } from '../../context/ChatContext';
 import { RealtimeCoordinator } from '../../utils/realtimeCoordinator';
+import { supabase } from '../../supabase/config';
 
 interface ChatInfoDrawerProps {
   chat: Chat;
@@ -117,7 +118,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
     setChatAvatar(chat.avatar || '');
   }, [chat.id, chat.name, chat.description, chat.avatar]);
 
-  const { updateGroupPermissions, deleteChat, deleteContact, getAllContacts, chats, exportChat } = useChat();
+  const { updateGroupPermissions, deleteChat, deleteContact, getAllContacts, chats, exportChat, showAlertNotice } = useChat();
 
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -154,18 +155,113 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
     if (chat.type === 'direct') {
       const otherUid = chat.participants.find((p) => p !== currentUser.uid);
       if (otherUid) {
+        if (otherUid === 'limochat_official_support') {
+          setTargetUser({
+            uid: 'limochat_official_support',
+            displayName: 'LimoChat Support',
+            phoneNumber: '+991 100 0001',
+            photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=LimoSupport',
+            email: 'support@limochat.app',
+            about: 'Official LimoChat Assistant & Support Desk',
+            isOnline: true,
+            lastSeen: Date.now(),
+            createdAt: Date.now(),
+            privacy: { lastSeen: 'everyone', profilePhoto: 'everyone', about: 'everyone', readReceipts: true, status: 'everyone' },
+            blockedUsers: [],
+          });
+          return;
+        }
+
+        // Try Firestore then fallback to Supabase
         getDoc(doc(db, 'users', otherUid)).then((snap) => {
-          if (snap.exists()) setTargetUser(snap.data() as UserProfile);
+          if (snap.exists()) {
+            setTargetUser(snap.data() as UserProfile);
+          } else {
+            supabase.from('users').select('*').eq('uid', otherUid).single().then(({ data }) => {
+              if (data) {
+                setTargetUser({
+                  uid: data.uid,
+                  displayName: data.display_name,
+                  phoneNumber: data.phone_number,
+                  photoURL: data.photo_url,
+                  about: data.about,
+                  email: data.email,
+                  isOnline: !!data.is_online,
+                  lastSeen: Number(data.last_seen || 0),
+                  createdAt: Number(data.created_at || 0),
+                  blockedUsers: data.blocked_users || [],
+                  privacy: data.privacy || {},
+                });
+              } else if ((chat as any).participantDetails?.[otherUid]) {
+                const pd = (chat as any).participantDetails[otherUid];
+                setTargetUser({
+                  uid: pd.uid,
+                  displayName: pd.displayName,
+                  phoneNumber: pd.phoneNumber || '',
+                  photoURL: pd.photoURL || '',
+                  about: '',
+                  email: '',
+                  isOnline: false,
+                  lastSeen: 0,
+                  createdAt: 0,
+                  blockedUsers: [],
+                  privacy: { lastSeen: 'everyone', profilePhoto: 'everyone', about: 'everyone', readReceipts: true, status: 'everyone' },
+                });
+              }
+            });
+          }
+        }).catch(() => {
+          supabase.from('users').select('*').eq('uid', otherUid).single().then(({ data }) => {
+            if (data) {
+              setTargetUser({
+                uid: data.uid,
+                displayName: data.display_name,
+                phoneNumber: data.phone_number,
+                photoURL: data.photo_url,
+                about: data.about,
+                email: data.email,
+                isOnline: !!data.is_online,
+                lastSeen: Number(data.last_seen || 0),
+                createdAt: Number(data.created_at || 0),
+                blockedUsers: data.blocked_users || [],
+                privacy: data.privacy || {},
+              });
+            }
+          });
         });
       }
     } else {
-      // Load group participants
+      // Load group participants with dual-database lookup
       Promise.all(
         chat.participants.map((pid) =>
-          getDoc(doc(db, 'users', pid)).then((s) => (s.exists() ? (s.data() as UserProfile) : null))
+          getDoc(doc(db, 'users', pid))
+            .then((s) => (s.exists() ? (s.data() as UserProfile) : null))
+            .catch(() => null)
         )
-      ).then((list) => {
-        setParticipants(list.filter((u): u is UserProfile => u !== null));
+      ).then(async (list) => {
+        const loaded = list.filter((u): u is UserProfile => u !== null);
+        const missingUids = chat.participants.filter((pid) => !loaded.some((u) => u.uid === pid));
+        if (missingUids.length > 0) {
+          const { data } = await supabase.from('users').select('*').in('uid', missingUids);
+          if (data) {
+            data.forEach((r: any) => {
+              loaded.push({
+                uid: r.uid,
+                displayName: r.display_name,
+                phoneNumber: r.phone_number,
+                photoURL: r.photo_url,
+                about: r.about,
+                email: r.email,
+                isOnline: !!r.is_online,
+                lastSeen: Number(r.last_seen || 0),
+                createdAt: Number(r.created_at || 0),
+                blockedUsers: r.blocked_users || [],
+                privacy: r.privacy || {},
+              });
+            });
+          }
+        }
+        setParticipants(loaded);
       });
     }
   }, [isOpen, chat.id, chat.type, currentUser.uid, chat.participants]);
@@ -253,32 +349,38 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
       const newUids = selectedMembersToAdd.map((u) => u.uid);
       const newParticipants = Array.from(new Set([...chat.participants, ...newUids]));
       const now = Date.now();
-      const updates: any = {
-        participants: newParticipants,
-      };
 
       const memberJoinedAtUpdates: Record<string, number> = { ...(chat.memberJoinedAt || {}) };
       const memberHistoryRestrictedUpdates: Record<string, boolean> = { ...(chat.memberHistoryRestricted || {}) };
 
       newUids.forEach((uid) => {
         const joinedTime = allowPastMessages ? 0 : now;
-        updates[`memberJoinedAt.${uid}`] = joinedTime;
-        updates[`memberHistoryRestricted.${uid}`] = !allowPastMessages;
         memberJoinedAtUpdates[uid] = joinedTime;
         memberHistoryRestrictedUpdates[uid] = !allowPastMessages;
       });
 
+      const updates: any = {
+        participants: newParticipants,
+        memberJoinedAt: memberJoinedAtUpdates,
+        memberHistoryRestricted: memberHistoryRestrictedUpdates,
+      };
+
       await updateDoc(doc(db, 'chats', chat.id), updates);
-      RealtimeCoordinator.updateGroupInfo(chat.id, {
+      await RealtimeCoordinator.updateGroupInfo(chat.id, {
         participants: newParticipants,
         memberJoinedAt: memberJoinedAtUpdates,
         memberHistoryRestricted: memberHistoryRestrictedUpdates,
       }).catch(() => {});
 
+      chat.participants = newParticipants;
+      chat.memberJoinedAt = memberJoinedAtUpdates;
+      chat.memberHistoryRestricted = memberHistoryRestrictedUpdates;
+
       setParticipants((prev) => [...prev, ...selectedMembersToAdd]);
       setAvailableContacts((prev) => prev.filter((c) => !newUids.includes(c.uid)));
       setSelectedMembersToAdd([]);
       setShowAddMember(false);
+      showAlertNotice?.("Members Added", `${selectedMembersToAdd.length} member(s) added to "${chat.name || 'group'}" across both databases.`, "primary");
     } catch (err: any) {
       setConfirmConfig({
         isOpen: true,
@@ -387,11 +489,16 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
     chat.participants?.includes('limochat_official_support');
 
   const handleDeleteContact = () => {
-    if (!targetUser || isSupportChat) return;
+    if (!targetUser || isSupportChat) {
+      if (isSupportChat) {
+        showAlertNotice?.("Protected Contact", "LimoChat Official Support cannot be deleted.", "warning");
+      }
+      return;
+    }
     setConfirmConfig({
       isOpen: true,
       title: `Delete "${targetUser.displayName}"?`,
-      description: "This will delete the conversation and permanently remove them from your contacts.",
+      description: "This will delete the conversation and permanently remove them from your contacts across all devices.",
       confirmText: "Delete Contact",
       cancelText: "Cancel",
       variant: "danger",
@@ -399,6 +506,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
         setConfirmConfig(null);
         await deleteContact(targetUser.uid);
         onClose();
+        showAlertNotice?.("Contact Removed", `"${targetUser.displayName}" was permanently deleted across all devices.`, "primary");
       },
     });
   };

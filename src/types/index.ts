@@ -33,6 +33,9 @@ export type UserPreferences = {
   lowDataCalls?: boolean;
   disappearingDuration: number; // in hours, 0 = off
   securityNotifications: boolean;
+  authenticatorEnabled?: boolean;
+  authenticatorSecret?: string;
+  recoveryCodes?: string[];
   twoStepPin?: string;
   twoStepRecoveryEmail?: string;
   appLockEnabled?: boolean;
@@ -141,6 +144,9 @@ export type UserProfile = {
   activeSessions?: UserSession[];
   isBanned?: boolean;
   isAdmin?: boolean;
+  authenticatorEnabled?: boolean;
+  authenticatorSecret?: string;
+  recoveryCodes?: string[];
   allowSupportCalls?: boolean;
   isOnboarded?: boolean;
   createdAt: number;

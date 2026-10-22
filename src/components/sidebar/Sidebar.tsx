@@ -547,7 +547,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
         )}
 
         {/* VIEW B: CALL HISTORY */}
-        {activeRail === 'calls' && <CallHistoryView />}
+        {activeRail === 'calls' && <CallHistoryView onSelectChat={() => { setActiveRail('chats'); onSelectChat(); }} />}
 
         {/* VIEW C: STATUS / STORIES */}
         {activeRail === 'status' && <StatusView />}

@@ -9,6 +9,8 @@ import { IncomingCallModal } from './components/calls/IncomingCallModal';
 import { ActiveCallModal } from './components/calls/ActiveCallModal';
 import { PermissionPromptModal } from './components/common/PermissionPromptModal';
 import { OnboardingModal } from './components/auth/OnboardingModal';
+import { TwoFactorChallengeModal } from './components/auth/TwoFactorChallengeModal';
+import { AuthenticatorModal } from './components/settings/AuthenticatorModal';
 import { SuspensionScreen } from './components/common/SuspensionScreen';
 import { AppLockScreen } from './components/auth/AppLockScreen';
 import { SplashScreen } from './components/common/SplashScreen';
@@ -16,7 +18,31 @@ import { MessageSquare, Lock, ShieldCheck, Sparkles, Ban } from 'lucide-react';
 import { NativeNotificationService } from './utils/nativeNotifications';
 
 const MainLayout: React.FC = () => {
-  const { currentUser, loading, signOut, isAdmin } = useAuth();
+  const { currentUser, loading, signOut, isAdmin, setAuthenticator } = useAuth();
+  const [showFirstTimeAuthModal, setShowFirstTimeAuthModal] = useState(false);
+  const [twoFactorVerified, setTwoFactorVerified] = useState(false);
+
+  // 2FA requirement check for Authenticator enabled accounts
+  const is2FaRequired = !!(
+    currentUser?.authenticatorEnabled || 
+    currentUser?.preferences?.authenticatorEnabled
+  ) && !twoFactorVerified && (
+    typeof sessionStorage !== 'undefined' && 
+    sessionStorage.getItem(`limochat_2fa_verified_${currentUser?.uid}`) !== 'true'
+  );
+
+  // First-time login Authenticator setup prompt
+  useEffect(() => {
+    if (!currentUser?.uid || is2FaRequired) return;
+    const hasAuth = !!(currentUser.authenticatorEnabled || currentUser.preferences?.authenticatorEnabled);
+    const dismissed = localStorage.getItem(`limochat_auth_prompt_dismissed_${currentUser.uid}`);
+    if (!hasAuth && !dismissed) {
+      const timer = setTimeout(() => {
+        setShowFirstTimeAuthModal(true);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [currentUser?.uid, currentUser?.authenticatorEnabled, currentUser?.preferences?.authenticatorEnabled, is2FaRequired]);
   const { activeChat, setActiveChat } = useChat();
   const [mobileView, setMobileView] = useState<'sidebar' | 'chat'>('sidebar');
   const [splashFinished, setSplashFinished] = useState(false);
@@ -112,6 +138,17 @@ const MainLayout: React.FC = () => {
     return <SuspensionScreen currentUser={currentUser} onSignOut={signOut} />;
   }
 
+  // Two-Factor Authentication (TOTP Authenticator) Challenge
+  if (is2FaRequired) {
+    return (
+      <TwoFactorChallengeModal
+        user={currentUser}
+        onVerified={() => setTwoFactorVerified(true)}
+        onCancel={signOut}
+      />
+    );
+  }
+
   // App Passcode Lock Screen
   if (isLockConfigured && isAppLocked) {
     return (
@@ -185,6 +222,28 @@ const MainLayout: React.FC = () => {
       <IncomingCallModal />
       <ActiveCallModal />
       <PermissionPromptModal />
+
+      {/* First-time login prompt to configure Authenticator App */}
+      {showFirstTimeAuthModal && currentUser && (
+        <AuthenticatorModal
+          isOpen={showFirstTimeAuthModal}
+          onClose={() => {
+            if (currentUser?.uid) {
+              localStorage.setItem(`limochat_auth_prompt_dismissed_${currentUser.uid}`, 'true');
+            }
+            setShowFirstTimeAuthModal(false);
+          }}
+          currentUser={currentUser}
+          onSaveAuthenticator={async (enabled, secret, recoveryCodes) => {
+            await setAuthenticator(enabled, secret, recoveryCodes || []);
+            if (currentUser?.uid) {
+              localStorage.setItem(`limochat_auth_prompt_dismissed_${currentUser.uid}`, 'true');
+            }
+            setShowFirstTimeAuthModal(false);
+          }}
+          isFirstTimePrompt={true}
+        />
+      )}
 
       {/* First-time Onboarding Flow */}
       <OnboardingModal

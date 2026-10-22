@@ -1497,16 +1497,59 @@ export class RealtimeCoordinator {
   }
 
   /**
-   * Delete contact in Supabase user profile
+   * Delete contact in Supabase user profile (Permanently across devices)
    */
   public static async deleteContact(userId: string, targetUid: string): Promise<void> {
     try {
-      const { data } = await supabase.from('users').select('deleted_contact_uids').eq('id', userId).single();
+      const { data } = await supabase.from('users').select('deleted_contact_uids').eq('uid', userId).single();
       const current = (data?.deleted_contact_uids as string[]) || [];
       const updated = Array.from(new Set([...current, targetUid]));
-      await supabase.from('users').update({ deleted_contact_uids: updated }).eq('id', userId);
+      await supabase.from('users').update({ deleted_contact_uids: updated }).eq('uid', userId);
     } catch (e) {
       console.warn('Supabase deleteContact error:', e);
+    }
+  }
+
+  /**
+   * Save Authenticator (TOTP) settings to Supabase
+   */
+  public static async updateUserAuthenticator(
+    uid: string,
+    enabled: boolean,
+    secret: string | null,
+    recoveryCodes: string[]
+  ): Promise<void> {
+    try {
+      await supabase
+        .from('users')
+        .update({
+          authenticator_enabled: enabled,
+          authenticator_secret: secret,
+          recovery_codes: recoveryCodes,
+          updated_at: Date.now(),
+        })
+        .eq('uid', uid);
+    } catch (e) {
+      console.warn('Supabase updateUserAuthenticator error:', e);
+    }
+  }
+
+  /**
+   * Lookup user by email or virtual phone number for Forgot Password / Authenticator reset
+   */
+  public static async findUserByEmailOrPhone(query: string): Promise<any | null> {
+    try {
+      const clean = query.trim().toLowerCase();
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .or(`email.ilike.${clean},phone_number.ilike.%${clean}%`)
+        .limit(1)
+        .single();
+      if (error || !data) return null;
+      return data;
+    } catch {
+      return null;
     }
   }
 

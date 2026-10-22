@@ -18,7 +18,11 @@ import { formatTime, formatDuration } from '../../utils/formatters';
 import { CallHistoryItem, UserProfile } from '../../types';
 import { CallListSkeleton } from '../common/SkeletonLoading';
 
-export const CallHistoryView: React.FC = () => {
+interface CallHistoryViewProps {
+  onSelectChat?: () => void;
+}
+
+export const CallHistoryView: React.FC<CallHistoryViewProps> = ({ onSelectChat }) => {
   const { callHistory, startCall } = useCall();
   const { currentUser } = useAuth();
   const { chats, setActiveChat, createDirectChat } = useChat();
@@ -34,6 +38,7 @@ export const CallHistoryView: React.FC = () => {
       );
       if (groupChat) {
         setActiveChat(groupChat);
+        if (onSelectChat) onSelectChat();
       }
       return;
     }
@@ -47,6 +52,7 @@ export const CallHistoryView: React.FC = () => {
     );
     if (directChat) {
       setActiveChat(directChat);
+      if (onSelectChat) onSelectChat();
     } else {
       const targetUser: UserProfile = {
         uid: targetUid,
@@ -68,7 +74,10 @@ export const CallHistoryView: React.FC = () => {
         },
       };
       const newChat = await createDirectChat(targetUser).catch(() => null);
-      if (newChat) setActiveChat(newChat);
+      if (newChat) {
+        setActiveChat(newChat);
+        if (onSelectChat) onSelectChat();
+      }
     }
   };
 

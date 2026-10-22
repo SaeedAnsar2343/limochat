@@ -52,7 +52,7 @@ import {
 import { UserProfile, ChatWallpaper, AppTheme, UserPrivacy, MessageToneType } from '../../types';
 import { Avatar } from '../common/Avatar';
 import { AvatarEditorModal } from './AvatarEditorModal';
-import { TwoStepModal } from './TwoStepModal';
+import { AuthenticatorModal } from './AuthenticatorModal';
 import { PasscodeModal } from './PasscodeModal';
 import { PrivacyPolicyModal } from '../pages/PrivacyPolicyModal';
 import { TermsConditionsModal } from '../pages/TermsConditionsModal';
@@ -156,7 +156,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
   const [desktopNotifs, setDesktopNotifs] = useState(
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission === 'granted' : false
   );
-  const [twoStepEnabled, setTwoStepEnabled] = useState(!!user.preferences?.twoStepPin);
+  const [twoStepEnabled, setTwoStepEnabled] = useState(!!(user.authenticatorEnabled || user.preferences?.authenticatorEnabled));
   const [securityNotifs, setSecurityNotifs] = useState(user.preferences?.securityNotifications ?? true);
   const [inAppVibration, setInAppVibration] = useState(user.preferences?.inAppVibration ?? true);
   const [highPriorityNotifs, setHighPriorityNotifs] = useState(user.preferences?.highPriorityNotifs ?? true);
@@ -227,21 +227,16 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
     await updateUserProfile({ photoURL });
   };
 
-  const handleSaveTwoStep = async (pin: string, recoveryEmail?: string) => {
-    await updateUserPreferences({
-      twoStepPin: pin,
-      twoStepRecoveryEmail: recoveryEmail || '',
-    });
-    setTwoStepEnabled(true);
-    showAlertNotice?.("Two-Step Verification Enabled", "Your account is protected with a 6-digit registration PIN.", "primary");
-  };
+  const { setAuthenticator } = useAuth();
 
-  const handleDisableTwoStep = async () => {
-    await updateUserPreferences({
-      twoStepPin: '',
-    });
-    setTwoStepEnabled(false);
-    showAlertNotice?.("Two-Step Verification Disabled", "Two-step PIN verification has been turned off.", "warning");
+  const handleSaveAuthenticator = async (enabled: boolean, secret: string | null, recoveryCodes?: string[]) => {
+    await setAuthenticator(enabled, secret, recoveryCodes || []);
+    setTwoStepEnabled(enabled);
+    if (enabled) {
+      showAlertNotice?.("Authenticator Configured", "Your account is now secured with standard Authenticator 2FA.", "primary");
+    } else {
+      showAlertNotice?.("Authenticator Disabled", "Two-step verification has been turned off.", "warning");
+    }
   };
 
   // Passcode Lock handlers
@@ -968,11 +963,11 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                     )}
                   </div>
 
-                  {/* Two-Step Verification PIN */}
+                  {/* Two-Step Verification (Authenticator App) */}
                   <div className="pt-2 border-t border-[#2e3b44] flex items-center justify-between">
                     <div>
                       <div className="text-xs font-semibold text-white flex items-center gap-2">
-                        <span>Two-Step Verification PIN</span>
+                        <span>Two-Step Verification (Authenticator App)</span>
                         {twoStepEnabled && (
                           <span className="text-[10px] bg-[#00a884]/20 text-[#00a884] font-semibold px-2 py-0.5 rounded-full border border-[#00a884]/30">
                             ACTIVE
@@ -980,7 +975,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                         )}
                       </div>
                       <div className="text-[11px] text-[#8696a0]">
-                        {twoStepEnabled ? '6-digit PIN is configured' : 'Require a 6-digit passcode on registration'}
+                        {twoStepEnabled ? 'Google/Microsoft Authenticator is active' : 'Require a 6-digit code from Google or Microsoft Authenticator'}
                       </div>
                     </div>
                     <button
@@ -1830,12 +1825,11 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
       )}
 
       {showTwoStepModal && (
-        <TwoStepModal
+        <AuthenticatorModal
           isOpen={showTwoStepModal}
           onClose={() => setShowTwoStepModal(false)}
           currentUser={user}
-          onSaveTwoStep={handleSaveTwoStep}
-          onDisableTwoStep={handleDisableTwoStep}
+          onSaveAuthenticator={handleSaveAuthenticator}
         />
       )}
 
