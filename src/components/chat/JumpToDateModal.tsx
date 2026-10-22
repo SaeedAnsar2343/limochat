@@ -77,7 +77,7 @@ export const JumpToDateModal: React.FC<JumpToDateModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 pt-safe pb-safe bg-black/75 backdrop-blur-md animate-fade-in select-none">
       <div className="fixed inset-0 cursor-default" onClick={onClose} />
 
       <div className="relative z-10 bg-[#202c33] text-[#e9edef] w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl border border-[#2e3b44] flex flex-col animate-scale-in modal-content">

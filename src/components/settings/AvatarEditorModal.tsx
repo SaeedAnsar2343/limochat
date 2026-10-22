@@ -178,7 +178,7 @@ export const AvatarEditorModal: React.FC<AvatarEditorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md select-none animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 pt-safe pb-safe bg-black/80 backdrop-blur-md select-none animate-fade-in">
       <div 
         className="fixed inset-0 cursor-default" 
         onClick={() => { if (!isSaving) onClose(); }} 

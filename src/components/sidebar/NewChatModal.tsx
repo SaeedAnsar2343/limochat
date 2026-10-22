@@ -138,7 +138,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in select-none">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-4 pt-safe pb-safe animate-fade-in select-none">
         <div className="bg-[#182229]/95 text-[#e9edef] rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-white/10 flex flex-col max-h-[85vh] backdrop-blur-2xl">
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-[#2e3b44] bg-[#111b21]">

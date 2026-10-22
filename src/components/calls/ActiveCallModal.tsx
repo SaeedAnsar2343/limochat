@@ -132,7 +132,7 @@ export const ActiveCallModal: React.FC = () => {
       } flex flex-col`}
     >
       {/* Call Header */}
-      <div className="h-16 px-6 bg-[#202c33]/80 backdrop-blur-xl border-b border-white/10 flex items-center justify-between text-white z-20">
+      <div className="pt-safe mobile-header-safe min-h-16 px-6 bg-[#202c33]/80 backdrop-blur-xl border-b border-white/10 flex items-center justify-between text-white z-20">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-[#00a884]/20 rounded-xl text-[#00a884]">
             {activeSession.isGroup ? (
@@ -309,7 +309,7 @@ export const ActiveCallModal: React.FC = () => {
       </div>
 
       {/* Call Bottom Controls Toolbar (Apple-style Glassmorphism) */}
-      <div className="h-20 bg-[#202c33]/85 backdrop-blur-xl border-t border-white/10 px-6 flex items-center justify-center gap-3 sm:gap-4 z-20">
+      <div className="min-h-20 bg-[#202c33]/85 backdrop-blur-xl border-t border-white/10 px-6 py-2 pb-safe flex items-center justify-center gap-3 sm:gap-4 z-20">
         {/* Toggle Audio / Mic */}
         <button
           onClick={toggleAudio}

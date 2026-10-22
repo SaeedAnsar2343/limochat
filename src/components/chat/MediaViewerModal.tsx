@@ -241,7 +241,7 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({
       )}
 
       {/* Header Bar */}
-      <div className="h-16 px-3 sm:px-6 flex items-center justify-between bg-black/75 backdrop-blur-xl border-b border-white/10 z-30 flex-shrink-0">
+      <div className="pt-safe mobile-header-safe min-h-16 px-3 sm:px-6 flex items-center justify-between bg-black/75 backdrop-blur-xl border-b border-white/10 z-30 flex-shrink-0">
         {/* Left: Sender & Metadata */}
         <div className="flex items-center gap-3 min-w-0 pr-2">
           <div className="min-w-0">

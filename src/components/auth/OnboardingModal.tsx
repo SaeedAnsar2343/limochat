@@ -73,8 +73,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onComp
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xl p-4 select-none animate-fade-in">
-      <div className="bg-[#182229]/95 border border-white/10 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col backdrop-blur-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xl p-4 pt-safe pb-safe select-none animate-fade-in overflow-y-auto">
+      <div className="bg-[#182229]/95 border border-white/10 rounded-3xl w-full max-w-lg max-h-[92dvh] overflow-y-auto shadow-2xl flex flex-col backdrop-blur-2xl my-auto">
         {/* Step Progress Bar */}
         <div className="h-1.5 bg-[#111b21] flex">
           {[1, 2, 3].map((s) => (

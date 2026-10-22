@@ -11,7 +11,7 @@ export const IncomingCallModal: React.FC = () => {
   const isVideo = incomingSession.callType === 'video';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 pt-safe pb-safe animate-fade-in select-none">
       <div className="bg-[#202c33] text-[#e9edef] rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-[#2e3b44] p-7 flex flex-col items-center text-center">
         {/* Caller Avatar with Animated Wave Ring */}
         <div className="relative mb-6">

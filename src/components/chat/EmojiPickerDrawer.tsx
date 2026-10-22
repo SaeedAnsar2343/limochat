@@ -244,7 +244,7 @@ export const EmojiPickerDrawer: React.FC<EmojiPickerDrawerProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="bg-white/95 dark:bg-[#182229]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-3xl shadow-[0_12px_45px_rgba(0,0,0,0.25)] dark:shadow-[0_12px_45px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col z-40 transition-all select-none animate-scale-in max-h-[440px] sm:max-h-[480px]">
+    <div className="bg-white/95 dark:bg-[#182229]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-2xl sm:rounded-3xl shadow-[0_12px_45px_rgba(0,0,0,0.25)] dark:shadow-[0_12px_45px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col z-40 transition-all select-none animate-scale-in h-[320px] sm:h-[350px] max-h-[42vh] w-full">
       
       {/* Top Header & Search Bar */}
       <div className="p-3 bg-gray-50/90 dark:bg-[#111b21]/90 border-b border-gray-200 dark:border-white/10 flex items-center justify-between gap-2.5">

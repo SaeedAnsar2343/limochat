@@ -65,6 +65,8 @@ import { useChat, SYSTEM_SUPPORT_USER } from '../../context/ChatContext';
 import { soundEngine } from '../../utils/sound';
 import { subscribeToAppVersion, getCachedAppVersion, AppVersionData } from '../../utils/versionConfig';
 import { SUPPORTED_LANGUAGES, translateText } from '../../utils/translate';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../../firebase/config';
 
 interface SettingsDrawerProps {
   user: UserProfile;
@@ -422,21 +424,38 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
     });
   };
 
-  // Chat History Export & Restore
-  const handleExportData = () => {
-    const allMessages: any[] = [];
+  // Chat History Comprehensive Export & Restore
+  const handleExportData = async () => {
+    const allMessagesMap = new Map<string, any>();
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.startsWith('limochat_msgs_')) {
           const msgs = JSON.parse(localStorage.getItem(key) || '[]');
-          if (Array.isArray(msgs)) allMessages.push(...msgs);
+          if (Array.isArray(msgs)) {
+            msgs.forEach((m: any) => { if (m.id) allMessagesMap.set(m.id, m); });
+          }
         }
       }
     } catch {}
 
+    // Pull directly from Firestore for 100% complete chat history
+    try {
+      for (const c of chats) {
+        const snap = await getDocs(collection(db, 'chats', c.id, 'messages'));
+        snap.forEach((d) => {
+          allMessagesMap.set(d.id, { id: d.id, ...d.data() });
+        });
+      }
+    } catch (err) {
+      console.warn("Export message fetch notice:", err);
+    }
+
+    const allMessages = Array.from(allMessagesMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
     const data = {
-      version: '2.0',
+      version: '2.5.0',
+      app: 'LimoChat',
       userProfile: {
         uid: user.uid,
         displayName: user.displayName,
@@ -455,10 +474,10 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `limochat-backup-${(user.displayName || 'user').replace(/\s+/g, '_')}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `limochat-full-backup-${(user.displayName || 'user').replace(/\s+/g, '_')}-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    showAlertNotice?.("Backup Exported", `Saved ${allMessages.length} messages and user profile to JSON file.`, "primary");
+    showAlertNotice?.("Backup Exported", `Saved complete backup (${allMessages.length} messages across ${chats.length} chats) to JSON file.`, "primary");
   };
 
   const handleRestoreBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -610,14 +629,14 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-md animate-fade-in select-none">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-md animate-fade-in select-none pt-safe pb-safe">
         {/* Outside Backdrop */}
         <div className="fixed inset-0 cursor-default" onClick={onClose} />
 
         {/* Unified One-Page Settings Dialog */}
-        <div className="relative z-10 bg-[#202c33] text-[#e9edef] w-full max-w-2xl h-[92vh] rounded-3xl overflow-hidden shadow-2xl border border-[#2e3b44] flex flex-col animate-scale-in modal-content">
+        <div className="relative z-10 bg-[#202c33] text-[#e9edef] w-full max-w-2xl h-[92vh] max-h-[96dvh] rounded-3xl overflow-hidden shadow-2xl border border-[#2e3b44] flex flex-col animate-scale-in modal-content">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#2e3b44] bg-[#111b21] flex-shrink-0">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#2e3b44] bg-[#111b21] flex-shrink-0 pt-safe">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-[#00a884]/20 rounded-xl text-[#00a884]">
                 <Palette className="w-5 h-5" />

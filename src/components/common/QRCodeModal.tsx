@@ -24,7 +24,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({ user, isOpen, onClose 
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${qrData}&color=11-27-33&bgcolor=ffffff&margin=10`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4 pt-safe pb-safe animate-fade-in">
       <div className="bg-[#202c33] text-[#e9edef] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-[#2e3b44] flex flex-col items-center">
         {/* Header */}
         <div className="w-full flex items-center justify-between px-5 py-4 border-b border-[#2e3b44]">

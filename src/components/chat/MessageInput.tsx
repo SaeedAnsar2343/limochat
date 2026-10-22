@@ -253,7 +253,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   }
 
   return (
-    <div className="px-2.5 sm:px-4 py-2 sm:py-3 bg-[#182229]/90 dark:bg-[#182229]/90 backdrop-blur-2xl backdrop-saturate-150 border-t border-white/[0.1] flex flex-col gap-2 relative message-input-bar shadow-[0_-8px_32px_rgba(0,0,0,0.35)] transition-all">
+    <div className="px-2.5 sm:px-4 py-2 sm:py-2.5 pb-safe bg-[#182229]/90 dark:bg-[#182229]/90 backdrop-blur-2xl backdrop-saturate-150 border-t border-white/[0.1] flex flex-col gap-2 relative message-input-bar shadow-[0_-8px_32px_rgba(0,0,0,0.35)] transition-all">
       {/* Quoted Message Preview (Drag-to-reply or quote) */}
       {replyingTo && (
         <div className="bg-[#111b21]/90 backdrop-blur-md border-l-4 border-[#00a884] rounded-r-2xl p-2.5 flex items-start justify-between animate-fade-in text-xs shadow-lg">

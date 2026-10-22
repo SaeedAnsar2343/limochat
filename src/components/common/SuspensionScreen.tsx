@@ -76,7 +76,7 @@ export const SuspensionScreen: React.FC<SuspensionScreenProps> = ({ currentUser,
   const isExpired = isTemporary && timeLeftSeconds <= 0;
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#0b141a] flex items-center justify-center p-4 suspension-screen-root">
+    <div className="fixed inset-0 z-50 bg-[#0b141a] flex items-center justify-center p-4 pt-safe pb-safe suspension-screen-root">
       {/* Background glow */}
       <div className="absolute inset-0 bg-radial from-red-500/10 via-transparent to-transparent opacity-50 pointer-events-none" />
 

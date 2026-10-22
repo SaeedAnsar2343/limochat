@@ -57,7 +57,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   const vStyles = getVariantStyles();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 pt-safe pb-safe">
       {/* Outside Backdrop */}
       <div
         className="fixed inset-0 bg-black/70 backdrop-blur-md animate-fade-in cursor-default"

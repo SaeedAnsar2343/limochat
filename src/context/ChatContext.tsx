@@ -77,6 +77,7 @@ interface ChatContextType {
   setTyping: (isTyping: boolean) => void;
   updateGroupPermissions: (chatId: string, permissions: GroupPermissions) => Promise<void>;
   showAlertNotice: (title: string, description: string, variant?: 'danger' | 'warning' | 'primary', confirmText?: string) => void;
+  exportChat: (chatId: string, format?: 'txt' | 'json') => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -278,6 +279,26 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const updated = chatList.find(c => c.id === activeChat.id);
         if (updated) setActiveChat(updated);
       }
+
+      // Background notification for inactive chats
+      if (currentUser?.uid && chatList.length > 0) {
+        chatList.forEach((c) => {
+          if (c.id !== activeChat?.id && c.lastMessage && c.lastMessage.senderId !== currentUser.uid) {
+            const ageMs = Date.now() - (c.lastMessage.timestamp || 0);
+            if (ageMs < 15000) {
+              const notifKey = `limochat_seen_${c.id}_${c.lastMessage.timestamp}`;
+              if (!sessionStorage.getItem(notifKey)) {
+                sessionStorage.setItem(notifKey, '1');
+                NativeNotificationService.notifyMessage({
+                  title: c.name || 'New Message',
+                  body: c.lastMessage.text || 'Sent an attachment',
+                  chatId: c.id,
+                });
+              }
+            }
+          }
+        });
+      }
     }, () => {
       // Fallback query without composite index
       const qFallback = query(chatsRef, where('participants', 'array-contains', currentUser.uid));
@@ -357,6 +378,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
 
+      // 1. Detect and notify incoming messages for all media & text types
       if (msgList.length > messages.length && messages.length > 0) {
         const last = msgList[msgList.length - 1];
         if (last && last.senderId !== currentUser?.uid) {
@@ -368,12 +390,43 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               navigator.vibrate(100);
             } catch {}
           }
+
+          let previewBody = last.text || '';
+          if (last.type === 'image') previewBody = last.text ? `📷 Photo: ${last.text}` : '📷 Photo';
+          else if (last.type === 'video') previewBody = last.text ? `🎥 Video: ${last.text}` : '🎥 Video';
+          else if (last.type === 'voice') previewBody = '🎤 Voice message';
+          else if (last.type === 'file') previewBody = last.text ? `📄 Document: ${last.text}` : '📄 Document';
+          else if (last.type === 'location') previewBody = '📍 Shared location';
+          else if (last.type === 'contact') previewBody = '👤 Shared contact';
+          else if (!previewBody) previewBody = '✨ Sent an attachment';
+
           NativeNotificationService.notifyMessage({
             title: activeChat?.name || 'New Message',
-            body: last.text || (last.type === 'image' ? '📷 Photo' : last.type === 'voice' ? '🎤 Voice note' : '📎 Attachment'),
+            body: previewBody,
             chatId: activeChat?.id || '',
           });
         }
+      }
+
+      // 2. Detect and notify message reactions on my messages
+      if (messages.length > 0 && currentUser?.uid) {
+        msgList.forEach(newMsg => {
+          if (newMsg.senderId === currentUser.uid && newMsg.reactions && newMsg.reactions.length > 0) {
+            const oldMsg = messages.find(m => m.id === newMsg.id);
+            const oldReactionsCount = oldMsg?.reactions?.length || 0;
+            if (newMsg.reactions.length > oldReactionsCount) {
+              const latestReaction = newMsg.reactions[newMsg.reactions.length - 1];
+              if (latestReaction && latestReaction.userId !== currentUser.uid) {
+                NativeNotificationService.notifyReaction({
+                  userName: latestReaction.userName || 'Contact',
+                  emoji: latestReaction.emoji,
+                  messageSnippet: newMsg.text || 'Message',
+                  chatId: activeChat?.id || '',
+                });
+              }
+            }
+          }
+        });
       }
 
       setMessages(msgList);
@@ -1310,6 +1363,91 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  const exportChat = async (chatId: string, format: 'txt' | 'json' = 'txt') => {
+    const targetChat = chats.find((c) => c.id === chatId) || activeChat;
+    if (!targetChat) return;
+
+    let chatMsgs: Message[] = [];
+    if (activeChat?.id === chatId && messages.length > 0) {
+      chatMsgs = [...messages];
+    } else {
+      try {
+        const cached = localStorage.getItem(`limochat_msgs_${chatId}`);
+        if (cached) chatMsgs = JSON.parse(cached);
+      } catch {}
+      if (chatMsgs.length === 0) {
+        try {
+          const snap = await getDocs(
+            query(collection(db, 'chats', chatId, 'messages'), orderBy('timestamp', 'asc'))
+          );
+          snap.forEach((d) => chatMsgs.push({ id: d.id, ...d.data() } as Message));
+        } catch {}
+      }
+    }
+
+    const safeTitle = (targetChat.name || 'Conversation')
+      .replace(/[^\w\s-]/g, '')
+      .trim() || 'Conversation';
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    if (format === 'json') {
+      const exportBundle = {
+        app: 'LimoChat',
+        version: '2.5.0',
+        chat: {
+          id: targetChat.id,
+          name: targetChat.name,
+          type: targetChat.type,
+          participants: targetChat.participants,
+        },
+        exportedAt: new Date().toISOString(),
+        totalMessages: chatMsgs.length,
+        messages: chatMsgs,
+      };
+      const blob = new Blob([JSON.stringify(exportBundle, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `limochat-${safeTitle}-${dateStr}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      let txt = `=====================================================\n`;
+      txt += `LimoChat Encrypted Chat Export\n`;
+      txt += `Chat: ${targetChat.name || 'Direct Conversation'}\n`;
+      txt += `Date of Export: ${new Date().toLocaleString()}\n`;
+      txt += `Total Messages: ${chatMsgs.length}\n`;
+      txt += `=====================================================\n\n`;
+
+      chatMsgs.forEach((m) => {
+        const time = new Date(m.timestamp).toLocaleString();
+        const sender = m.senderName || (m.senderId === currentUser?.uid ? 'You' : 'Participant');
+        let body = m.text || '';
+        if (m.type === 'image') body = `[Photo: ${m.text || m.mediaUrl || ''}]`;
+        else if (m.type === 'video') body = `[Video: ${m.text || m.mediaUrl || ''}]`;
+        else if (m.type === 'voice') body = `[Voice Note]`;
+        else if (m.type === 'file') body = `[Document: ${m.text || m.mediaUrl || ''}]`;
+        else if (m.type === 'location') body = `[Location: ${m.text || ''}]`;
+
+        const rx = (m.reactions || []).map((r) => `${r.emoji} (${r.userName})`).join(', ');
+        const rxStr = rx ? `  [Reactions: ${rx}]` : '';
+
+        txt += `[${time}] ${sender}: ${body}${rxStr}\n`;
+      });
+
+      const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `limochat-${safeTitle}-${dateStr}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    showAlertNotice('Chat Exported', `Successfully exported ${chatMsgs.length} messages for "${targetChat.name || 'Chat'}"`, 'primary');
+  };
+
   return (
     <ChatContext.Provider
       value={{
@@ -1350,6 +1488,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setTyping,
         updateGroupPermissions,
         showAlertNotice,
+        exportChat,
       }}
     >
       {children}

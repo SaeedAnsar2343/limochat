@@ -89,7 +89,7 @@ export const ReportMessageModal: React.FC<ReportMessageModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 select-none animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 pt-safe pb-safe select-none animate-fade-in">
       {/* Backdrop for outside touch close */}
       <div 
         className="fixed inset-0 bg-black/80 backdrop-blur-md cursor-default"

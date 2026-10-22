@@ -297,7 +297,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
         {activeRail === 'chats' && (
           <>
             {/* Header */}
-            <div className="h-16 px-4 bg-[#202c33] flex items-center justify-between border-b border-[#2e3b44]">
+            <div className="pt-safe mobile-header-safe min-h-16 px-4 bg-[#202c33] flex items-center justify-between border-b border-[#2e3b44]">
               {viewingArchived ? (
                 <div className="flex items-center gap-3">
                   <button
@@ -555,7 +555,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
         {/* VIEW D: COMMUNITIES */}
         {activeRail === 'communities' && (
           <div className="flex-1 flex flex-col h-full overflow-hidden">
-            <div className="h-16 px-4 bg-[#202c33] flex items-center justify-between border-b border-[#2e3b44]">
+            <div className="pt-safe mobile-header-safe min-h-16 px-4 bg-[#202c33] flex items-center justify-between border-b border-[#2e3b44]">
               <h2 className="text-base font-bold text-white tracking-tight">Communities</h2>
             </div>
             <div className="flex-1 overflow-y-auto">
@@ -565,7 +565,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
         )}
 
         {/* Mobile Glassy Bottom Navigation Bar (Modern Apple / VisionOS Glassmorphism Dock) */}
-        <div className="md:hidden flex-shrink-0 z-30 px-3 pb-3 pt-1 pointer-events-none sticky bottom-0">
+        <div className="md:hidden flex-shrink-0 z-30 px-3 pb-safe pt-1 pointer-events-none sticky bottom-0 mb-1">
           <nav 
             aria-label="Mobile Navigation"
             className="pointer-events-auto h-16 bg-[#182229]/80 dark:bg-[#182229]/80 backdrop-blur-2xl backdrop-saturate-150 border border-white/[0.12] rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.18)] flex items-center justify-around px-2 relative overflow-hidden mobile-glass-dock"

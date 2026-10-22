@@ -17,6 +17,7 @@ import { formatTime } from '../../utils/formatters';
 import { useChat } from '../../context/ChatContext';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../../firebase/config';
+import { NativeNotificationService } from '../../utils/nativeNotifications';
 
 interface StatusViewerModalProps {
   isOpen: boolean;
@@ -198,12 +199,72 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
           text: currentStatus.text || 'Status Update',
         },
       });
+      // Notify status author
+      NativeNotificationService.notifyStatusReaction({
+        userName: currentUser.displayName || 'A contact',
+        replyText: replyText.trim(),
+        statusId: currentStatus.id,
+      });
+
       setReplyText('');
-      alert("Reply sent as direct message!");
     } catch (err: any) {
-      alert("Error sending status reply: " + err.message);
+      console.warn("Status reply notice:", err);
     } finally {
       setSendingReply(false);
+    }
+  };
+
+  const handleQuickReact = async (emoji: string) => {
+    if (isMyStatus || !currentStatus || !currentUser) return;
+    try {
+      // 1. Register reaction on status document
+      const docRef = doc(db, 'statuses', currentStatus.id);
+      await updateDoc(docRef, {
+        reactions: arrayUnion({
+          emoji,
+          userId: currentUser.uid,
+          userName: currentUser.displayName || 'User',
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+
+      // 2. Dispatch push notification to status author
+      NativeNotificationService.notifyStatusReaction({
+        userName: currentUser.displayName || 'A contact',
+        emoji,
+        statusId: currentStatus.id,
+      });
+
+      // 3. Send direct message with emoji quoting status (WhatsApp style)
+      let targetChat = chats.find(
+        (c) => c.type === 'direct' && c.participants.includes(currentStatus.userId)
+      );
+      if (!targetChat) {
+        targetChat = await createDirectChat({
+          uid: currentStatus.userId,
+          displayName: currentStatus.userName,
+          photoURL: currentStatus.userPhoto || '',
+          phoneNumber: currentStatus.userPhone || '',
+          email: '',
+          about: '',
+          isOnline: false,
+          lastSeen: 0,
+          privacy: { lastSeen: 'everyone', profilePhoto: 'everyone', readReceipts: true },
+          blockedUsers: [],
+          createdAt: 0,
+        });
+      }
+      setActiveChat(targetChat);
+      await sendMessage(emoji, 'text', undefined, {
+        quotedMessage: {
+          id: currentStatus.id,
+          senderId: currentStatus.userId,
+          senderName: currentStatus.userName,
+          text: currentStatus.text || 'Status Update',
+        },
+      });
+    } catch (err: any) {
+      console.warn("Status reaction notice:", err);
     }
   };
 
@@ -233,7 +294,7 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
         }}
       >
         {/* Top Header & Multi-Story Progress Bars */}
-        <div className="p-4 z-20 bg-gradient-to-b from-black/80 via-black/40 to-transparent">
+        <div className="pt-safe p-4 z-20 bg-gradient-to-b from-black/85 via-black/40 to-transparent">
           {/* Segmented Progress Bars */}
           <div className="flex items-center gap-1.5 mb-3">
             {statuses.map((_, i) => (
@@ -388,32 +449,49 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
           )}
         </div>
 
-        {/* Bottom Bar: Reply Input or Views Counter */}
-        <div className="p-4 z-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+        {/* Bottom Bar: Quick Emoji Reactions & Reply Input or Views Counter */}
+        <div className="pb-safe p-4 z-20 bg-gradient-to-t from-black/90 via-black/50 to-transparent space-y-2.5">
           {isMyStatus ? (
-            <div className="flex items-center justify-center gap-2 text-white/80 text-xs py-2 bg-black/40 rounded-full backdrop-blur-md border border-white/10">
+            <div className="flex items-center justify-center gap-2 text-white/90 text-xs py-2 bg-black/50 rounded-full backdrop-blur-md border border-white/10">
               <Eye className="w-4 h-4 text-[#00a884]" />
               <span>
                 {currentStatus.viewedBy ? currentStatus.viewedBy.length : 1} view{currentStatus.viewedBy && currentStatus.viewedBy.length === 1 ? '' : 's'}
               </span>
             </div>
           ) : (
-            <form onSubmit={handleSendReply} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder="Reply to status..."
-                className="flex-1 bg-black/60 border border-white/20 rounded-full px-4 py-2.5 text-xs text-white placeholder-white/60 focus:outline-none focus:border-[#00a884] backdrop-blur-md"
-              />
-              <button
-                type="submit"
-                disabled={sendingReply || !replyText.trim()}
-                className="p-2.5 rounded-full bg-[#00a884] hover:bg-[#02906f] active:scale-95 text-white transition disabled:opacity-50 cursor-pointer shadow-lg shadow-[#00a884]/30"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            </form>
+            <>
+              {/* Quick Reactions Bar (WhatsApp Style) */}
+              <div className="flex items-center justify-around px-2 py-1 bg-black/40 backdrop-blur-md rounded-2xl border border-white/10">
+                {['❤️', '😂', '😮', '😢', '🙏', '👏', '🔥', '💯'].map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => handleQuickReact(emoji)}
+                    className="text-xl sm:text-2xl hover:scale-130 active:scale-95 transition-transform p-1 cursor-pointer select-none"
+                    title={`React with ${emoji}`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={handleSendReply} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder="Reply to status..."
+                  className="flex-1 bg-black/60 border border-white/20 rounded-full px-4 py-2.5 text-xs text-white placeholder-white/60 focus:outline-none focus:border-[#00a884] backdrop-blur-md"
+                />
+                <button
+                  type="submit"
+                  disabled={sendingReply || !replyText.trim()}
+                  className="p-2.5 rounded-full bg-[#00a884] hover:bg-[#02906f] active:scale-95 text-white transition disabled:opacity-50 cursor-pointer shadow-lg shadow-[#00a884]/30"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </form>
+            </>
           )}
         </div>
       </div>

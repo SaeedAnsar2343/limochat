@@ -72,7 +72,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
   }, [enteredPin, targetPin]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#0b141a] flex items-center justify-center p-4 select-none animate-fade-in suspension-screen-root">
+    <div className="fixed inset-0 z-50 bg-[#0b141a] flex items-center justify-center p-4 pt-safe pb-safe select-none animate-fade-in suspension-screen-root">
       {/* Background glow */}
       <div className="absolute inset-0 bg-radial from-[#00a884]/15 via-transparent to-transparent opacity-60 pointer-events-none" />
 

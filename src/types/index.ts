@@ -149,7 +149,7 @@ export type UserProfile = {
   policyWarnings?: PolicyWarning[];
 };
 
-export type MessageType = 'text' | 'image' | 'voice' | 'file' | 'call_log' | 'video';
+export type MessageType = 'text' | 'image' | 'voice' | 'file' | 'call_log' | 'video' | 'location' | 'contact' | 'sticker';
 
 export type MessageStatus = 'sent' | 'delivered' | 'read';
 

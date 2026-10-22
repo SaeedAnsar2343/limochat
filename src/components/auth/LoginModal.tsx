@@ -69,12 +69,12 @@ export const LoginModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center login-screen-bg p-4 overflow-y-auto select-none relative">
+    <div className="fixed inset-0 z-40 flex items-center justify-center login-screen-bg p-4 pt-safe pb-safe overflow-y-auto select-none relative">
       {/* Interactive Background Floating Glow Orbs */}
       <div className="absolute top-1/4 left-1/4 w-72 h-72 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none animate-pulse" />
       <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full bg-teal-500/10 blur-3xl pointer-events-none animate-pulse" style={{ animationDelay: '1s' }} />
 
-      <div className="login-card rounded-3xl w-full max-w-md p-6 sm:p-8 flex flex-col items-center relative my-auto z-10 transition-all duration-300 animate-scale-in">
+      <div className="login-card rounded-3xl w-full max-w-md p-5 sm:p-8 flex flex-col items-center relative my-auto z-10 transition-all duration-300 animate-scale-in shadow-2xl">
         
         {/* Top Header Bar with Badges & Theme Toggle */}
         <div className="flex items-center justify-between w-full mb-6">
@@ -264,7 +264,7 @@ export const LoginModal: React.FC = () => {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
-                className="login-form-input w-full rounded-xl pl-10 pr-3.5 py-2.5 text-xs focus:outline-none transition-all"
+                className="login-form-input w-full rounded-xl pl-10 pr-3.5 py-3 text-sm focus:outline-none transition-all"
               />
             </div>
           )}
@@ -277,7 +277,7 @@ export const LoginModal: React.FC = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="login-form-input w-full rounded-xl pl-10 pr-3.5 py-2.5 text-xs focus:outline-none transition-all"
+              className="login-form-input w-full rounded-xl pl-10 pr-3.5 py-3 text-sm focus:outline-none transition-all"
             />
           </div>
 
@@ -288,7 +288,7 @@ export const LoginModal: React.FC = () => {
               placeholder="Password (optional for quick login)"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="login-form-input w-full rounded-xl pl-10 pr-10 py-2.5 text-xs focus:outline-none transition-all"
+              className="login-form-input w-full rounded-xl pl-10 pr-10 py-3 text-sm focus:outline-none transition-all"
             />
             <button
               type="button"

@@ -93,7 +93,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
   const [mediaTab, setMediaTab] = useState<MediaFilterTab>('media');
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
 
-  const { updateGroupPermissions, deleteChat, deleteContact, getAllContacts, chats } = useChat();
+  const { updateGroupPermissions, deleteChat, deleteContact, getAllContacts, chats, exportChat } = useChat();
 
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -315,7 +315,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
   return (
     <div className="fixed inset-0 z-50 md:static md:w-96 md:h-full w-full h-full bg-[#111b21] md:border-l border-[#2e3b44] flex flex-col flex-shrink-0 animate-slide-left overflow-y-auto contact-info-drawer select-none shadow-2xl">
       {/* Top Header */}
-      <div className="h-16 px-4 bg-[#202c33] flex items-center justify-between border-b border-[#2e3b44] drawer-header flex-shrink-0 sticky top-0 z-30">
+      <div className="pt-safe mobile-header-safe min-h-16 px-4 bg-[#202c33] flex items-center justify-between border-b border-[#2e3b44] drawer-header flex-shrink-0 sticky top-0 z-30">
         <div className="flex items-center gap-3">
           <button
             onClick={onClose}
@@ -933,7 +933,27 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
       )}
 
       {/* Bottom Danger & Management Actions */}
-      <div className="p-4 space-y-2 bg-[#111b21] mt-auto border-t border-[#222e35]">
+      <div className="p-4 space-y-2 bg-[#111b21] mt-auto border-t border-[#222e35] pb-safe">
+        {/* Export Chat Action */}
+        <div className="flex gap-2 w-full mb-1">
+          <button
+            type="button"
+            onClick={() => exportChat(chat.id, 'txt')}
+            className="flex-1 py-2.5 px-3 rounded-xl bg-[#202c33] hover:bg-[#2a3942] border border-[#2e3b44] text-[#00a884] flex items-center justify-center gap-1.5 text-xs font-bold transition cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export (.txt)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => exportChat(chat.id, 'json')}
+            className="flex-1 py-2.5 px-3 rounded-xl bg-[#202c33] hover:bg-[#2a3942] border border-[#2e3b44] text-blue-400 flex items-center justify-center gap-1.5 text-xs font-bold transition cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export (.json)</span>
+          </button>
+        </div>
+
         {isSupportChat ? (
           <div className="p-3 bg-[#202c33] rounded-2xl border border-white/10 text-center space-y-1">
             <span className="text-xs font-semibold text-[#00a884] flex items-center justify-center gap-1.5">

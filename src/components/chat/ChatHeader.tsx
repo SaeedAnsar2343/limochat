@@ -13,13 +13,15 @@ import {
   RotateCcw,
   Ban,
   Star,
-  Calendar
+  Calendar,
+  Download
 } from 'lucide-react';
 import { Chat, UserProfile } from '../../types';
 import { Avatar } from '../common/Avatar';
 import { formatLastSeen } from '../../utils/formatters';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase/config';
+import { useChat } from '../../context/ChatContext';
 
 interface ChatHeaderProps {
   chat: Chat;
@@ -56,6 +58,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   isFilteringStarred = false,
   onToggleStarredFilter,
 }) => {
+  const { exportChat } = useChat();
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
@@ -121,7 +124,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   const avatarUrl = chat.type === 'direct' ? otherUser?.photoURL || chat.avatar : chat.avatar;
 
   return (
-    <div className="h-16 px-3 sm:px-4 bg-[#202c33]/90 dark:bg-[#202c33]/90 backdrop-blur-2xl border-b border-white/[0.08] flex items-center justify-between select-none z-10 shadow-sm transition-all">
+    <div className="pt-safe mobile-header-safe min-h-16 px-3 sm:px-4 bg-[#202c33]/95 dark:bg-[#202c33]/95 backdrop-blur-2xl border-b border-white/[0.08] flex items-center justify-between select-none z-10 shadow-sm transition-all">
       {/* Left: Back button & Info */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0 pr-2">
         <button
@@ -256,6 +259,28 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                     <span>Select messages</span>
                   </button>
                 )}
+
+                <button
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    exportChat(chat.id, 'txt');
+                  }}
+                  className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
+                >
+                  <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Export chat (.txt)</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    exportChat(chat.id, 'json');
+                  }}
+                  className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
+                >
+                  <Download className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span>Export chat (.json)</span>
+                </button>
 
                 {onClearChat && (
                   <button

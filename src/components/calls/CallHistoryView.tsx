@@ -70,7 +70,7 @@ export const CallHistoryView: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col bg-[#111b21] overflow-y-auto select-none">
       {/* Top Header */}
-      <div className="p-4 bg-[#202c33] border-b border-[#2e3b44] flex items-center justify-between">
+      <div className="pt-safe mobile-header-safe min-h-16 p-4 bg-[#202c33] border-b border-[#2e3b44] flex items-center justify-between">
         <h2 className="text-base font-bold text-white tracking-tight">Calls</h2>
         <div className="flex items-center gap-2">
           <div className="flex bg-[#111b21] rounded-xl p-0.5 border border-[#2e3b44] text-xs">

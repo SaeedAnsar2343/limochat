@@ -10,6 +10,7 @@ import { NewStatusModal } from './NewStatusModal';
 import { StatusViewerModal } from './StatusViewerModal';
 import { formatTime } from '../../utils/formatters';
 import { StatusListSkeleton } from '../common/SkeletonLoading';
+import { NativeNotificationService } from '../../utils/nativeNotifications';
 
 export const StatusView: React.FC = () => {
   const { currentUser } = useAuth();
@@ -43,6 +44,27 @@ export const StatusView: React.FC = () => {
       });
 
       list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+      // Push notification for new status updates posted by contacts
+      if (currentUser?.uid && list.length > 0) {
+        list.forEach((st) => {
+          if (st.userId !== currentUser.uid && st.timestamp) {
+            const ageMs = Date.now() - st.timestamp;
+            if (ageMs < 30000) {
+              const statusNotifKey = `limochat_seen_status_${st.id}`;
+              if (!sessionStorage.getItem(statusNotifKey)) {
+                sessionStorage.setItem(statusNotifKey, '1');
+                NativeNotificationService.notifyStatusUpdate({
+                  userName: st.userName || 'Contact',
+                  statusSnippet: st.text || 'Shared a new status update',
+                  userId: st.userId,
+                });
+              }
+            }
+          }
+        });
+      }
+
       setStatuses(list);
       try {
         localStorage.setItem('limochat_statuses', JSON.stringify(list));
@@ -131,7 +153,7 @@ export const StatusView: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col bg-[#111b21] overflow-y-auto select-none relative">
       {/* Header */}
-      <div className="p-4 bg-[#202c33] border-b border-[#2e3b44] flex items-center justify-between sticky top-0 z-10 backdrop-blur-md">
+      <div className="pt-safe mobile-header-safe min-h-16 p-4 bg-[#202c33] border-b border-[#2e3b44] flex items-center justify-between sticky top-0 z-10 backdrop-blur-md">
         <h2 className="text-base font-bold text-white tracking-tight">Status</h2>
         <button
           onClick={() => openNewStatus('camera')}

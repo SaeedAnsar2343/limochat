@@ -1145,14 +1145,14 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 pt-safe pb-safe">
       {/* Background overlay */}
       <div className="fixed inset-0 bg-black/80 backdrop-blur-md cursor-default" onClick={onClose} />
 
       {/* Main Modal Container */}
-      <div className="relative z-50 w-full max-w-5xl h-[90vh] bg-[#202c33] border border-[#2e3b44] rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-scale-in">
+      <div className="relative z-50 w-full max-w-5xl h-[90vh] max-h-[96dvh] bg-[#202c33] border border-[#2e3b44] rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-scale-in">
         {/* Header */}
-        <div className="px-6 py-4 bg-[#111b21] border-b border-[#2e3b44] flex items-center justify-between">
+        <div className="px-6 py-4 bg-[#111b21] border-b border-[#2e3b44] flex items-center justify-between pt-safe">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20">
               <ShieldAlert className="w-6 h-6" />
