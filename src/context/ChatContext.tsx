@@ -1,3 +1,4 @@
+import { RealtimeCoordinator } from '../utils/realtimeCoordinator';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
   collection, 
@@ -432,7 +433,23 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     }, () => {});
 
-    return () => unsubscribe();
+    // Dual-channel real-time listener (RTDB + Supabase WebSocket)
+    const unsubLive = RealtimeCoordinator.subscribeToLiveMessages(activeChat.id, (liveMsg) => {
+      if (liveMsg.chatId !== activeChat.id) return;
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === liveMsg.id)) return prev;
+        const updated = [...prev, liveMsg].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        try {
+          localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    });
+
+    return () => {
+      unsubscribe();
+      unsubLive();
+    };
   }, [activeChat?.id, currentUser?.uid]);
 
   const sendMessage = async (
@@ -591,7 +608,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setReplyingTo(null);
 
-    // Try saving to Firestore
+    // Broadcast through dual-channel real-time engine (RTDB + Supabase) immediately
+    RealtimeCoordinator.broadcastLiveMessage(activeChat.id, newMsg).catch(() => {});
+
+    // Try saving to Firestore in background for permanent persistence
     try {
       const msgDocRef = doc(db, 'chats', activeChat.id, 'messages', msgId);
       await setDoc(msgDocRef, sanitizeData({ ...newMsg, status: 'delivered' }), { merge: true });
@@ -1074,6 +1094,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!activeChat || !currentUser) return;
     if (typingStateRef.current === isTyping) return;
     typingStateRef.current = isTyping;
+
+    // Broadcast typing through dual-channel real-time sockets (0 DB writes)
+    RealtimeCoordinator.broadcastTyping(activeChat.id, currentUser.uid, isTyping).catch(() => {});
 
     try {
       const chatRef = doc(db, 'chats', activeChat.id);

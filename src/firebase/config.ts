@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getDatabase } from "firebase/database";
 import { getStorage } from "firebase/storage";
 
 export const firebaseConfig = {
@@ -10,7 +11,8 @@ export const firebaseConfig = {
   storageBucket: "woki-toki-69a0d.firebasestorage.app",
   messagingSenderId: "482808339600",
   appId: "1:482808339600:web:ff5a9281f6201ca1bfcc15",
-  measurementId: "G-XC6RR04FKP"
+  measurementId: "G-XC6RR04FKP",
+  databaseURL: "https://woki-toki-69a0d-default-rtdb.firebaseio.com"
 };
 
 // Initialize Firebase
@@ -19,4 +21,5 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 export const db = getFirestore(app);
+export const rtdb = getDatabase(app);
 export const storage = getStorage(app);

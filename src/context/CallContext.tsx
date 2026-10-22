@@ -1,3 +1,4 @@
+import { RealtimeCoordinator } from '../utils/realtimeCoordinator';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { 
   collection, 
@@ -410,38 +411,52 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }));
       };
 
-      const callerCandidates = collection(db, 'calls', sessionId, 'callerCandidates');
+      // Stream ICE candidates via dual-channel RTDB + Supabase (0 Firestore writes)
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          addDoc(callerCandidates, event.candidate.toJSON()).catch(() => {});
+          RealtimeCoordinator.sendCallSignal(sessionId, {
+            type: 'candidate',
+            role: 'caller',
+            candidate: event.candidate.toJSON()
+          }).catch(() => {});
         }
       };
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
+      // Broadcast offer via dual-channel real-time sockets
+      RealtimeCoordinator.sendCallSignal(sessionId, {
+        type: 'offer',
+        offer: { type: offer.type, sdp: offer.sdp }
+      }).catch(() => {});
+
+      // Background persistence in Firestore
       const callDoc = doc(db, 'calls', sessionId);
-      await updateDoc(callDoc, {
+      updateDoc(callDoc, {
         offer: { type: offer.type, sdp: offer.sdp },
       }).catch(() => {});
 
-      const unsubCall = onSnapshot(callDoc, async (snapshot) => {
+      // Live signaling listener via dual-channel RTDB + Supabase WebSockets
+      RealtimeCoordinator.subscribeToCallSignals(sessionId, async (signal) => {
+        if (signal.type === 'answer' && !pc.currentRemoteDescription) {
+          soundEngine.stopDialTone();
+          const rtcSessionDesc = new RTCSessionDescription(signal.answer);
+          await pc.setRemoteDescription(rtcSessionDesc).catch(() => {});
+        } else if (signal.type === 'candidate' && signal.role === 'callee') {
+          const candidate = new RTCIceCandidate(signal.candidate);
+          await pc.addIceCandidate(candidate).catch(() => {});
+        }
+      });
+
+      // Secondary fallback listener on Firestore document
+      onSnapshot(callDoc, async (snapshot) => {
         const data = snapshot.data();
         if (data?.answer && !pc.currentRemoteDescription) {
           soundEngine.stopDialTone();
           const rtcSessionDesc = new RTCSessionDescription(data.answer);
-          await pc.setRemoteDescription(rtcSessionDesc);
+          await pc.setRemoteDescription(rtcSessionDesc).catch(() => {});
         }
-      }, () => {});
-
-      const calleeCandidates = collection(db, 'calls', sessionId, 'calleeCandidates');
-      onSnapshot(calleeCandidates, (snapshot) => {
-        snapshot.docChanges().forEach(async (change) => {
-          if (change.type === 'added') {
-            const candidate = new RTCIceCandidate(change.doc.data());
-            await pc.addIceCandidate(candidate).catch(() => {});
-          }
-        });
       }, () => {});
     } catch (err) {
       console.warn("Peer connection setup notice:", err);
@@ -497,10 +512,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }));
       };
 
-      const calleeCandidates = collection(db, 'calls', session.id, 'calleeCandidates');
+      // Stream callee candidates via dual-channel RTDB + Supabase (0 Firestore writes)
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          addDoc(calleeCandidates, event.candidate.toJSON()).catch(() => {});
+          RealtimeCoordinator.sendCallSignal(session.id, {
+            type: 'candidate',
+            role: 'callee',
+            candidate: event.candidate.toJSON()
+          }).catch(() => {});
         }
       };
 
@@ -511,20 +530,33 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
-        await updateDoc(sessionRef, {
+        // Broadcast answer via dual-channel WebSockets immediately
+        RealtimeCoordinator.sendCallSignal(session.id, {
+          type: 'answer',
+          answer: { type: answer.type, sdp: answer.sdp }
+        }).catch(() => {});
+
+        // Save to Firestore in background
+        updateDoc(sessionRef, {
           answer: { type: answer.type, sdp: answer.sdp },
         }).catch(() => {});
       }
 
-      const callerCandidates = collection(db, 'calls', session.id, 'callerCandidates');
-      onSnapshot(callerCandidates, (snapshot) => {
-        snapshot.docChanges().forEach(async (change) => {
-          if (change.type === 'added') {
-            const candidate = new RTCIceCandidate(change.doc.data());
-            await pc.addIceCandidate(candidate).catch(() => {});
-          }
-        });
-      }, () => {});
+      // Dual-channel listener for caller candidates and offers
+      RealtimeCoordinator.subscribeToCallSignals(session.id, async (signal) => {
+        if (signal.type === 'offer' && !pc.currentRemoteDescription) {
+          await pc.setRemoteDescription(new RTCSessionDescription(signal.offer)).catch(() => {});
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          RealtimeCoordinator.sendCallSignal(session.id, {
+            type: 'answer',
+            answer: { type: answer.type, sdp: answer.sdp }
+          }).catch(() => {});
+        } else if (signal.type === 'candidate' && signal.role === 'caller') {
+          const candidate = new RTCIceCandidate(signal.candidate);
+          await pc.addIceCandidate(candidate).catch(() => {});
+        }
+      });
     } catch (err: any) {
       console.error("Accept call error:", err);
       cleanupCallState();
