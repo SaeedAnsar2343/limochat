@@ -264,11 +264,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           prev.forEach((c) => map.set(c.id, c));
           supaChats.forEach((sc) => {
             const existing = map.get(sc.id);
-            if (!existing || (sc.updatedAt || 0) >= (existing.updatedAt || 0)) {
+            const newTime = sc.lastMessage?.timestamp || sc.updatedAt || 0;
+            const existingTime = existing?.lastMessage?.timestamp || existing?.updatedAt || 0;
+            if (!existing || newTime >= existingTime) {
               map.set(sc.id, sc);
             }
           });
-          const merged = Array.from(map.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+          const merged = Array.from(map.values()).sort((a, b) => {
+            const timeA = a.lastMessage?.timestamp || a.updatedAt || 0;
+            const timeB = b.lastMessage?.timestamp || b.updatedAt || 0;
+            return timeB - timeA;
+          });
           try {
             localStorage.setItem('limochat_cached_chats', JSON.stringify(merged));
           } catch {}
@@ -276,6 +282,45 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
     }).catch(() => {});
+
+    // 3. Realtime subscription to chat list updates for current user
+    const unsubUserChats = RealtimeCoordinator.subscribeToUserChats(currentUser.uid, (update) => {
+      setChats((prev) => {
+        const found = prev.find((c) => c.id === update.chatId);
+        if (found) {
+          const updatedChat: Chat = {
+            ...found,
+            updatedAt: update.updatedAt,
+            lastMessage: update.lastMessage,
+            participants: update.participants || found.participants,
+          };
+          const others = prev.filter((c) => c.id !== update.chatId);
+          const newList = [updatedChat, ...others];
+          try {
+            localStorage.setItem('limochat_cached_chats', JSON.stringify(newList));
+          } catch {}
+          return newList;
+        } else {
+          RealtimeCoordinator.fetchUserChats(currentUser.uid).then((fresh) => {
+            if (fresh.length > 0) {
+              setChats(fresh);
+              try {
+                localStorage.setItem('limochat_cached_chats', JSON.stringify(fresh));
+              } catch {}
+            }
+          }).catch(() => {});
+          return prev;
+        }
+      });
+
+      if (activeChat?.id === update.chatId) {
+        setActiveChat((prev) => prev ? {
+          ...prev,
+          updatedAt: update.updatedAt,
+          lastMessage: update.lastMessage,
+        } : null);
+      }
+    });
 
     const chatsRef = collection(db, 'chats');
     // Using single-field query to guarantee 0 composite index errors in Firestore
@@ -295,11 +340,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         prev.forEach(c => map.set(c.id, c));
         chatList.forEach(c => {
           const existing = map.get(c.id);
-          if (!existing || (c.updatedAt || 0) >= (existing.updatedAt || 0)) {
+          const newTime = c.lastMessage?.timestamp || c.updatedAt || 0;
+          const existingTime = existing?.lastMessage?.timestamp || existing?.updatedAt || 0;
+          // Only overwrite if the Firestore document genuinely has a newer lastMessage/timestamp
+          if (!existing || newTime >= existingTime) {
             map.set(c.id, c);
           }
         });
-        const combined = Array.from(map.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        const combined = Array.from(map.values()).sort((a, b) => {
+          const timeA = a.lastMessage?.timestamp || a.updatedAt || 0;
+          const timeB = b.lastMessage?.timestamp || b.updatedAt || 0;
+          return timeB - timeA;
+        });
         try {
           localStorage.setItem('limochat_cached_chats', JSON.stringify(combined));
         } catch {}
@@ -308,7 +360,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (activeChat) {
         const updated = chatList.find(c => c.id === activeChat.id);
-        if (updated) setActiveChat(updated);
+        if (updated) {
+          const updatedTime = updated.lastMessage?.timestamp || updated.updatedAt || 0;
+          const activeTime = activeChat.lastMessage?.timestamp || activeChat.updatedAt || 0;
+          if (updatedTime >= activeTime) {
+            setActiveChat(updated);
+          }
+        }
       }
 
       // Background notification for inactive chats
@@ -334,7 +392,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn("Chats snapshot warning (Supabase active):", err);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      unsubUserChats();
+    };
   }, [currentUser?.uid]);
 
   // Load communities for current user
@@ -391,6 +452,39 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try {
             localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(combined));
           } catch {}
+
+          // Synchronize activeChat's lastMessage to the latest actual message if newer
+          if (combined.length > 0) {
+            const latest = combined[combined.length - 1];
+            setChats((prev) => {
+              const updated = prev.map((c) => {
+                if (c.id === activeChat.id) {
+                  const currentLastTime = c.lastMessage?.timestamp || 0;
+                  if ((latest.timestamp || 0) >= currentLastTime) {
+                    return {
+                      ...c,
+                      updatedAt: latest.timestamp,
+                      lastMessage: {
+                        text: latest.text || (latest.type === 'image' ? '📷 Photo' : latest.type === 'voice' ? '🎤 Voice message' : latest.type === 'file' ? '📎 Attachment' : latest.type === 'call_log' ? (latest.text || '📞 Call') : 'Message'),
+                        senderId: latest.senderId,
+                        timestamp: latest.timestamp,
+                        type: latest.type,
+                        status: latest.status || 'delivered',
+                        callType: latest.callType,
+                        callStatus: latest.callStatus,
+                      },
+                    };
+                  }
+                }
+                return c;
+              });
+              try {
+                localStorage.setItem('limochat_cached_chats', JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
+          }
+
           return combined;
         });
       }
@@ -420,6 +514,28 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try {
             localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(updated));
           } catch {}
+
+          const lastMsgObj = {
+            text: liveMsg.text || (liveMsg.type === 'image' ? '📷 Photo' : liveMsg.type === 'voice' ? '🎤 Voice message' : liveMsg.type === 'file' ? '📎 Attachment' : liveMsg.type === 'call_log' ? (liveMsg.text || '📞 Call') : 'Message'),
+            senderId: liveMsg.senderId,
+            timestamp: liveMsg.timestamp || Date.now(),
+            type: liveMsg.type,
+            status: liveMsg.status || 'delivered',
+            callType: liveMsg.callType,
+            callStatus: liveMsg.callStatus,
+          };
+          setChats(prev => {
+            const updatedChats = prev.map(c => c.id === activeChat.id ? {
+              ...c,
+              updatedAt: liveMsg.timestamp || Date.now(),
+              lastMessage: lastMsgObj,
+            } : c);
+            try {
+              localStorage.setItem('limochat_cached_chats', JSON.stringify(updatedChats));
+            } catch {}
+            return updatedChats;
+          });
+
           return updated;
         });
 
@@ -491,6 +607,39 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try {
             localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(combined));
           } catch {}
+
+          // Synchronize activeChat's lastMessage to the latest actual message if newer
+          if (combined.length > 0) {
+            const latest = combined[combined.length - 1];
+            setChats((prev) => {
+              const updated = prev.map((c) => {
+                if (c.id === activeChat.id) {
+                  const currentLastTime = c.lastMessage?.timestamp || 0;
+                  if ((latest.timestamp || 0) >= currentLastTime) {
+                    return {
+                      ...c,
+                      updatedAt: latest.timestamp,
+                      lastMessage: {
+                        text: latest.text || (latest.type === 'image' ? '📷 Photo' : latest.type === 'voice' ? '🎤 Voice message' : latest.type === 'file' ? '📎 Attachment' : latest.type === 'call_log' ? (latest.text || '📞 Call') : 'Message'),
+                        senderId: latest.senderId,
+                        timestamp: latest.timestamp,
+                        type: latest.type,
+                        status: latest.status || 'delivered',
+                        callType: latest.callType,
+                        callStatus: latest.callStatus,
+                      },
+                    };
+                  }
+                }
+                return c;
+              });
+              try {
+                localStorage.setItem('limochat_cached_chats', JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
+          }
+
           return combined;
         });
       }
@@ -661,7 +810,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setReplyingTo(null);
 
     // 1. Primary High-Availability: Save to Supabase PostgreSQL (UNLIMITED writes, zero quota limits, persists on refresh)
-    const savedToSupabase = await RealtimeCoordinator.persistAndBroadcastMessage(activeChat.id, newMsg);
+    const savedToSupabase = await RealtimeCoordinator.persistAndBroadcastMessage(
+      activeChat.id,
+      newMsg,
+      {
+        participants: activeChat.participants,
+        name: activeChat.name,
+        avatar: activeChat.avatar,
+        type: activeChat.type,
+      }
+    );
 
     if (savedToSupabase) {
       // Confirm delivered in local state immediately
@@ -983,6 +1141,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Persist and broadcast via Supabase
     RealtimeCoordinator.reactToMessage(activeChat.id, messageId, updatedReactions).catch(() => {});
+
+    // Trigger push / local notification on Android and browser if reacting to someone else's message
+    if (targetMsg.senderId !== currentUser.uid && emoji) {
+      NativeNotificationService.notifyReaction({
+        userName: currentUser.displayName || 'A contact',
+        emoji,
+        messageSnippet: targetMsg.text || 'Message',
+        chatId: activeChat.id,
+      });
+    }
 
     try {
       const msgRef = doc(db, 'chats', activeChat.id, 'messages', messageId);

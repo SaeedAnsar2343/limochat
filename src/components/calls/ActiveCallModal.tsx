@@ -7,15 +7,15 @@ import {
   VideoOff, 
   Monitor, 
   Users, 
-  ShieldCheck, 
-  Maximize2,
-  Minimize2,
-  Volume2,
-  VolumeX,
-  Grid,
-  UserPlus,
-  Wifi,
-  X
+  Lock, 
+  ChevronDown,
+  Volume2, 
+  VolumeX, 
+  Grid, 
+  RotateCcw,
+  Wifi, 
+  X,
+  UserPlus
 } from 'lucide-react';
 import { useCall } from '../../context/CallContext';
 import { useAuth } from '../../context/AuthContext';
@@ -47,11 +47,11 @@ export const ActiveCallModal: React.FC = () => {
   const { currentUser } = useAuth();
   const { chats } = useChat();
   const [duration, setDuration] = useState<number>(0);
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [isMinimized, setIsMinimized] = useState<boolean>(false);
   const [showKeypad, setShowKeypad] = useState(false);
-  const [showAddParticipant, setShowAddParticipant] = useState(false);
   const [keypadInput, setKeypadInput] = useState('');
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
+  const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRefs = useRef<{ [uid: string]: HTMLVideoElement | null }>({});
@@ -108,130 +108,165 @@ export const ActiveCallModal: React.FC = () => {
       const el = remoteVideoRefs.current[uid];
       if (el && stream) {
         el.srcObject = stream;
-        // Apply speaker toggle volume on remote elements
         el.volume = isSpeakerOn ? 1.0 : 0.4;
       }
     });
   }, [remoteStreams, isSpeakerOn]);
 
+  // Camera flip for mobile
+  const flipCamera = async () => {
+    if (!localStream) return;
+    try {
+      const nextFacing = cameraFacing === 'user' ? 'environment' : 'user';
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: nextFacing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      const oldVideoTrack = localStream.getVideoTracks()[0];
+
+      if (oldVideoTrack) {
+        localStream.removeTrack(oldVideoTrack);
+        oldVideoTrack.stop();
+      }
+      localStream.addTrack(newVideoTrack);
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStream;
+      }
+      setCameraFacing(nextFacing);
+    } catch (e) {
+      console.warn('Camera flip error:', e);
+    }
+  };
+
   if (!activeSession) return null;
 
   const isVideo = activeSession.callType === 'video';
   const remoteUids = Object.keys(remoteStreams);
+  const displayName = activeSession.isGroup
+    ? (activeSession.groupName || 'Group Call')
+    : (activeSession.callerId === currentUser?.uid
+        ? (otherUser?.displayName || 'Contact')
+        : activeSession.callerName);
+  const displayPhoto = activeSession.callerId === currentUser?.uid
+    ? (otherUser?.photoURL || activeSession.callerPhoto)
+    : activeSession.callerPhoto;
 
   const handleKeyPress = (k: string) => {
     setKeypadInput((prev) => prev + k);
   };
 
+  // Minimized Floating Pill Mode
+  if (isMinimized) {
+    return (
+      <div 
+        onClick={() => setIsMinimized(false)}
+        className="fixed bottom-6 right-6 z-50 bg-[#1f2c34] text-white px-4 py-3 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3 cursor-pointer animate-fade-in hover:bg-[#2a3942] transition"
+      >
+        <div className="relative">
+          <Avatar src={displayPhoto} name={displayName} size="sm" />
+          <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-[#00a884]' : 'bg-amber-400'} ring-2 ring-[#1f2c34]`} />
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xs font-semibold max-w-[120px] truncate">{displayName}</span>
+          <span className="text-[11px] text-[#00a884] font-mono">
+            {isConnected ? formatDuration(duration) : callStateLabel}
+          </span>
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            endCall();
+          }}
+          className="p-2 bg-[#ea0038] hover:bg-[#c90030] text-white rounded-full ml-1"
+          title="End Call"
+        >
+          <PhoneOff className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={`fixed z-50 transition-all ${
-        isFullscreen
-          ? 'inset-0 bg-[#0b141a]'
-          : 'inset-3 sm:inset-6 md:inset-10 lg:inset-14 bg-[#111b21]/95 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl overflow-hidden'
-      } flex flex-col`}
-    >
-      {/* Call Header */}
-      <div className="pt-safe mobile-header-safe min-h-16 px-6 bg-[#202c33]/80 backdrop-blur-xl border-b border-white/10 flex items-center justify-between text-white z-20">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-[#00a884]/20 rounded-xl text-[#00a884]">
-            {activeSession.isGroup ? (
-              <Users className="w-5 h-5" />
-            ) : isVideo ? (
-              <Video className="w-5 h-5" />
-            ) : (
-              <ShieldCheck className="w-5 h-5" />
-            )}
-          </div>
-          <div>
-            <h3 className="font-bold text-sm text-white">
-              {activeSession.isGroup
-                ? activeSession.groupName || 'Group Call'
-                : activeSession.callerId === currentUser?.uid
-                ? (otherUser?.displayName || 'Outgoing Call')
-                : activeSession.callerName}
-            </h3>
-            <div className="text-xs text-[#00a884] font-mono flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-[#00a884]' : 'bg-amber-400'} animate-pulse`}></span>
-              <span>{isConnected ? formatDuration(duration) : callStateLabel}</span>
-              <span className="text-[#8696a0] flex items-center gap-1">
-                <Wifi className="w-3 h-3 text-[#00a884]" />
-                <span>HD Audio • E2EE</span>
-              </span>
-            </div>
-          </div>
+    <div className="fixed inset-0 z-50 bg-[#0b141a] flex flex-col justify-between overflow-hidden select-none animate-fade-in">
+      {/* Background ambient gradient glow for WhatsApp feel */}
+      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#122822]/40 via-[#0b141a] to-[#0b141a]" />
+
+      {/* Top Header Bar */}
+      <div className="relative z-20 pt-safe px-4 sm:px-6 py-3 flex items-center justify-between text-[#8696a0]">
+        <button
+          onClick={() => setIsMinimized(true)}
+          className="p-2.5 rounded-full hover:bg-white/10 text-white/80 hover:text-white transition cursor-pointer"
+          title="Minimize Call"
+        >
+          <ChevronDown className="w-6 h-6" />
+        </button>
+
+        {/* E2EE Lock Banner */}
+        <div className="flex items-center gap-1.5 text-xs text-[#8696a0] font-medium bg-black/30 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/5">
+          <Lock className="w-3 h-3 text-[#00a884]" />
+          <span>End-to-end encrypted</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Speaker Mode Badge */}
-          <div
-            className={`px-2.5 py-1 rounded-full text-[10px] font-mono flex items-center gap-1 border ${
-              isSpeakerOn
-                ? 'bg-[#00a884]/20 text-[#00a884] border-[#00a884]/30'
-                : 'bg-black/30 text-[#8696a0] border-white/10'
-            }`}
-          >
-            {isSpeakerOn ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
-            <span>{isSpeakerOn ? 'SPEAKER ON' : 'EARPIECE'}</span>
+        {/* Quality indicator / Speaker state */}
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 text-[11px] text-[#00a884] font-mono bg-[#00a884]/10 px-2.5 py-1 rounded-full border border-[#00a884]/20">
+            <Wifi className="w-3 h-3" />
+            <span>HD</span>
           </div>
-
-          <button
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className="p-2 rounded-xl text-[#8696a0] hover:text-white hover:bg-white/10 transition cursor-pointer"
-          >
-            {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
-          </button>
         </div>
       </div>
 
-      {/* Main Video / Participant Stage */}
-      <div className="flex-1 relative bg-[#0b141a]/95 flex items-center justify-center p-4 overflow-hidden">
+      {/* Center Stage: Audio vs Video Layout */}
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-4">
         {isVideo ? (
-          // Video Call Layout
+          /* Video Call Stage */
           <div className="w-full h-full relative flex items-center justify-center">
-            {/* Remote Streams Grid */}
             {remoteUids.length > 0 ? (
-              <div className="w-full h-full grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="absolute inset-0 w-full h-full">
                 {remoteUids.map((uid) => (
-                  <div
+                  <video
                     key={uid}
-                    className="relative w-full h-full bg-[#182229] rounded-2xl overflow-hidden flex items-center justify-center border border-white/10 shadow-lg"
-                  >
-                    <video
-                      ref={(el) => {
-                        remoteVideoRefs.current[uid] = el;
-                        if (el && remoteStreams[uid]) el.srcObject = remoteStreams[uid];
-                      }}
-                      autoPlay
-                      playsInline
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-lg text-xs text-white">
-                      Remote Participant
-                    </div>
-                  </div>
+                    ref={(el) => {
+                      remoteVideoRefs.current[uid] = el;
+                      if (el && remoteStreams[uid]) el.srcObject = remoteStreams[uid];
+                    }}
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
                 ))}
+                {/* Remote Participant overlay */}
+                <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full text-xs text-white">
+                  {displayName}
+                </div>
               </div>
             ) : (
-              // Waiting for other party to join
+              /* Waiting for remote video */
               <div className="flex flex-col items-center text-center space-y-4">
-                <Avatar
-                  src={otherUser?.photoURL || activeSession.callerPhoto}
-                  name={otherUser?.displayName || activeSession.callerName}
-                  size="xl"
-                  className="border-4 border-[#00a884] shadow-2xl animate-pulse"
-                />
+                <div className="relative">
+                  <span className="absolute -inset-4 rounded-full bg-[#00a884]/20 animate-pulse-ring" />
+                  <Avatar
+                    src={displayPhoto}
+                    name={displayName}
+                    size="xl"
+                    className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-[#00a884] shadow-2xl relative z-10"
+                  />
+                </div>
                 <div>
-                  <h4 className="text-xl font-bold text-white mb-1">
-                    {callStateLabel}
-                  </h4>
-                  <p className="text-xs text-[#8696a0]">{callSubtitle}</p>
+                  <h3 className="text-2xl sm:text-3xl font-semibold text-white tracking-wide">
+                    {displayName}
+                  </h3>
+                  <p className="text-sm text-[#00a884] font-mono mt-1">
+                    {isConnected ? formatDuration(duration) : callStateLabel}
+                  </p>
+                  <p className="text-xs text-[#8696a0] mt-0.5">{callSubtitle}</p>
                 </div>
               </div>
             )}
 
-            {/* Local Video Picture-in-Picture */}
-            <div className="absolute bottom-4 right-4 w-36 h-48 sm:w-48 sm:h-64 bg-[#182229] rounded-2xl overflow-hidden border-2 border-[#00a884] shadow-2xl z-20">
+            {/* Floating Local Video PiP Preview */}
+            <div className="absolute top-4 right-4 w-28 h-40 sm:w-36 sm:h-52 bg-[#182229] rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl z-20 group">
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -245,41 +280,56 @@ export const ActiveCallModal: React.FC = () => {
                   <span>Camera Off</span>
                 </div>
               )}
+              {/* Flip camera overlay button on PiP */}
+              <button
+                onClick={flipCamera}
+                className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition cursor-pointer"
+                title="Flip Camera"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
               <div className="absolute bottom-2 left-2 bg-black/60 px-2 py-0.5 rounded text-[10px] text-white">
-                You {isAudioMuted && '(Muted)'}
+                You {isAudioMuted && '• Muted'}
               </div>
             </div>
           </div>
         ) : (
-          // Audio Call Layout
-          <div className="flex flex-col items-center justify-center space-y-6 text-center">
+          /* Audio Call Stage (Authentic WhatsApp Audio Layout) */
+          <div className="flex flex-col items-center justify-center text-center space-y-6">
             <div className="relative">
-              <span className={`absolute -inset-4 rounded-full ${isConnected ? 'bg-[#00a884]/20' : 'bg-amber-400/20'} animate-pulse-ring`}></span>
+              {/* Pulsing Voice Activity Rings */}
+              <span className={`absolute -inset-6 rounded-full ${isConnected ? 'bg-[#00a884]/20' : 'bg-amber-400/20'} animate-pulse-ring`} />
+              <span className={`absolute -inset-12 rounded-full ${isConnected ? 'bg-[#00a884]/10' : 'bg-amber-400/10'} animate-pulse`} />
+              
               <Avatar
-                src={otherUser?.photoURL || activeSession.callerPhoto}
-                name={otherUser?.displayName || activeSession.callerName}
+                src={displayPhoto}
+                name={displayName}
                 size="xl"
-                className="relative z-10 border-4 border-[#00a884] shadow-2xl"
+                className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-[#00a884]/60 shadow-2xl relative z-10"
               />
             </div>
-            <div>
-              <h3 className="text-2xl font-bold text-white mb-1">
-                {activeSession.isGroup ? activeSession.groupName : (otherUser?.displayName || activeSession.callerName)}
-              </h3>
-              <p className="text-base text-[#00a884] font-semibold font-mono">
-                {isConnected ? formatDuration(duration) : callStateLabel}
-              </p>
-              <p className="text-xs text-[#8696a0] mt-1">{callSubtitle}</p>
+
+            <div className="space-y-1">
+              <h2 className="text-2xl sm:text-3xl font-semibold text-white tracking-wide">
+                {displayName}
+              </h2>
+              <div className="flex items-center justify-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-[#00a884]' : 'bg-amber-400'} animate-pulse`} />
+                <span className="text-sm sm:text-base text-[#00a884] font-mono font-medium">
+                  {isConnected ? formatDuration(duration) : callStateLabel}
+                </span>
+              </div>
+              <p className="text-xs text-[#8696a0]">{callSubtitle}</p>
             </div>
           </div>
         )}
 
-        {/* Dialpad Overlay */}
+        {/* Dialpad Overlay Modal */}
         {showKeypad && (
           <div className="absolute inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center z-30 p-4 animate-scale-in">
-            <div className="bg-[#182229] p-6 rounded-3xl border border-white/10 w-full max-w-xs text-center space-y-4">
+            <div className="bg-[#1f2c34] p-6 rounded-3xl border border-white/10 w-full max-w-xs text-center space-y-4 shadow-2xl">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-white">Dialpad / Touch Tone</span>
+                <span className="text-xs font-semibold text-white">Touch-Tone Keypad</span>
                 <button
                   onClick={() => setShowKeypad(false)}
                   className="p-1 rounded-full text-[#8696a0] hover:text-white"
@@ -297,7 +347,7 @@ export const ActiveCallModal: React.FC = () => {
                   <button
                     key={k}
                     onClick={() => handleKeyPress(k)}
-                    className="p-3 bg-[#202c33] hover:bg-[#2a3942] active:bg-[#00a884] text-white rounded-xl text-base font-semibold font-mono transition"
+                    className="p-3 bg-[#2a3942] hover:bg-[#32444f] active:bg-[#00a884] text-white rounded-2xl text-base font-semibold font-mono transition"
                   >
                     {k}
                   </button>
@@ -308,81 +358,81 @@ export const ActiveCallModal: React.FC = () => {
         )}
       </div>
 
-      {/* Call Bottom Controls Toolbar (Apple-style Glassmorphism) */}
-      <div className="min-h-20 bg-[#202c33]/85 backdrop-blur-xl border-t border-white/10 px-6 py-2 pb-safe flex items-center justify-center gap-3 sm:gap-4 z-20">
-        {/* Toggle Audio / Mic */}
-        <button
-          onClick={toggleAudio}
-          className={`p-3.5 rounded-2xl transition shadow-lg cursor-pointer ${
-            isAudioMuted
-              ? 'bg-red-600/25 text-red-400 hover:bg-red-600/35 border border-red-500/30'
-              : 'bg-[#2a3942] text-white hover:bg-[#32444f]'
-          }`}
-          title={isAudioMuted ? 'Unmute microphone' : 'Mute microphone'}
-        >
-          {isAudioMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-        </button>
-
-        {/* Speakerphone Toggle (User Request) */}
-        <button
-          onClick={toggleSpeaker}
-          className={`p-3.5 rounded-2xl transition shadow-lg cursor-pointer ${
-            isSpeakerOn
-              ? 'bg-[#00a884] text-white'
-              : 'bg-[#2a3942] text-[#8696a0] hover:text-white hover:bg-[#32444f]'
-          }`}
-          title={isSpeakerOn ? 'Speakerphone Enabled' : 'Switch to Speaker'}
-        >
-          {isSpeakerOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
-        </button>
-
-        {/* Toggle Video */}
-        {isVideo && (
+      {/* WhatsApp Bottom Control Bar: Iconic Floating Pill */}
+      <div className="relative z-20 pb-safe px-4 py-6">
+        <div className="bg-[#1f2c34]/95 backdrop-blur-2xl rounded-full px-5 sm:px-8 py-3.5 shadow-2xl border border-white/10 flex items-center justify-between gap-3 sm:gap-6 max-w-md mx-auto">
+          {/* Mute Microphone */}
           <button
-            onClick={toggleVideo}
-            className={`p-3.5 rounded-2xl transition shadow-lg cursor-pointer ${
-              isVideoMuted
-                ? 'bg-red-600/25 text-red-400 hover:bg-red-600/35 border border-red-500/30'
+            onClick={toggleAudio}
+            className={`p-3.5 rounded-full transition cursor-pointer ${
+              isAudioMuted
+                ? 'bg-white text-black'
                 : 'bg-[#2a3942] text-white hover:bg-[#32444f]'
             }`}
-            title={isVideoMuted ? 'Turn on camera' : 'Turn off camera'}
+            title={isAudioMuted ? 'Unmute microphone' : 'Mute microphone'}
           >
-            {isVideoMuted ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+            {isAudioMuted ? <MicOff className="w-5 h-5 text-red-600" /> : <Mic className="w-5 h-5" />}
           </button>
-        )}
 
-        {/* Toggle Keypad */}
-        <button
-          onClick={() => setShowKeypad(!showKeypad)}
-          className={`p-3.5 rounded-2xl transition shadow-lg cursor-pointer ${
-            showKeypad ? 'bg-[#00a884] text-white' : 'bg-[#2a3942] text-white hover:bg-[#32444f]'
-          }`}
-          title="Keypad"
-        >
-          <Grid className="w-5 h-5" />
-        </button>
+          {/* Speakerphone Toggle */}
+          <button
+            onClick={toggleSpeaker}
+            className={`p-3.5 rounded-full transition cursor-pointer ${
+              isSpeakerOn
+                ? 'bg-white text-black'
+                : 'bg-[#2a3942] text-white hover:bg-[#32444f]'
+            }`}
+            title={isSpeakerOn ? 'Speaker On' : 'Switch to Speaker'}
+          >
+            {isSpeakerOn ? <Volume2 className="w-5 h-5 text-[#00a884]" /> : <VolumeX className="w-5 h-5" />}
+          </button>
 
-        {/* Toggle Screen Sharing */}
-        <button
-          onClick={toggleScreenShare}
-          className={`p-3.5 rounded-2xl transition shadow-lg cursor-pointer ${
-            isScreenSharing
-              ? 'bg-[#00a884] text-white'
-              : 'bg-[#2a3942] text-white hover:bg-[#32444f]'
-          }`}
-          title="Share Screen"
-        >
-          <Monitor className="w-5 h-5" />
-        </button>
+          {/* Toggle Video */}
+          <button
+            onClick={toggleVideo}
+            className={`p-3.5 rounded-full transition cursor-pointer ${
+              isVideoMuted
+                ? 'bg-[#2a3942] text-[#8696a0] hover:text-white'
+                : isVideo
+                ? 'bg-white text-black'
+                : 'bg-[#2a3942] text-white hover:bg-[#32444f]'
+            }`}
+            title={isVideo ? 'Camera On' : 'Switch to Video'}
+          >
+            {isVideoMuted ? <VideoOff className="w-5 h-5 text-red-400" /> : <Video className="w-5 h-5" />}
+          </button>
 
-        {/* End Call Button */}
-        <button
-          onClick={endCall}
-          className="p-3.5 rounded-2xl bg-red-600 hover:bg-red-700 text-white transition shadow-lg shadow-red-600/40 ml-2 cursor-pointer"
-          title="End Call"
-        >
-          <PhoneOff className="w-6 h-6" />
-        </button>
+          {/* Toggle Keypad */}
+          <button
+            onClick={() => setShowKeypad(!showKeypad)}
+            className={`p-3.5 rounded-full transition cursor-pointer ${
+              showKeypad ? 'bg-white text-black' : 'bg-[#2a3942] text-white hover:bg-[#32444f]'
+            }`}
+            title="Dialpad"
+          >
+            <Grid className="w-5 h-5" />
+          </button>
+
+          {/* Screen Share (Desktop) */}
+          <button
+            onClick={toggleScreenShare}
+            className={`hidden sm:flex p-3.5 rounded-full transition cursor-pointer ${
+              isScreenSharing ? 'bg-[#00a884] text-white' : 'bg-[#2a3942] text-white hover:bg-[#32444f]'
+            }`}
+            title="Share Screen"
+          >
+            <Monitor className="w-5 h-5" />
+          </button>
+
+          {/* Large Red WhatsApp Hang Up Button */}
+          <button
+            onClick={endCall}
+            className="w-14 h-14 rounded-full bg-[#ea0038] hover:bg-[#c90030] text-white flex items-center justify-center shadow-lg shadow-red-600/40 active:scale-95 transition cursor-pointer flex-shrink-0"
+            title="End Call"
+          >
+            <PhoneOff className="w-6 h-6" />
+          </button>
+        </div>
       </div>
     </div>
   );

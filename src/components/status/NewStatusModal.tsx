@@ -30,6 +30,7 @@ import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { StatusUpdate, StatusPrivacyMode, UserProfile } from '../../types';
 import { Avatar } from '../common/Avatar';
+import { RealtimeCoordinator } from '../../utils/realtimeCoordinator';
 import { 
   getPolicyRules, 
   checkContentViolation, 
@@ -503,6 +504,9 @@ export const NewStatusModal: React.FC<NewStatusModalProps> = ({
             ...statusData,
           };
 
+          // Save to Supabase PostgreSQL (Unlimited writes) & Broadcast live
+          await RealtimeCoordinator.createStatus(createdItem);
+
           if (onStatusCreated) {
             onStatusCreated(createdItem);
           }
@@ -540,6 +544,9 @@ export const NewStatusModal: React.FC<NewStatusModalProps> = ({
           id: docRef ? docRef.id : `status_${now}`,
           ...statusData,
         };
+
+        // Save to Supabase PostgreSQL (Unlimited writes) & Broadcast live
+        await RealtimeCoordinator.createStatus(createdItem);
 
         if (onStatusCreated) {
           onStatusCreated(createdItem);

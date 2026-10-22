@@ -1,5 +1,5 @@
 import React from 'react';
-import { Phone, PhoneOff, Video, ShieldCheck } from 'lucide-react';
+import { Phone, PhoneOff, Video, Lock } from 'lucide-react';
 import { useCall } from '../../context/CallContext';
 import { Avatar } from '../common/Avatar';
 
@@ -11,60 +11,76 @@ export const IncomingCallModal: React.FC = () => {
   const isVideo = incomingSession.callType === 'video';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 pt-safe pb-safe animate-fade-in select-none">
-      <div className="bg-[#202c33] text-[#e9edef] rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-[#2e3b44] p-7 flex flex-col items-center text-center">
-        {/* Caller Avatar with Animated Wave Ring */}
-        <div className="relative mb-6">
-          <span className="absolute -inset-3 rounded-full bg-[#00a884]/30 animate-pulse-ring"></span>
+    <div className="fixed inset-0 z-50 flex flex-col justify-between bg-[#0b141a]/95 backdrop-blur-2xl select-none animate-fade-in p-6 pt-safe pb-safe">
+      {/* Background Ambient Glow */}
+      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#00a884]/15 via-transparent to-black/40" />
+
+      {/* Top Banner */}
+      <div className="relative z-10 flex flex-col items-center text-center space-y-1 pt-6">
+        <div className="flex items-center gap-1.5 text-xs text-[#8696a0] font-medium bg-black/40 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/5">
+          <Lock className="w-3 h-3 text-[#00a884]" />
+          <span>WhatsApp End-to-end Encrypted</span>
+        </div>
+        <p className="text-xs text-[#00a884] font-medium mt-1">
+          Incoming LimoChat {isVideo ? 'Video' : 'Audio'} Call...
+        </p>
+      </div>
+
+      {/* Center Caller Profile */}
+      <div className="relative z-10 flex flex-col items-center text-center space-y-6 my-auto">
+        <div className="relative">
+          {/* Animated WhatsApp Concentric Ripple Rings */}
+          <span className="absolute -inset-6 rounded-full bg-[#00a884]/25 animate-pulse-ring" />
+          <span className="absolute -inset-12 rounded-full bg-[#00a884]/15 animate-pulse" />
+
           <Avatar
             src={incomingSession.callerPhoto}
             name={incomingSession.callerName}
             size="xl"
-            className="relative z-10 border-4 border-[#00a884] shadow-2xl"
+            className="w-36 h-36 sm:w-44 sm:h-44 rounded-full border-4 border-[#00a884] shadow-2xl relative z-10"
           />
         </div>
 
-        {/* Caller Info */}
-        <h3 className="text-xl font-bold text-white mb-1">
-          {incomingSession.callerName}
-        </h3>
-        
-        {incomingSession.isGroup && incomingSession.groupName && (
-          <p className="text-xs text-[#53bdeb] font-medium mb-1">
-            Group: {incomingSession.groupName}
-          </p>
-        )}
+        <div className="space-y-1">
+          <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-wide">
+            {incomingSession.callerName}
+          </h2>
+          {incomingSession.isGroup && incomingSession.groupName ? (
+            <p className="text-sm text-[#53bdeb] font-medium">
+              Group: {incomingSession.groupName}
+            </p>
+          ) : (
+            <p className="text-xs text-[#8696a0]">
+              LimoChat High-Definition {isVideo ? 'Video' : 'Voice'} Call
+            </p>
+          )}
+        </div>
+      </div>
 
-        <div className="flex items-center gap-1.5 text-xs text-[#00a884] font-medium mb-8">
-          {isVideo ? <Video className="w-4 h-4" /> : <Phone className="w-4 h-4" />}
-          <span>Incoming LimoChat {isVideo ? 'Video' : 'Audio'} Call...</span>
+      {/* Bottom Accept & Decline Action Controls */}
+      <div className="relative z-10 flex items-center justify-around max-w-xs sm:max-w-sm mx-auto w-full pb-8">
+        {/* Decline Button */}
+        <div className="flex flex-col items-center gap-2">
+          <button
+            onClick={declineCall}
+            className="w-16 h-16 rounded-full bg-[#ea0038] hover:bg-[#c90030] text-white flex items-center justify-center shadow-xl shadow-red-600/40 active:scale-95 transition cursor-pointer"
+            title="Decline"
+          >
+            <PhoneOff className="w-7 h-7" />
+          </button>
+          <span className="text-xs font-medium text-[#8696a0]">Decline</span>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center justify-center gap-10 w-full">
-          {/* Decline Button */}
-          <div className="flex flex-col items-center gap-2">
-            <button
-              onClick={declineCall}
-              className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center shadow-lg shadow-red-600/30 transition transform hover:scale-110 active:scale-95"
-              title="Decline"
-            >
-              <PhoneOff className="w-7 h-7" />
-            </button>
-            <span className="text-xs text-[#8696a0]">Decline</span>
-          </div>
-
-          {/* Accept Button */}
-          <div className="flex flex-col items-center gap-2">
-            <button
-              onClick={acceptCall}
-              className="w-16 h-16 rounded-full bg-[#00a884] hover:bg-[#02906f] text-white flex items-center justify-center shadow-lg shadow-[#00a884]/30 transition transform hover:scale-110 active:scale-95"
-              title="Accept"
-            >
-              {isVideo ? <Video className="w-7 h-7" /> : <Phone className="w-7 h-7" />}
-            </button>
-            <span className="text-xs text-[#8696a0]">Accept</span>
-          </div>
+        {/* Accept Button */}
+        <div className="flex flex-col items-center gap-2">
+          <button
+            onClick={acceptCall}
+            className="w-16 h-16 rounded-full bg-[#00a884] hover:bg-[#02906f] text-white flex items-center justify-center shadow-xl shadow-[#00a884]/40 active:scale-95 transition animate-bounce cursor-pointer"
+            title="Accept"
+          >
+            {isVideo ? <Video className="w-7 h-7" /> : <Phone className="w-7 h-7" />}
+          </button>
+          <span className="text-xs font-medium text-[#00a884]">Accept</span>
         </div>
       </div>
     </div>

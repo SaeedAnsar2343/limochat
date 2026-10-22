@@ -303,6 +303,8 @@ export type StatusUpdate = {
   fontFamily?: string;
   timestamp: number;
   viewedBy?: string[];
+  viewers?: { uid: string; displayName: string; photoURL?: string; timestamp: number }[];
+  reactions?: { emoji: string; userId: string; userName: string; timestamp: number }[];
   privacy?: StatusPrivacyMode;
   privacyUids?: string[];
   taggedContacts?: { uid: string; displayName: string }[];

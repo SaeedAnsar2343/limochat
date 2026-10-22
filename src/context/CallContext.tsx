@@ -145,12 +145,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             callId: foundIncoming.id,
           });
         }
-      } else {
-        if (incomingSessionRef.current) {
-          setIncomingSession(null);
-          soundEngine.stopRingtone();
-          NativeNotificationService.dismissCallNotification();
-        }
       }
     }, (err) => {
       console.warn("Incoming call listener warning (Supabase active):", err);
@@ -271,13 +265,24 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       };
 
-      let otherName = 'Contact';
-      let otherPhoto = '';
-      let otherUid = '';
+      // Resolve participants list safely (handles empty participants arrays on legacy/Supabase chats)
+      let participantsList = chat?.participants && chat.participants.length > 0
+        ? [...chat.participants]
+        : (chat?.id ? chat.id.replace(/^chat_/, '').split('_').filter(Boolean) : []);
+      if (user?.uid && !participantsList.includes(user.uid)) {
+        participantsList.push(user.uid);
+      }
+      if (!participantsList.includes(currentUser.uid)) {
+        participantsList.push(currentUser.uid);
+      }
+
+      let otherName = user?.displayName || chat?.name || 'Contact';
+      let otherPhoto = user?.photoURL || chat?.avatar || '';
+      let otherUid = user?.uid || participantsList.find((p) => p !== currentUser.uid) || '';
 
       if (isGroup && chat) {
         otherName = chat.name || 'Group';
-        chat.participants.forEach((pid) => {
+        participantsList.forEach((pid) => {
           if (pid !== currentUser.uid) {
             targetParticipants[pid] = {
               uid: pid,
@@ -288,27 +293,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             };
           }
         });
-      } else if (user) {
-        otherName = user.displayName;
-        otherPhoto = user.photoURL || '';
-        otherUid = user.uid;
-        targetParticipants[user.uid] = {
-          uid: user.uid,
-          displayName: user.displayName || 'Contact',
-          photoURL: user.photoURL || '',
-          status: 'invited',
-          audioMuted: false,
-          videoMuted: false,
-        };
-      } else if (chat) {
-        otherName = chat.name || 'Contact';
-        otherPhoto = chat.avatar || '';
-        chat.participants.forEach((pid) => {
+      } else {
+        participantsList.forEach((pid) => {
           if (pid !== currentUser.uid) {
-            otherUid = pid;
             targetParticipants[pid] = {
               uid: pid,
-              displayName: chat.name || 'Contact',
+              displayName: pid === otherUid ? otherName : 'Contact',
+              photoURL: pid === otherUid ? otherPhoto : '',
               status: 'invited',
               audioMuted: false,
               videoMuted: false,
@@ -378,9 +369,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await RealtimeCoordinator.createCallSession(session);
 
       // 3. Establish WebRTC PeerConnection as caller immediately
-      if (!isGroup && (user || (chat && chat.participants.length === 2))) {
-        const targetUserUid = user ? user.uid : chat!.participants.find((p) => p !== currentUser.uid)!;
-        await setupPeerConnectionAsCaller(session.id, targetUserUid, stream);
+      if (!isGroup && otherUid) {
+        await setupPeerConnectionAsCaller(session.id, otherUid, stream);
       }
 
       // 4. Auto-end call after 45s if no answer
@@ -476,6 +466,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const c = pendingCandidates.shift();
             if (c) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
           }
+          setActiveSession((prev) => (prev ? { ...prev, status: 'accepted', startedAt: prev.startedAt || Date.now() } : null));
         }
       };
 
@@ -520,7 +511,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const stream = await getLocalUserMedia(incomingSession.callType);
       setLocalStream(stream);
 
-      const session = incomingSession;
+      const session: CallSession = {
+        ...incomingSession,
+        status: 'accepted',
+        startedAt: Date.now(),
+      };
       setActiveSession(session);
       setIncomingSession(null);
 
@@ -678,7 +673,35 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     // Persist and broadcast call log in Supabase PostgreSQL
-    RealtimeCoordinator.persistAndBroadcastMessage(chatId, logMessage as any).catch(() => {});
+    const pUids = activeSession?.participantUids || [callerId];
+    RealtimeCoordinator.persistAndBroadcastMessage(
+      chatId,
+      logMessage as any,
+      { participants: pUids }
+    ).catch(() => {});
+
+    try {
+      const cachedChats = localStorage.getItem('limochat_cached_chats');
+      if (cachedChats) {
+        const parsed = JSON.parse(cachedChats);
+        if (Array.isArray(parsed)) {
+          const updated = parsed.map((c: any) => c.id === chatId ? {
+            ...c,
+            updatedAt: now,
+            lastMessage: {
+              text: callLabel,
+              senderId: callerId,
+              timestamp: now,
+              type: 'call_log',
+              status: 'delivered',
+              callType,
+              callStatus: isMissed ? 'missed' : 'ended',
+            }
+          } : c);
+          localStorage.setItem('limochat_cached_chats', JSON.stringify(updated));
+        }
+      }
+    } catch {}
 
     try {
       const messagesRef = collection(db, 'chats', chatId, 'messages');

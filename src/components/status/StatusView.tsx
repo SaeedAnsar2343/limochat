@@ -11,6 +11,7 @@ import { StatusViewerModal } from './StatusViewerModal';
 import { formatTime } from '../../utils/formatters';
 import { StatusListSkeleton } from '../common/SkeletonLoading';
 import { NativeNotificationService } from '../../utils/nativeNotifications';
+import { RealtimeCoordinator } from '../../utils/realtimeCoordinator';
 
 export const StatusView: React.FC = () => {
   const { currentUser } = useAuth();
@@ -28,10 +29,65 @@ export const StatusView: React.FC = () => {
   const [modalType, setModalType] = useState<'text' | 'camera' | 'image' | 'video'>('text');
   const [selectedUserStatuses, setSelectedUserStatuses] = useState<StatusUpdate[] | null>(null);
 
-  // Sync statuses from Firestore
+  // Sync statuses from Supabase PostgreSQL (Unlimited writes) & Firestore
   useEffect(() => {
+    // 1. Fetch statuses from Supabase PostgreSQL
+    RealtimeCoordinator.fetchStatuses().then((supaList) => {
+      if (supaList.length > 0) {
+        setStatuses((prev) => {
+          const map = new Map<string, StatusUpdate>();
+          prev.forEach((s) => map.set(s.id, s));
+          supaList.forEach((s) => map.set(s.id, s));
+          const merged = Array.from(map.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          try {
+            localStorage.setItem('limochat_statuses', JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
+      }
+    }).catch(() => {});
+
+    // 2. Real-time subscription to statuses (Postgres changes & broadcast)
+    const unsubRealtime = RealtimeCoordinator.subscribeToStatuses(
+      (newStatus) => {
+        setStatuses((prev) => {
+          const map = new Map<string, StatusUpdate>();
+          prev.forEach((s) => map.set(s.id, s));
+          map.set(newStatus.id, newStatus);
+          const merged = Array.from(map.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          try {
+            localStorage.setItem('limochat_statuses', JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
+
+        // Push notification for new status from contacts
+        if (currentUser?.uid && newStatus.userId !== currentUser.uid) {
+          const statusNotifKey = `limochat_seen_status_${newStatus.id}`;
+          if (!sessionStorage.getItem(statusNotifKey)) {
+            sessionStorage.setItem(statusNotifKey, '1');
+            NativeNotificationService.notifyStatusUpdate({
+              userName: newStatus.userName || 'Contact',
+              statusSnippet: newStatus.text || 'Shared a new status update',
+              userId: newStatus.userId,
+            });
+          }
+        }
+      },
+      (update) => {
+        setStatuses((prev) => {
+          const updated = prev.map((s) => (s.id === update.statusId ? { ...s, ...update } : s));
+          try {
+            localStorage.setItem('limochat_statuses', JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+      }
+    );
+
+    // 3. Secondary companion Firestore snapshot
     const statusesRef = collection(db, 'statuses');
-    const unsub = onSnapshot(statusesRef, (snapshot) => {
+    const unsubFirestore = onSnapshot(statusesRef, (snapshot) => {
       const list: StatusUpdate[] = [];
       const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
 
@@ -45,36 +101,25 @@ export const StatusView: React.FC = () => {
 
       list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-      // Push notification for new status updates posted by contacts
-      if (currentUser?.uid && list.length > 0) {
-        list.forEach((st) => {
-          if (st.userId !== currentUser.uid && st.timestamp) {
-            const ageMs = Date.now() - st.timestamp;
-            if (ageMs < 30000) {
-              const statusNotifKey = `limochat_seen_status_${st.id}`;
-              if (!sessionStorage.getItem(statusNotifKey)) {
-                sessionStorage.setItem(statusNotifKey, '1');
-                NativeNotificationService.notifyStatusUpdate({
-                  userName: st.userName || 'Contact',
-                  statusSnippet: st.text || 'Shared a new status update',
-                  userId: st.userId,
-                });
-              }
-            }
-          }
-        });
-      }
-
-      setStatuses(list);
-      try {
-        localStorage.setItem('limochat_statuses', JSON.stringify(list));
-      } catch {}
+      setStatuses((prev) => {
+        const map = new Map<string, StatusUpdate>();
+        prev.forEach((s) => map.set(s.id, s));
+        list.forEach((s) => map.set(s.id, s));
+        const merged = Array.from(map.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        try {
+          localStorage.setItem('limochat_statuses', JSON.stringify(merged));
+        } catch {}
+        return merged;
+      });
     }, (err) => {
-      console.warn("Statuses snapshot notice:", err);
+      console.warn("Statuses snapshot notice (Supabase active):", err);
     });
 
-    return () => unsub();
-  }, []);
+    return () => {
+      unsubRealtime();
+      unsubFirestore();
+    };
+  }, [currentUser?.uid]);
 
   if (!currentUser) return null;
 

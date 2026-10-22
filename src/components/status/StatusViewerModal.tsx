@@ -18,6 +18,7 @@ import { useChat } from '../../context/ChatContext';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { NativeNotificationService } from '../../utils/nativeNotifications';
+import { RealtimeCoordinator } from '../../utils/realtimeCoordinator';
 
 interface StatusViewerModalProps {
   isOpen: boolean;
@@ -53,10 +54,17 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
   const currentStatus = statuses[currentIndex];
   const isMyStatus = currentStatus?.userId === currentUser.uid;
 
-  // Mark status as viewed in Firestore
+  // Mark status as viewed in Supabase & Firestore
   useEffect(() => {
     if (!isOpen || !currentStatus || !currentUser) return;
     if (!currentStatus.viewedBy?.includes(currentUser.uid)) {
+      // 1. Supabase view registration
+      RealtimeCoordinator.viewStatus(currentStatus.id, currentUser.uid, {
+        displayName: currentUser.displayName || 'User',
+        photoURL: currentUser.photoURL || '',
+      });
+
+      // 2. Firestore view registration
       try {
         const docRef = doc(db, 'statuses', currentStatus.id);
         updateDoc(docRef, {
@@ -217,18 +225,23 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
   const handleQuickReact = async (emoji: string) => {
     if (isMyStatus || !currentStatus || !currentUser) return;
     try {
-      // 1. Register reaction on status document
+      const reactionPayload = {
+        emoji,
+        userId: currentUser.uid,
+        userName: currentUser.displayName || 'User',
+        timestamp: Date.now(),
+      };
+
+      // 1. Register reaction in Supabase PostgreSQL & broadcast live
+      RealtimeCoordinator.reactToStatus(currentStatus.id, reactionPayload).catch(() => {});
+
+      // 2. Register reaction on Firestore document
       const docRef = doc(db, 'statuses', currentStatus.id);
       await updateDoc(docRef, {
-        reactions: arrayUnion({
-          emoji,
-          userId: currentUser.uid,
-          userName: currentUser.displayName || 'User',
-          timestamp: Date.now(),
-        }),
+        reactions: arrayUnion(reactionPayload),
       }).catch(() => {});
 
-      // 2. Dispatch push notification to status author
+      // 3. Dispatch push notification to status author
       NativeNotificationService.notifyStatusReaction({
         userName: currentUser.displayName || 'A contact',
         emoji,

@@ -1,7 +1,7 @@
 import { rtdb } from '../firebase/config';
 import { ref, set, push, onChildAdded, onValue, remove, off } from 'firebase/database';
 import { supabase } from '../supabase/config';
-import { Message, CallSession, Chat, UserProfile } from '../types';
+import { Message, CallSession, Chat, UserProfile, StatusUpdate } from '../types';
 
 /**
  * Universal Dual-Engine Realtime & Persistence Coordinator
@@ -26,7 +26,16 @@ export class RealtimeCoordinator {
   /**
    * Save message to Supabase PostgreSQL (UNLIMITED writes) & Broadcast live
    */
-  public static async persistAndBroadcastMessage(chatId: string, message: Message): Promise<boolean> {
+  public static async persistAndBroadcastMessage(
+    chatId: string,
+    message: Message,
+    meta?: {
+      participants?: string[];
+      name?: string;
+      avatar?: string;
+      type?: any;
+    }
+  ): Promise<boolean> {
     const row = {
       id: message.id,
       chat_id: chatId,
@@ -52,22 +61,47 @@ export class RealtimeCoordinator {
 
     let saved = false;
 
+    // Resolve participants (never allow empty array for chats)
+    let chatParticipants = meta?.participants && meta.participants.length > 0 ? [...meta.participants] : undefined;
+    if (!chatParticipants || chatParticipants.length === 0) {
+      const parts = chatId.replace(/^chat_/, '').split('_').filter(Boolean);
+      if (parts.length >= 2) {
+        chatParticipants = parts;
+      }
+    }
+
+    const lastMsgObj = {
+      text: message.text || (
+        message.type === 'image' ? '📷 Photo' :
+        message.type === 'voice' ? '🎤 Voice message' :
+        message.type === 'file' ? '📎 Attachment' :
+        message.type === 'call_log' ? (message.text || '📞 Call') :
+        'Message'
+      ),
+      senderId: message.senderId,
+      timestamp: message.timestamp || Date.now(),
+      type: message.type,
+      status: 'delivered',
+      callType: message.callType,
+      callStatus: message.callStatus,
+    };
+
     // 1. Insert into Supabase PostgreSQL (Permanent persistence, zero quota limits)
     try {
-      // First ensure the chat exists / is updated in Supabase chats table
-      await supabase.from('chats').upsert({
+      const chatUpdate: any = {
         id: chatId,
         updated_at: message.timestamp || Date.now(),
-        last_message: {
-          text: message.text || '',
-          senderId: message.senderId,
-          timestamp: message.timestamp || Date.now(),
-          type: message.type,
-          status: 'delivered',
-          callType: message.callType,
-          callStatus: message.callStatus,
-        },
-      });
+        last_message: lastMsgObj,
+      };
+
+      if (chatParticipants && chatParticipants.length > 0) {
+        chatUpdate.participants = chatParticipants;
+      }
+      if (meta?.name) chatUpdate.name = meta.name;
+      if (meta?.avatar) chatUpdate.avatar = meta.avatar;
+      if (meta?.type) chatUpdate.type = meta.type;
+
+      await supabase.from('chats').upsert(chatUpdate);
 
       const { error } = await supabase.from('messages').upsert(row);
       if (!error) {
@@ -91,7 +125,25 @@ export class RealtimeCoordinator {
       console.warn('Supabase broadcast error:', e);
     }
 
-    // 3. Best-effort write to Firebase RTDB if active
+    // 3. Broadcast chat list update to each participant's personal channel
+    try {
+      const targetUids = chatParticipants || [message.senderId];
+      for (const uid of targetUids) {
+        const userChatChannel = supabase.channel(`user_chats:${uid}`);
+        await userChatChannel.send({
+          type: 'broadcast',
+          event: 'chat_updated',
+          payload: {
+            chatId,
+            lastMessage: lastMsgObj,
+            updatedAt: message.timestamp || Date.now(),
+            participants: chatParticipants,
+          },
+        });
+      }
+    } catch {}
+
+    // 4. Best-effort write to Firebase RTDB if active
     try {
       const rtdbMsgRef = ref(rtdb, `live_chats/${chatId}/messages/${message.id}`);
       await set(rtdbMsgRef, { ...message, status: 'delivered' });
@@ -146,10 +198,14 @@ export class RealtimeCoordinator {
    */
   public static async persistChat(chat: Chat): Promise<void> {
     try {
+      let participants = chat.participants || [];
+      if (participants.length === 0 && chat.id) {
+        participants = chat.id.replace(/^chat_/, '').split('_').filter(Boolean);
+      }
       await supabase.from('chats').upsert({
         id: chat.id,
         type: chat.type,
-        participants: chat.participants || [],
+        participants,
         name: chat.name || '',
         avatar: chat.avatar || '',
         last_message: chat.lastMessage || null,
@@ -163,32 +219,62 @@ export class RealtimeCoordinator {
   }
 
   /**
-   * Fetch user's chats from Supabase PostgreSQL
+   * Fetch user's chats from Supabase PostgreSQL (Unlimited quota, persistent)
    */
   public static async fetchUserChats(userUid: string): Promise<Chat[]> {
     try {
+      // Robust query: checks participants array OR direct chat id containing uid
       const { data, error } = await supabase
         .from('chats')
         .select('*')
-        .contains('participants', [userUid])
+        .or(`participants.cs.{"${userUid}"},id.ilike.%${userUid}%`)
         .order('updated_at', { ascending: false });
 
       if (error || !data) return [];
 
-      return data.map((r: any) => ({
-        id: r.id,
-        type: r.type,
-        participants: r.participants || [],
-        name: r.name,
-        avatar: r.avatar,
-        lastMessage: r.last_message,
-        unreadCount: r.unread_count || {},
-        createdAt: Number(r.created_at),
-        updatedAt: Number(r.updated_at),
-      }));
+      return data.map((r: any) => {
+        let participants = r.participants || [];
+        if (participants.length === 0 && r.id) {
+          participants = r.id.replace(/^chat_/, '').split('_').filter(Boolean);
+        }
+        return {
+          id: r.id,
+          type: r.type,
+          participants,
+          name: r.name,
+          avatar: r.avatar,
+          lastMessage: r.last_message,
+          unreadCount: r.unread_count || {},
+          createdAt: Number(r.created_at || Date.now()),
+          updatedAt: Number(r.updated_at || Date.now()),
+        };
+      });
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Listen for chat list updates for the current user
+   */
+  public static subscribeToUserChats(
+    userUid: string,
+    onChatUpdated: (update: { chatId: string; lastMessage: any; updatedAt: number; participants?: string[] }) => void
+  ): () => void {
+    const channel = supabase
+      .channel(`user_chats:${userUid}`)
+      .on('broadcast', { event: 'chat_updated' }, (payload: any) => {
+        if (payload?.payload) {
+          onChatUpdated(payload.payload);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
+    };
   }
 
   /**
@@ -877,6 +963,215 @@ export class RealtimeCoordinator {
     return () => {
       try {
         supabase.removeChannel(channel);
+      } catch {}
+    };
+  }
+
+  // ==========================================
+  // 5. STATUS UPDATES & STORY REACTIONS (Dual-Engine)
+  // ==========================================
+
+  /**
+   * Persist a status update to Supabase PostgreSQL & broadcast live
+   */
+  public static async createStatus(status: StatusUpdate): Promise<boolean> {
+    try {
+      const row = {
+        id: status.id,
+        user_id: status.userId,
+        user_name: status.userName || 'User',
+        user_photo: status.userPhoto || '',
+        type: status.mediaType || 'text',
+        text: status.text || '',
+        media_url: status.mediaUrl || '',
+        background_color: status.backgroundColor || '#0b141a',
+        font_style: status.fontFamily || '',
+        timestamp: status.timestamp || Date.now(),
+        views: status.viewedBy || [status.userId],
+        viewers: status.viewers || [],
+        reactions: status.reactions || [],
+        privacy_mode: status.privacy || 'contacts',
+        allowed_uids: status.privacyUids || [],
+        excluded_uids: status.privacy === 'contacts_except' ? (status.privacyUids || []) : [],
+        created_at: status.timestamp || Date.now(),
+      };
+
+      const { error } = await supabase.from('statuses').upsert(row);
+      if (!error) {
+        // Broadcast live new status update
+        const channel = supabase.channel('global_statuses');
+        await channel.send({
+          type: 'broadcast',
+          event: 'new_status',
+          payload: status,
+        });
+        return true;
+      } else {
+        console.warn('Supabase status insert notice:', error);
+      }
+    } catch (e) {
+      console.warn('Supabase create status error:', e);
+    }
+    return false;
+  }
+
+  /**
+   * Fetch active status updates (past 24h) from Supabase PostgreSQL
+   */
+  public static async fetchStatuses(): Promise<StatusUpdate[]> {
+    try {
+      const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+      const { data, error } = await supabase
+        .from('statuses')
+        .select('*')
+        .gte('timestamp', twentyFourHoursAgo)
+        .order('timestamp', { ascending: false });
+
+      if (error || !data) return [];
+
+      return data.map((r: any) => ({
+        id: r.id,
+        userId: r.user_id,
+        userName: r.user_name,
+        userPhoto: r.user_photo,
+        text: r.text,
+        mediaUrl: r.media_url,
+        mediaType: r.type,
+        backgroundColor: r.background_color,
+        fontFamily: r.font_style,
+        timestamp: Number(r.timestamp),
+        viewedBy: r.views || [],
+        viewers: r.viewers || [],
+        reactions: r.reactions || [],
+        privacy: r.privacy_mode,
+        privacyUids: r.allowed_uids || [],
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * React to a status update in Supabase PostgreSQL & broadcast live
+   */
+  public static async reactToStatus(
+    statusId: string,
+    reaction: { emoji: string; userId: string; userName: string; timestamp: number }
+  ): Promise<void> {
+    try {
+      const { data } = await supabase.from('statuses').select('reactions').eq('id', statusId).maybeSingle();
+      const existing = (data?.reactions || []) as any[];
+      // Filter out existing reaction from this user if any, then append
+      const filtered = existing.filter((r) => r.userId !== reaction.userId);
+      const updated = [...filtered, reaction];
+
+      await supabase.from('statuses').update({ reactions: updated }).eq('id', statusId);
+
+      const channel = supabase.channel('global_statuses');
+      await channel.send({
+        type: 'broadcast',
+        event: 'status_reaction',
+        payload: { statusId, reaction, reactions: updated },
+      });
+    } catch (e) {
+      console.warn('Supabase react to status notice:', e);
+    }
+  }
+
+  /**
+   * Register a view on a status in Supabase PostgreSQL
+   */
+  public static async viewStatus(
+    statusId: string,
+    viewerUid: string,
+    viewerProfile?: { displayName: string; photoURL?: string }
+  ): Promise<void> {
+    try {
+      const { data } = await supabase.from('statuses').select('views, viewers').eq('id', statusId).maybeSingle();
+      if (!data) return;
+
+      const views = (data.views || []) as string[];
+      if (!views.includes(viewerUid)) {
+        const newViews = [...views, viewerUid];
+        const viewers = (data.viewers || []) as any[];
+        const newViewers = viewerProfile
+          ? [...viewers, { uid: viewerUid, displayName: viewerProfile.displayName, photoURL: viewerProfile.photoURL, timestamp: Date.now() }]
+          : viewers;
+
+        await supabase.from('statuses').update({ views: newViews, viewers: newViewers }).eq('id', statusId);
+      }
+    } catch {}
+  }
+
+  /**
+   * Subscribe to real-time status updates and reactions
+   */
+  public static subscribeToStatuses(
+    onNewStatus: (status: StatusUpdate) => void,
+    onStatusUpdate?: (update: { statusId: string; [key: string]: any }) => void
+  ): () => void {
+    const broadcastChannel = supabase
+      .channel('global_statuses')
+      .on('broadcast', { event: 'new_status' }, (payload: any) => {
+        if (payload?.payload) {
+          onNewStatus(payload.payload);
+        }
+      })
+      .on('broadcast', { event: 'status_reaction' }, (payload: any) => {
+        if (onStatusUpdate && payload?.payload) {
+          onStatusUpdate(payload.payload);
+        }
+      })
+      .subscribe();
+
+    const dbSub = supabase
+      .channel('db-statuses')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'statuses',
+        },
+        (payload: any) => {
+          const r = payload.new;
+          if (!r || !r.id) return;
+          if (payload.eventType === 'INSERT') {
+            onNewStatus({
+              id: r.id,
+              userId: r.user_id,
+              userName: r.user_name,
+              userPhoto: r.user_photo,
+              text: r.text,
+              mediaUrl: r.media_url,
+              mediaType: r.type,
+              backgroundColor: r.background_color,
+              fontFamily: r.font_style,
+              timestamp: Number(r.timestamp),
+              viewedBy: r.views || [],
+              viewers: r.viewers || [],
+              reactions: r.reactions || [],
+              privacy: r.privacy_mode,
+              privacyUids: r.allowed_uids || [],
+            });
+          } else if (payload.eventType === 'UPDATE' && onStatusUpdate) {
+            onStatusUpdate({
+              statusId: r.id,
+              views: r.views,
+              viewers: r.viewers,
+              reactions: r.reactions,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(broadcastChannel);
+      } catch {}
+      try {
+        supabase.removeChannel(dbSub);
       } catch {}
     };
   }
