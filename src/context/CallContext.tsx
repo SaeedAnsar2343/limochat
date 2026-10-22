@@ -176,15 +176,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    // 2. Firestore fallback listener
+    // 2. Firestore fallback listener (DO NOT cleanup if document is absent in Firestore!)
     const sessionRef = doc(db, 'calls', activeSession.id);
     const unsub = onSnapshot(sessionRef, (docSnap) => {
-      if (!docSnap.exists()) {
-        cleanupCallState();
-        return;
-      }
+      if (!docSnap.exists()) return;
       const data = { id: docSnap.id, ...docSnap.data() } as CallSession;
-      setActiveSession(data);
+      setActiveSession((prev) => (prev ? { ...prev, ...data } : data));
 
       if (data.status === 'ended' || data.status === 'declined') {
         soundEngine.playCallEnd();
@@ -435,6 +432,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }));
       };
 
+      const pendingCandidates: RTCIceCandidateInit[] = [];
+
       // Stream ICE candidates via dual-channel RTDB + Supabase (0 Firestore writes)
       pc.onicecandidate = (event) => {
         if (event.candidate) {
@@ -449,37 +448,62 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // Broadcast offer via dual-channel real-time sockets
+      const offerPayload = { type: offer.type, sdp: offer.sdp };
+
+      // 1. Save offer to Supabase calls table row
+      await RealtimeCoordinator.updateCallSession(sessionId, {
+        offer: offerPayload
+      });
+
+      // 2. Broadcast and persist offer in call_signals table
       RealtimeCoordinator.sendCallSignal(sessionId, {
         type: 'offer',
-        offer: { type: offer.type, sdp: offer.sdp }
+        offer: offerPayload
       }).catch(() => {});
 
-      // Background persistence in Firestore
+      // 3. Background persistence in Firestore
       const callDoc = doc(db, 'calls', sessionId);
       updateDoc(callDoc, {
-        offer: { type: offer.type, sdp: offer.sdp },
+        offer: offerPayload,
       }).catch(() => {});
 
-      // Live signaling listener via dual-channel RTDB + Supabase WebSockets
-      RealtimeCoordinator.subscribeToCallSignals(sessionId, async (signal) => {
-        if (signal.type === 'answer' && !pc.currentRemoteDescription) {
+      const applyAnswer = async (answerData: any) => {
+        if (!pc.currentRemoteDescription && answerData) {
           soundEngine.stopDialTone();
-          const rtcSessionDesc = new RTCSessionDescription(signal.answer);
+          const rtcSessionDesc = new RTCSessionDescription(answerData);
           await pc.setRemoteDescription(rtcSessionDesc).catch(() => {});
+          while (pendingCandidates.length > 0) {
+            const c = pendingCandidates.shift();
+            if (c) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+          }
+        }
+      };
+
+      // 4. Live signaling listener via Supabase persistent signals & Realtime broadcast
+      RealtimeCoordinator.subscribeToCallSignals(sessionId, async (signal) => {
+        if (signal.type === 'answer') {
+          await applyAnswer(signal.answer);
         } else if (signal.type === 'candidate' && signal.role === 'callee') {
-          const candidate = new RTCIceCandidate(signal.candidate);
-          await pc.addIceCandidate(candidate).catch(() => {});
+          if (pc.remoteDescription) {
+            await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch(() => {});
+          } else {
+            pendingCandidates.push(signal.candidate);
+          }
         }
       });
 
-      // Secondary fallback listener on Firestore document
+      // 5. Watch for answer on Supabase calls table directly
+      RealtimeCoordinator.subscribeToCallUpdates(sessionId, async (updates) => {
+        if (updates.answer) {
+          await applyAnswer(updates.answer);
+        }
+      });
+
+      // 6. Secondary fallback listener on Firestore document
       onSnapshot(callDoc, async (snapshot) => {
         const data = snapshot.data();
-        if (data?.answer && !pc.currentRemoteDescription) {
-          soundEngine.stopDialTone();
-          const rtcSessionDesc = new RTCSessionDescription(data.answer);
-          await pc.setRemoteDescription(rtcSessionDesc).catch(() => {});
+        if (data?.answer) {
+          await applyAnswer(data.answer);
         }
       }, () => {});
     } catch (err) {
@@ -517,14 +541,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       setCallHistory(prev => [historyItem, ...prev]);
 
-      // Update in Supabase
-      RealtimeCoordinator.updateCallSession(session.id, {
+      // 1. Update status to 'accepted' in Supabase calls table
+      await RealtimeCoordinator.updateCallSession(session.id, {
         status: 'accepted',
         startedAt: Date.now(),
-      }).catch(() => {});
+      });
 
       const sessionRef = doc(db, 'calls', session.id);
-      await updateDoc(sessionRef, {
+      updateDoc(sessionRef, {
         status: 'accepted',
         startedAt: Date.now(),
         [`participants.${currentUser.uid}.status`]: 'joined',
@@ -542,6 +566,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }));
       };
 
+      const pendingCandidates: RTCIceCandidateInit[] = [];
+
       // Stream callee candidates via dual-channel RTDB + Supabase (0 Firestore writes)
       pc.onicecandidate = (event) => {
         if (event.candidate) {
@@ -553,38 +579,61 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       };
 
-      const callSnapshot = await getDoc(sessionRef).catch(() => null);
-      const callData = callSnapshot?.data();
-      if (callData?.offer) {
-        await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        // Broadcast answer via dual-channel WebSockets immediately
-        RealtimeCoordinator.sendCallSignal(session.id, {
-          type: 'answer',
-          answer: { type: answer.type, sdp: answer.sdp }
-        }).catch(() => {});
-
-        // Save to Firestore in background
-        updateDoc(sessionRef, {
-          answer: { type: answer.type, sdp: answer.sdp },
-        }).catch(() => {});
+      // 2. Fetch offer from incoming session or Supabase calls table
+      let offerData = session.offer;
+      if (!offerData) {
+        const latestCall = await RealtimeCoordinator.fetchCallSession(session.id);
+        if (latestCall?.offer) {
+          offerData = latestCall.offer;
+        }
       }
 
-      // Dual-channel listener for caller candidates and offers
-      RealtimeCoordinator.subscribeToCallSignals(session.id, async (signal) => {
-        if (signal.type === 'offer' && !pc.currentRemoteDescription) {
-          await pc.setRemoteDescription(new RTCSessionDescription(signal.offer)).catch(() => {});
+      const applyOfferAndAnswer = async (offerPayload: any) => {
+        if (!pc.currentRemoteDescription && offerPayload) {
+          await pc.setRemoteDescription(new RTCSessionDescription(offerPayload)).catch(() => {});
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
+
+          const answerPayload = { type: answer.type, sdp: answer.sdp };
+
+          // Save answer in Supabase calls table
+          await RealtimeCoordinator.updateCallSession(session.id, {
+            answer: answerPayload,
+          });
+
+          // Broadcast & persist answer in call_signals table
           RealtimeCoordinator.sendCallSignal(session.id, {
             type: 'answer',
-            answer: { type: answer.type, sdp: answer.sdp }
+            answer: answerPayload,
           }).catch(() => {});
+
+          // Save to Firestore in background
+          updateDoc(sessionRef, {
+            answer: answerPayload,
+          }).catch(() => {});
+
+          // Flush any queued caller candidates
+          while (pendingCandidates.length > 0) {
+            const c = pendingCandidates.shift();
+            if (c) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+          }
+        }
+      };
+
+      if (offerData) {
+        await applyOfferAndAnswer(offerData);
+      }
+
+      // 3. Dual-channel listener for caller candidates and offers
+      RealtimeCoordinator.subscribeToCallSignals(session.id, async (signal) => {
+        if (signal.type === 'offer') {
+          await applyOfferAndAnswer(signal.offer);
         } else if (signal.type === 'candidate' && signal.role === 'caller') {
-          const candidate = new RTCIceCandidate(signal.candidate);
-          await pc.addIceCandidate(candidate).catch(() => {});
+          if (pc.remoteDescription) {
+            await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch(() => {});
+          } else {
+            pendingCandidates.push(signal.candidate);
+          }
         }
       });
     } catch (err: any) {

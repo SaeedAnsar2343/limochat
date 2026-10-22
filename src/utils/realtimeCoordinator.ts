@@ -664,16 +664,66 @@ export class RealtimeCoordinator {
   }
 
   /**
-   * Broadcast a call signaling packet (offer, answer, or candidate)
+   * Fetch active call session from Supabase PostgreSQL
+   */
+  public static async fetchCallSession(callId: string): Promise<CallSession | null> {
+    try {
+      const { data, error } = await supabase
+        .from('calls')
+        .select('*')
+        .eq('id', callId)
+        .maybeSingle();
+
+      if (error || !data) return null;
+
+      return {
+        id: data.id,
+        chatId: data.chat_id,
+        isGroup: (data.participant_uids || []).length > 2,
+        callerId: data.caller_id,
+        callerName: data.caller_name,
+        callerPhoto: data.caller_photo,
+        callType: data.call_type,
+        status: data.status,
+        participants: data.participants || {},
+        participantUids: data.participant_uids || [],
+        offer: data.offer,
+        answer: data.answer,
+        createdAt: Number(data.created_at),
+        startedAt: data.started_at ? Number(data.started_at) : undefined,
+        endedAt: data.ended_at ? Number(data.ended_at) : undefined,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Broadcast & persist a call signaling packet (offer, answer, or candidate)
    */
   public static async sendCallSignal(callId: string, signal: any): Promise<void> {
+    const signalId = `sig_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const packet = {
       ...signal,
-      packetId: `sig_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      packetId: signalId,
       timestamp: Date.now(),
     };
 
-    // 1. Supabase Realtime Broadcast (instant in-memory WebSocket)
+    // 1. Persist to Supabase call_signals table (persistent storage, zero quota limits)
+    try {
+      await supabase.from('call_signals').insert({
+        id: signalId,
+        call_id: callId,
+        type: signal.type,
+        role: signal.role || null,
+        signal: packet,
+        created_at: Date.now(),
+      });
+    } catch (e) {
+      console.warn('Supabase call_signals insert notice:', e);
+    }
+
+    // 2. Broadcast via Supabase Realtime channel for sub-25ms WebSocket latency
     try {
       const channel = supabase.channel(`call:${callId}`);
       await channel.send({
@@ -683,7 +733,7 @@ export class RealtimeCoordinator {
       });
     } catch {}
 
-    // 2. Firebase RTDB
+    // 3. Best-effort write to Firebase RTDB if active
     try {
       const signalsRef = ref(rtdb, `calls/${callId}/signals`);
       await push(signalsRef, packet);
@@ -697,8 +747,68 @@ export class RealtimeCoordinator {
     callId: string,
     onSignal: (signal: any) => void
   ): () => void {
-    const signalsRef = ref(rtdb, `calls/${callId}/signals`);
+    // 1. Immediately replay any already persisted signals (e.g. Offer generated before callee answered)
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('call_signals')
+          .select('*')
+          .eq('call_id', callId)
+          .order('created_at', { ascending: true });
 
+        if (data && data.length > 0) {
+          for (const row of data) {
+            const packet = row.signal || row;
+            const packetId = packet.packetId || row.id;
+            if (!this.seenSignalIds.has(packetId)) {
+              this.seenSignalIds.add(packetId);
+              onSignal(packet);
+            }
+          }
+        }
+      } catch {}
+    })();
+
+    // 2. Listen to Postgres Changes on call_signals table
+    const dbSignalsSub = supabase
+      .channel(`db-signals:${callId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'call_signals',
+          filter: `call_id=eq.${callId}`,
+        },
+        (payload: any) => {
+          const row = payload.new;
+          if (!row) return;
+          const packet = row.signal || row;
+          const packetId = packet.packetId || row.id;
+          if (this.seenSignalIds.has(packetId)) return;
+          this.seenSignalIds.add(packetId);
+
+          onSignal(packet);
+        }
+      )
+      .subscribe();
+
+    // 3. Listen to Supabase Broadcast channel
+    const supaChannel = supabase
+      .channel(`call:${callId}`)
+      .on('broadcast', { event: 'call_signal' }, (payload: any) => {
+        const val = payload.payload;
+        if (!val) return;
+        const packetId = val.packetId || `${val.type}_${val.timestamp}`;
+        if (this.seenSignalIds.has(packetId)) return;
+        this.seenSignalIds.add(packetId);
+
+        onSignal(val);
+      })
+      .subscribe();
+
+    // 4. RTDB fallback listener
+    const signalsRef = ref(rtdb, `calls/${callId}/signals`);
     const rtdbCallback = (snapshot: any) => {
       const val = snapshot.val();
       if (!val) return;
@@ -713,25 +823,15 @@ export class RealtimeCoordinator {
       onChildAdded(signalsRef, rtdbCallback);
     } catch {}
 
-    const supaChannel = supabase
-      .channel(`call:${callId}`)
-      .on('broadcast', { event: 'call_signal' }, (payload: any) => {
-        const val = payload.payload;
-        if (!val) return;
-        const packetId = val.packetId || `${val.type}_${val.timestamp}`;
-        if (this.seenSignalIds.has(packetId)) return;
-        this.seenSignalIds.add(packetId);
-
-        onSignal(val);
-      })
-      .subscribe();
-
     return () => {
       try {
-        off(signalsRef, 'child_added', rtdbCallback);
+        supabase.removeChannel(dbSignalsSub);
       } catch {}
       try {
         supabase.removeChannel(supaChannel);
+      } catch {}
+      try {
+        off(signalsRef, 'child_added', rtdbCallback);
       } catch {}
     };
   }
