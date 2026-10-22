@@ -15,7 +15,9 @@ import {
   MailOpen,
   RotateCcw,
   PhoneCall,
-  PhoneMissed
+  PhoneMissed,
+  Clock,
+  AlertCircle
 } from 'lucide-react';
 import { Chat, UserProfile } from '../../types';
 import { Avatar } from '../common/Avatar';
@@ -174,9 +176,11 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
         {/* Delivery / Read Status Ticks for me */}
         {isMeSender && (
           <span className="flex-shrink-0 mr-0.5">
+            {status === 'sending' && <Clock className="w-3.5 h-3.5 text-[#8696a0] animate-pulse" />}
             {status === 'sent' && <Check className="w-3.5 h-3.5 text-[#8696a0]" />}
             {status === 'delivered' && <CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" />}
             {status === 'read' && <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />}
+            {status === 'failed' && <AlertCircle className="w-3.5 h-3.5 text-red-500" />}
           </span>
         )}
 

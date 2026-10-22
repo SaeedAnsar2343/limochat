@@ -22,7 +22,8 @@ import {
   Smile,
   CheckSquare,
   Heart,
-  Flag
+  Flag,
+  Clock
 } from 'lucide-react';
 import { Message, UserProfile } from '../../types';
 import { formatTime, formatDuration } from '../../utils/formatters';
@@ -119,7 +120,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   );
   const [showLangPicker, setShowLangPicker] = useState(false);
 
-  const { fontSize, reactToMessage } = useChat();
+  const { fontSize, reactToMessage, sendMessage } = useChat();
   const { startCall } = useCall();
   const fontClass = fontSize === 'lg' ? 'text-base' : fontSize === 'base' ? 'text-sm' : 'text-xs';
 
@@ -784,7 +785,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
           {/* Delivery & Read Status Ticks (for current user's sent messages) */}
           {isMe && !message.isDeletedForEveryone && (
-            <span className="ml-0.5">
+            <span className="ml-0.5 inline-flex items-center">
+              {message.status === 'sending' && (
+                <span title="Sending..."><Clock className="w-3 h-3 text-[#8696a0] animate-pulse" /></span>
+              )}
               {message.status === 'sent' && (
                 <span title="Sent"><Check className="w-3.5 h-3.5 text-[#8696a0]" /></span>
               )}
@@ -793,6 +797,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               )}
               {message.status === 'read' && (
                 <span title="Read"><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
+              )}
+              {message.status === 'failed' && (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    sendMessage(message.text, message.type, message.mediaUrl, message);
+                  }}
+                  className="flex items-center gap-0.5 text-red-500 hover:text-red-400 font-medium cursor-pointer" 
+                  title="Failed to deliver. Click to retry."
+                >
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span className="text-[10px] underline">Retry</span>
+                </button>
               )}
             </span>
           )}

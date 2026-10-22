@@ -253,19 +253,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const chatsRef = collection(db, 'chats');
-    const q = query(
-      chatsRef,
-      where('participants', 'array-contains', currentUser.uid),
-      orderBy('updatedAt', 'desc')
-    );
+    // Using single-field query to guarantee 0 composite index errors in Firestore
+    const q = query(chatsRef, where('participants', 'array-contains', currentUser.uid));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const chatList: Chat[] = [];
       snapshot.forEach((docSnap) => {
         chatList.push({ id: docSnap.id, ...docSnap.data() } as Chat);
       });
+      // Sort client-side by updatedAt descending
+      chatList.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-      // Merge with any local chats
       setChats(prev => {
         const map = new Map<string, Chat>();
         chatList.forEach(c => map.set(c.id, c));
@@ -299,15 +297,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         });
       }
-    }, () => {
-      // Fallback query without composite index
-      const qFallback = query(chatsRef, where('participants', 'array-contains', currentUser.uid));
-      onSnapshot(qFallback, (s) => {
-        const list: Chat[] = [];
-        s.forEach(d => list.push({ id: d.id, ...d.data() } as Chat));
-        list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-        setChats(list);
-      }, () => {});
+    }, (err) => {
+      console.warn("Chats snapshot warning:", err);
     });
 
     return () => unsubscribe();
@@ -352,8 +343,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const messagesRef = collection(db, 'chats', activeChat.id, 'messages');
     const q = query(messagesRef, orderBy('timestamp', 'asc'));
 
-    // Reset unread count for current user upon opening this chat
-    if (currentUser?.uid) {
+    // Only reset unread count if it is actually greater than 0 (saves writes)
+    if (currentUser?.uid && (activeChat.unreadCount?.[currentUser.uid] || 0) > 0) {
       updateDoc(doc(db, 'chats', activeChat.id), {
         [`unreadCount.${currentUser.uid}`]: 0,
       }).catch(() => {});
@@ -429,10 +420,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
 
-      setMessages(msgList);
-      try {
-        localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(msgList));
-      } catch {}
+      setMessages((prev) => {
+        const serverIds = new Set(msgList.map(m => m.id));
+        // Preserve local pending or failed messages so they NEVER disappear on refresh
+        const pendingLocal = prev.filter(m => m.chatId === activeChat.id && !serverIds.has(m.id) && (m.status === 'sending' || m.status === 'failed'));
+        const combined = [...msgList, ...pendingLocal].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        try {
+          localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(combined));
+        } catch {}
+        return combined;
+      });
     }, () => {});
 
     return () => unsubscribe();
@@ -558,7 +555,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       mediaDuration: extra?.mediaDuration || 0,
       fileName: extra?.fileName || '',
       fileSize: extra?.fileSize || '',
-      status: 'delivered',
+      status: 'sending',
       timestamp: now,
       quotedMessage: replyingTo || null,
       isDeletedForEveryone: false,
@@ -583,7 +580,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         senderId: currentUser.uid,
         timestamp: now,
         type,
-        status: 'delivered',
+        status: 'sending',
         callType: extra?.callType,
         callStatus: extra?.callStatus,
       }
@@ -597,7 +594,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Try saving to Firestore
     try {
       const msgDocRef = doc(db, 'chats', activeChat.id, 'messages', msgId);
-      await setDoc(msgDocRef, sanitizeData(newMsg), { merge: true });
+      await setDoc(msgDocRef, sanitizeData({ ...newMsg, status: 'delivered' }), { merge: true });
+
+      // Confirm delivered in local state
+      setMessages(prev => {
+        const updated = prev.map(m => m.id === msgId ? { ...m, status: 'delivered' as const } : m);
+        localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(updated));
+        return updated;
+      });
 
       const chatRef = doc(db, 'chats', activeChat.id);
       
@@ -622,8 +626,25 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           callStatus: extra?.callStatus,
         }
       }), { merge: true });
-    } catch (err) {
-      console.warn("Message saved to reactive local session (Firestore offline/syncing):", err);
+    } catch (err: any) {
+      console.warn("Firestore message write error:", err);
+      const isQuota = err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded') || err?.message?.includes('RESOURCE_EXHAUSTED');
+
+      // Update message status to 'failed' locally so user sees retry button
+      setMessages(prev => {
+        const updated = prev.map(m => m.id === msgId ? { ...m, status: 'failed' as const } : m);
+        localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(updated));
+        return updated;
+      });
+
+      if (isQuota) {
+        showAlertNotice(
+          "Database Daily Quota Reached",
+          "Firebase Spark (Free) plan daily write limit of 20,000 writes has been reached on project 'woki-toki-69a0d'. To enable unlimited messaging and calling, please upgrade to the Blaze plan in Firebase Console.",
+          "danger",
+          "Understood"
+        );
+      }
     }
   };
 
@@ -1046,25 +1067,46 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
   };
 
+  const typingStateRef = React.useRef<boolean>(false);
+  const typingTimerRef = React.useRef<any>(null);
+
   const setTyping = async (isTyping: boolean) => {
     if (!activeChat || !currentUser) return;
+    if (typingStateRef.current === isTyping) return;
+    typingStateRef.current = isTyping;
+
     try {
       const chatRef = doc(db, 'chats', activeChat.id);
       await updateDoc(chatRef, {
         [`typingUsers.${currentUser.uid}`]: isTyping
       });
     } catch {}
+
+    if (isTyping) {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        setTyping(false);
+      }, 3500);
+    }
   };
 
   // Find or create direct 1-on-1 chat
   const createDirectChat = async (targetUser: UserProfile): Promise<Chat> => {
     if (!currentUser) throw new Error("Not logged in");
 
-    // Check existing
+    const sortedUids = [currentUser.uid, targetUser.uid].sort();
+    // Deterministic unified ID so both users always connect to the EXACT SAME chat document
+    const chatId = targetUser.uid === SYSTEM_SUPPORT_USER.uid 
+      ? `support_${currentUser.uid}` 
+      : `chat_${sortedUids[0]}_${sortedUids[1]}`;
+
+    // Check existing either by unified chatId or by participants
     const existing = chats.find(c => 
-      c.type === 'direct' && 
-      c.participants.includes(targetUser.uid) && 
-      c.participants.length === 2
+      c.id === chatId || (
+        c.type === 'direct' && 
+        c.participants.includes(targetUser.uid) && 
+        c.participants.length === 2
+      )
     );
     if (existing) {
       setActiveChat(existing);
@@ -1072,10 +1114,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const now = Date.now();
-    // Predictable unified ID for LimoChat Support
-    const chatId = targetUser.uid === SYSTEM_SUPPORT_USER.uid 
-      ? `support_${currentUser.uid}` 
-      : `chat_${currentUser.uid.slice(0, 5)}_${targetUser.uid.slice(0, 5)}_${Date.now()}`;
 
     const newChatData: Chat = {
       id: chatId,

@@ -290,20 +290,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Immediate online beacon
     updateDoc(userRef, { isOnline: true, lastSeen: Date.now() }).catch(() => {});
 
-    // Periodic heartbeat ensures presence stays live across tabs/devices
+    // Periodic heartbeat throttled to 3 minutes when window is active (saves thousands of writes/day)
     const heartbeatTimer = setInterval(() => {
-      updateDoc(userRef, { isOnline: true, lastSeen: Date.now() }).catch(() => {});
-    }, 40000);
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        updateDoc(userRef, { isOnline: true, lastSeen: Date.now() }).catch(() => {});
+      }
+    }, 180000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        updateDoc(userRef, { isOnline: true, lastSeen: Date.now() }).catch(() => {});
+      }
+    };
 
     const handleBeforeUnload = () => {
       updateDoc(userRef, { isOnline: false, lastSeen: Date.now() }).catch(() => {});
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       clearInterval(heartbeatTimer);
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [currentUser?.uid]);
 

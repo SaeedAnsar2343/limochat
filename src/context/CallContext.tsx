@@ -41,6 +41,24 @@ interface CallContextType {
 
 const CallContext = createContext<CallContextType | null>(null);
 
+
+const sanitizeData = (obj: any): any => {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeData).filter((v) => v !== undefined);
+  }
+  if (typeof obj === 'object') {
+    const result: any = {};
+    for (const [key, val] of Object.entries(obj)) {
+      if (val !== undefined) {
+        result[key] = sanitizeData(val);
+      }
+    }
+    return result;
+  }
+  return obj;
+};
+
 export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useAuth();
   const [activeSession, setActiveSession] = useState<CallSession | null>(null);
@@ -94,7 +112,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const session = { id: docSnap.id, ...docSnap.data() } as CallSession;
         if (session.callerId !== currentUser.uid && session.participants && session.participants[currentUser.uid]) {
           const myParticipant = session.participants[currentUser.uid];
-          if (myParticipant.status === 'invited') {
+          const ageMs = Date.now() - (session.createdAt || 0);
+          if (myParticipant.status === 'invited' && ageMs < 60000) {
             foundIncoming = session;
             break;
           }
@@ -327,7 +346,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       try {
         const callsRef = collection(db, 'calls');
-        const docRef = await addDoc(callsRef, newSessionData);
+        const cleanPayload = sanitizeData(newSessionData);
+        const docRef = await addDoc(callsRef, cleanPayload);
         const session: CallSession = { id: docRef.id, ...newSessionData };
         setActiveSession(session);
 
@@ -335,10 +355,30 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const targetUserUid = user ? user.uid : chat!.participants.find((p) => p !== currentUser.uid)!;
           await setupPeerConnectionAsCaller(session.id, targetUserUid, stream);
         }
+
+        // Auto-end call after 45s if no answer
+        setTimeout(() => {
+          setActiveSession(current => {
+            if (current && current.id === session.id && current.status === 'ringing') {
+              cleanupCallState();
+              soundEngine.playCallEnd();
+              return null;
+            }
+            return current;
+          });
+        }, 45000);
       } catch (err: any) {
-        console.warn("Call active in peer session:", err);
-        const localSession: CallSession = { id: callId, ...newSessionData };
-        setActiveSession(localSession);
+        console.error("Firestore call session error:", err);
+        soundEngine.stopDialTone();
+        cleanupCallState();
+        const isQuota = err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded') || err?.message?.includes('RESOURCE_EXHAUSTED');
+        setCallAlert({
+          title: isQuota ? "Database Daily Quota Reached" : "Call Connection Failed",
+          description: isQuota
+            ? "Firebase Spark daily free write limit (20,000 writes/day) has been reached on project 'woki-toki-69a0d'. Please upgrade to the Blaze plan in Firebase Console to enable unlimited calling."
+            : (err?.message || "Could not connect call signaling. Please check connection and retry."),
+        });
+        return;
       }
     } catch (err: any) {
       console.error("Start call error:", err);

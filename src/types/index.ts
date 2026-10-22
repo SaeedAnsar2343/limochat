@@ -151,7 +151,7 @@ export type UserProfile = {
 
 export type MessageType = 'text' | 'image' | 'voice' | 'file' | 'call_log' | 'video' | 'location' | 'contact' | 'sticker';
 
-export type MessageStatus = 'sent' | 'delivered' | 'read';
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 
 export type QuotedMessage = {
   id: string;
