@@ -245,13 +245,37 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [chats]);
 
-  // Load chats for current user from Firestore
+  // Load chats for current user from Supabase & Firestore
   useEffect(() => {
     if (!currentUser?.uid) {
       setChats([]);
       setActiveChat(null);
       return;
     }
+
+    // 1. Sync current user profile to Supabase directory
+    RealtimeCoordinator.syncUserProfile(currentUser).catch(() => {});
+
+    // 2. Fetch user's chats from Supabase PostgreSQL (Unlimited quota, persistent)
+    RealtimeCoordinator.fetchUserChats(currentUser.uid).then((supaChats) => {
+      if (supaChats.length > 0) {
+        setChats((prev) => {
+          const map = new Map<string, Chat>();
+          prev.forEach((c) => map.set(c.id, c));
+          supaChats.forEach((sc) => {
+            const existing = map.get(sc.id);
+            if (!existing || (sc.updatedAt || 0) >= (existing.updatedAt || 0)) {
+              map.set(sc.id, sc);
+            }
+          });
+          const merged = Array.from(map.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+          try {
+            localStorage.setItem('limochat_cached_chats', JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
+      }
+    }).catch(() => {});
 
     const chatsRef = collection(db, 'chats');
     // Using single-field query to guarantee 0 composite index errors in Firestore
@@ -267,11 +291,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setChats(prev => {
         const map = new Map<string, Chat>();
-        chatList.forEach(c => map.set(c.id, c));
-        prev.forEach(c => {
-          if (!map.has(c.id)) map.set(c.id, c);
+        // Keep existing Supabase / cached chats so they are never lost
+        prev.forEach(c => map.set(c.id, c));
+        chatList.forEach(c => {
+          const existing = map.get(c.id);
+          if (!existing || (c.updatedAt || 0) >= (existing.updatedAt || 0)) {
+            map.set(c.id, c);
+          }
         });
-        return Array.from(map.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        const combined = Array.from(map.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        try {
+          localStorage.setItem('limochat_cached_chats', JSON.stringify(combined));
+        } catch {}
+        return combined;
       });
 
       if (activeChat) {
@@ -299,7 +331,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
     }, (err) => {
-      console.warn("Chats snapshot warning:", err);
+      console.warn("Chats snapshot warning (Supabase active):", err);
     });
 
     return () => unsubscribe();
@@ -328,7 +360,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    // Immediately clear/initialize messages to guarantee clean chat switching
+    // 1. Immediately load cached messages for instant rendering on switch/open
     let initialList: Message[] = [];
     try {
       const cached = localStorage.getItem(`limochat_msgs_${activeChat.id}`);
@@ -341,17 +373,89 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
     setMessages(initialList);
 
-    const messagesRef = collection(db, 'chats', activeChat.id, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'asc'));
+    // 2. Fetch persistent chat messages from Supabase PostgreSQL (UNLIMITED quota, persists across refreshes)
+    RealtimeCoordinator.fetchChatMessages(activeChat.id).then((supaMsgs) => {
+      if (supaMsgs.length > 0) {
+        setMessages((prev) => {
+          const map = new Map<string, Message>();
+          prev.forEach((m) => map.set(m.id, m));
+          supaMsgs.forEach((sm) => {
+            const existing = map.get(sm.id);
+            if (!existing || existing.status !== 'sending') {
+              map.set(sm.id, sm);
+            }
+          });
+          const combined = Array.from(map.values())
+            .filter((m) => !m.deletedForUsers?.includes(currentUser?.uid || ''))
+            .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+          try {
+            localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(combined));
+          } catch {}
+          return combined;
+        });
+      }
+    }).catch((err) => {
+      console.warn("Supabase fetch chat messages notice:", err);
+    });
 
-    // Only reset unread count if it is actually greater than 0 (saves writes)
+    // Reset unread count if > 0
     if (currentUser?.uid && (activeChat.unreadCount?.[currentUser.uid] || 0) > 0) {
       updateDoc(doc(db, 'chats', activeChat.id), {
         [`unreadCount.${currentUser.uid}`]: 0,
       }).catch(() => {});
     }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    // 3. Dual-channel real-time listener (Supabase Realtime Channel + Postgres Changes + RTDB)
+    const unsubLive = RealtimeCoordinator.subscribeToLiveMessages(
+      activeChat.id,
+      (liveMsg) => {
+        if (liveMsg.chatId !== activeChat.id) return;
+        setMessages((prev) => {
+          const map = new Map<string, Message>();
+          prev.forEach((m) => map.set(m.id, m));
+          map.set(liveMsg.id, liveMsg);
+          const updated = Array.from(map.values())
+            .filter((m) => !m.deletedForUsers?.includes(currentUser?.uid || ''))
+            .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+          try {
+            localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+
+        if (currentUser && liveMsg.senderId !== currentUser.uid) {
+          if (currentUser?.preferences?.notificationSound !== false) {
+            soundEngine.playMessageReceived(currentUser?.preferences?.messageTone || 'pop');
+          }
+          if (currentUser?.preferences?.inAppVibration !== false && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+            try {
+              navigator.vibrate(100);
+            } catch {}
+          }
+          let previewBody = liveMsg.text || 'Sent an attachment';
+          NativeNotificationService.notifyMessage({
+            title: activeChat?.name || 'New Message',
+            body: previewBody,
+            chatId: activeChat?.id || '',
+          });
+        }
+      },
+      (update) => {
+        setMessages((prev) => {
+          const updated = prev.map((m) => (m.id === update.id ? { ...m, ...update } : m));
+          try {
+            localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+      }
+    );
+
+    // 4. Firestore snapshot listener as backup / secondary sync
+    const messagesRef = collection(db, 'chats', activeChat.id, 'messages');
+    const q = query(messagesRef, orderBy('timestamp', 'asc'));
+
+    const unsubscribeFirestore = onSnapshot(q, (snapshot) => {
       const msgList: Message[] = [];
 
       snapshot.forEach((docSnap) => {
@@ -370,84 +474,32 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
 
-      // 1. Detect and notify incoming messages for all media & text types
-      if (msgList.length > messages.length && messages.length > 0) {
-        const last = msgList[msgList.length - 1];
-        if (last && last.senderId !== currentUser?.uid) {
-          if (currentUser?.preferences?.notificationSound !== false) {
-            soundEngine.playMessageReceived(currentUser?.preferences?.messageTone || 'pop');
-          }
-          if (currentUser?.preferences?.inAppVibration !== false && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-            try {
-              navigator.vibrate(100);
-            } catch {}
-          }
-
-          let previewBody = last.text || '';
-          if (last.type === 'image') previewBody = last.text ? `📷 Photo: ${last.text}` : '📷 Photo';
-          else if (last.type === 'video') previewBody = last.text ? `🎥 Video: ${last.text}` : '🎥 Video';
-          else if (last.type === 'voice') previewBody = '🎤 Voice message';
-          else if (last.type === 'file') previewBody = last.text ? `📄 Document: ${last.text}` : '📄 Document';
-          else if (last.type === 'location') previewBody = '📍 Shared location';
-          else if (last.type === 'contact') previewBody = '👤 Shared contact';
-          else if (!previewBody) previewBody = '✨ Sent an attachment';
-
-          NativeNotificationService.notifyMessage({
-            title: activeChat?.name || 'New Message',
-            body: previewBody,
-            chatId: activeChat?.id || '',
-          });
-        }
-      }
-
-      // 2. Detect and notify message reactions on my messages
-      if (messages.length > 0 && currentUser?.uid) {
-        msgList.forEach(newMsg => {
-          if (newMsg.senderId === currentUser.uid && newMsg.reactions && newMsg.reactions.length > 0) {
-            const oldMsg = messages.find(m => m.id === newMsg.id);
-            const oldReactionsCount = oldMsg?.reactions?.length || 0;
-            if (newMsg.reactions.length > oldReactionsCount) {
-              const latestReaction = newMsg.reactions[newMsg.reactions.length - 1];
-              if (latestReaction && latestReaction.userId !== currentUser.uid) {
-                NativeNotificationService.notifyReaction({
-                  userName: latestReaction.userName || 'Contact',
-                  emoji: latestReaction.emoji,
-                  messageSnippet: newMsg.text || 'Message',
-                  chatId: activeChat?.id || '',
-                });
-              }
+      if (msgList.length > 0) {
+        setMessages((prev) => {
+          const map = new Map<string, Message>();
+          // Preserve all Supabase and local cached messages
+          prev.forEach((m) => map.set(m.id, m));
+          msgList.forEach((m) => {
+            const existing = map.get(m.id);
+            if (!existing || (m.timestamp || 0) >= (existing.timestamp || 0)) {
+              map.set(m.id, m);
             }
-          }
+          });
+          const combined = Array.from(map.values())
+            .filter((m) => !m.deletedForUsers?.includes(currentUser?.uid || ''))
+            .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+          try {
+            localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(combined));
+          } catch {}
+          return combined;
         });
       }
-
-      setMessages((prev) => {
-        const serverIds = new Set(msgList.map(m => m.id));
-        // Preserve local pending or failed messages so they NEVER disappear on refresh
-        const pendingLocal = prev.filter(m => m.chatId === activeChat.id && !serverIds.has(m.id) && (m.status === 'sending' || m.status === 'failed'));
-        const combined = [...msgList, ...pendingLocal].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-        try {
-          localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(combined));
-        } catch {}
-        return combined;
-      });
-    }, () => {});
-
-    // Dual-channel real-time listener (RTDB + Supabase WebSocket)
-    const unsubLive = RealtimeCoordinator.subscribeToLiveMessages(activeChat.id, (liveMsg) => {
-      if (liveMsg.chatId !== activeChat.id) return;
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === liveMsg.id)) return prev;
-        const updated = [...prev, liveMsg].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-        try {
-          localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(updated));
-        } catch {}
-        return updated;
-      });
+    }, (err) => {
+      console.warn("Firestore messages snapshot warning (Supabase active):", err);
     });
 
     return () => {
-      unsubscribe();
+      unsubscribeFirestore();
       unsubLive();
     };
   }, [activeChat?.id, currentUser?.uid]);
@@ -608,20 +660,27 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setReplyingTo(null);
 
-    // Broadcast through dual-channel real-time engine (RTDB + Supabase) immediately
-    RealtimeCoordinator.broadcastLiveMessage(activeChat.id, newMsg).catch(() => {});
+    // 1. Primary High-Availability: Save to Supabase PostgreSQL (UNLIMITED writes, zero quota limits, persists on refresh)
+    const savedToSupabase = await RealtimeCoordinator.persistAndBroadcastMessage(activeChat.id, newMsg);
 
-    // Try saving to Firestore in background for permanent persistence
-    try {
-      const msgDocRef = doc(db, 'chats', activeChat.id, 'messages', msgId);
-      await setDoc(msgDocRef, sanitizeData({ ...newMsg, status: 'delivered' }), { merge: true });
-
-      // Confirm delivered in local state
+    if (savedToSupabase) {
+      // Confirm delivered in local state immediately
       setMessages(prev => {
         const updated = prev.map(m => m.id === msgId ? { ...m, status: 'delivered' as const } : m);
         localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(updated));
         return updated;
       });
+
+      setChats(prev => prev.map(c => c.id === activeChat.id ? {
+        ...c,
+        lastMessage: c.lastMessage ? { ...c.lastMessage, status: 'delivered' as const } : null
+      } : c));
+    }
+
+    // 2. Secondary / Background best-effort persistence to Firestore
+    try {
+      const msgDocRef = doc(db, 'chats', activeChat.id, 'messages', msgId);
+      await setDoc(msgDocRef, sanitizeData({ ...newMsg, status: 'delivered' }), { merge: true });
 
       const chatRef = doc(db, 'chats', activeChat.id);
       
@@ -647,23 +706,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }), { merge: true });
     } catch (err: any) {
-      console.warn("Firestore message write error:", err);
-      const isQuota = err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded') || err?.message?.includes('RESOURCE_EXHAUSTED');
-
-      // Update message status to 'failed' locally so user sees retry button
-      setMessages(prev => {
-        const updated = prev.map(m => m.id === msgId ? { ...m, status: 'failed' as const } : m);
-        localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(updated));
-        return updated;
-      });
-
-      if (isQuota) {
-        showAlertNotice(
-          "Database Daily Quota Reached",
-          "Firebase Spark (Free) plan daily write limit of 20,000 writes has been reached on project 'woki-toki-69a0d'. To enable unlimited messaging and calling, please upgrade to the Blaze plan in Firebase Console.",
-          "danger",
-          "Understood"
-        );
+      console.warn("Firestore message fallback write notice (saved in Supabase):", err);
+      // Only if Supabase also failed do we show failed state
+      if (!savedToSupabase) {
+        setMessages(prev => {
+          const updated = prev.map(m => m.id === msgId ? { ...m, status: 'failed' as const } : m);
+          localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(updated));
+          return updated;
+        });
       }
     }
   };
@@ -794,7 +844,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return c;
     }));
 
-    // 3. Persist to Firestore
+    // 3. Persist to Supabase PostgreSQL & broadcast live
+    RealtimeCoordinator.deleteMessageForEveryone(activeChat.id, messageId).catch(() => {});
+
+    // 4. Secondary fallback in Firestore
     try {
       const msgRef = doc(db, 'chats', activeChat.id, 'messages', messageId);
       await updateDoc(msgRef, {
@@ -831,6 +884,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return updated;
     });
 
+    // Persist to Supabase
+    RealtimeCoordinator.deleteMessageForMe(activeChat.id, messageId, currentUser.uid).catch(() => {});
+
     try {
       const msgRef = doc(db, 'chats', activeChat.id, 'messages', messageId);
       await updateDoc(msgRef, {
@@ -865,6 +921,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       for (const msgId of messageIds) {
+        RealtimeCoordinator.deleteMessageForEveryone(activeChat.id, msgId).catch(() => {});
         try {
           const msgRef = doc(db, 'chats', activeChat.id, 'messages', msgId);
           await updateDoc(msgRef, {
@@ -882,6 +939,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       for (const msgId of messageIds) {
+        RealtimeCoordinator.deleteMessageForMe(activeChat.id, msgId, currentUser.uid).catch(() => {});
         try {
           const msgRef = doc(db, 'chats', activeChat.id, 'messages', msgId);
           await updateDoc(msgRef, {
@@ -923,6 +981,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return updated;
     });
 
+    // Persist and broadcast via Supabase
+    RealtimeCoordinator.reactToMessage(activeChat.id, messageId, updatedReactions).catch(() => {});
+
     try {
       const msgRef = doc(db, 'chats', activeChat.id, 'messages', messageId);
       await updateDoc(msgRef, { reactions: updatedReactions });
@@ -947,6 +1008,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     setMessages(prev => prev.map(m => m.id === messageId ? { ...m, starredBy: updated } : m));
 
+    RealtimeCoordinator.toggleStarMessage(messageId, updated).catch(() => {});
+
     try {
       await updateDoc(doc(db, 'chats', activeChat.id, 'messages', messageId), {
         starredBy: updated
@@ -957,6 +1020,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const clearChatHistory = async (chatId: string) => {
     setMessages([]);
     localStorage.removeItem(`limochat_msgs_${chatId}`);
+
+    RealtimeCoordinator.clearChatHistory(chatId).catch(() => {});
 
     try {
       const messagesRef = collection(db, 'chats', chatId, 'messages');
@@ -999,6 +1064,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       }
     } catch {}
+
+    // Delete in Supabase
+    RealtimeCoordinator.deleteChat(chatId).catch(() => {});
 
     // Delete in Firestore
     try {
@@ -1159,6 +1227,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setChats(prev => [newChatData, ...prev.filter(c => c.id !== newChatData.id)]);
     setActiveChat(newChatData);
 
+    // Persist chat to Supabase PostgreSQL
+    RealtimeCoordinator.persistChat(newChatData).catch(() => {});
+
     // If support chat, initialize welcome message in messages state
     if (targetUser.uid === SYSTEM_SUPPORT_USER.uid) {
       const welcomeMsg: Message = {
@@ -1177,6 +1248,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       setMessages([welcomeMsg]);
       localStorage.setItem(`limochat_msgs_${chatId}`, JSON.stringify([welcomeMsg]));
+      RealtimeCoordinator.persistAndBroadcastMessage(chatId, welcomeMsg).catch(() => {});
     }
 
     // Try saving to Firestore
@@ -1294,12 +1366,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setChats(prev => [newGroupData, ...prev]);
     setActiveChat(newGroupData);
 
+    // Persist to Supabase
+    RealtimeCoordinator.persistChat(newGroupData).catch(() => {});
+
     try {
       const chatsRef = collection(db, 'chats');
       const docRef = await addDoc(chatsRef, sanitizeData(newGroupData));
       const withServerId = { ...newGroupData, id: docRef.id };
       setChats(prev => prev.map(c => c.id === groupId ? withServerId : c));
       setActiveChat(withServerId);
+      RealtimeCoordinator.persistChat(withServerId).catch(() => {});
       return withServerId;
     } catch (err) {
       console.warn("Group created in local session:", err);
@@ -1374,13 +1450,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return commData;
   };
 
-  // Get all registered contacts
+  // Get all registered contacts (Dual Engine: Firestore with Supabase Directory fallback)
   const getAllContacts = async (): Promise<UserProfile[]> => {
+    const list: UserProfile[] = [];
+    const deletedUids = currentUser?.deletedContactUids || [];
+
     try {
       const usersRef = collection(db, 'users');
       const snap = await getDocs(usersRef);
-      const list: UserProfile[] = [];
-      const deletedUids = currentUser?.deletedContactUids || [];
 
       snap.forEach(d => {
         const u = d.data() as UserProfile;
@@ -1392,14 +1469,26 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           list.push(u);
         }
       });
-
-      if (currentUser?.uid !== SYSTEM_SUPPORT_USER.uid) {
-        list.unshift(SYSTEM_SUPPORT_USER);
-      }
-      return list;
     } catch {
-      return [SYSTEM_SUPPORT_USER];
+      // If Firestore is throttled or offline, fallback to Supabase PostgreSQL users
+      try {
+        const supaUsers = await RealtimeCoordinator.searchUsers('');
+        supaUsers.forEach(u => {
+          if (
+            u.uid !== currentUser?.uid &&
+            u.uid !== SYSTEM_SUPPORT_USER.uid &&
+            !deletedUids.includes(u.uid)
+          ) {
+            list.push(u);
+          }
+        });
+      } catch {}
     }
+
+    if (currentUser?.uid !== SYSTEM_SUPPORT_USER.uid) {
+      list.unshift(SYSTEM_SUPPORT_USER);
+    }
+    return list;
   };
 
   // Search users by +991 virtual number, displayName, or email

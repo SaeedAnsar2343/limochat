@@ -265,6 +265,8 @@ export type CallSession = {
   status: CallStatus;
   participants: { [uid: string]: CallParticipant };
   participantUids?: string[]; // Array of uids for simple index-free querying
+  offer?: any;
+  answer?: any;
   createdAt: number;
   startedAt?: number;
   endedAt?: number;

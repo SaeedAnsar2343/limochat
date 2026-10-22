@@ -100,10 +100,24 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [callHistory]);
 
-  // Listen for incoming calls targeted at current user
+  // Listen for incoming calls targeted at current user (Dual Engine: Supabase + Firestore)
   useEffect(() => {
     if (!currentUser?.uid) return;
 
+    // 1. Supabase incoming call listener (Instant WebSocket broadcast + Postgres changes)
+    const unsubSupa = RealtimeCoordinator.subscribeToIncomingCalls(currentUser.uid, (session) => {
+      if (!incomingSessionRef.current || incomingSessionRef.current.id !== session.id) {
+        setIncomingSession(session);
+        soundEngine.startIncomingRingtone();
+        NativeNotificationService.notifyCall({
+          callerName: session.callerName,
+          callType: session.callType,
+          callId: session.id,
+        });
+      }
+    });
+
+    // 2. Firestore listener as secondary companion
     const callsRef = collection(db, 'calls');
     const q = query(callsRef, where('status', '==', 'ringing'));
 
@@ -139,19 +153,30 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     }, (err) => {
-      console.warn("Incoming call listener warning:", err);
+      console.warn("Incoming call listener warning (Supabase active):", err);
     });
 
     return () => {
+      unsubSupa();
       unsubscribe();
       soundEngine.stopRingtone();
     };
   }, [currentUser?.uid]);
 
-  // Sync active session changes
+  // Sync active session changes (Dual Engine: Supabase Realtime + Firestore)
   useEffect(() => {
     if (!activeSession?.id) return;
 
+    // 1. Supabase active call updates
+    const unsubSupaUpdates = RealtimeCoordinator.subscribeToCallUpdates(activeSession.id, (updates) => {
+      setActiveSession((prev) => (prev ? { ...prev, ...updates } : null));
+      if (updates.status === 'ended' || updates.status === 'declined') {
+        soundEngine.playCallEnd();
+        cleanupCallState();
+      }
+    });
+
+    // 2. Firestore fallback listener
     const sessionRef = doc(db, 'calls', activeSession.id);
     const unsub = onSnapshot(sessionRef, (docSnap) => {
       if (!docSnap.exists()) {
@@ -167,7 +192,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }, () => {});
 
-    return () => unsub();
+    return () => {
+      unsubSupaUpdates();
+      unsub();
+    };
   }, [activeSession?.id]);
 
   const cleanupCallState = () => {
@@ -345,41 +373,37 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: Date.now(),
       };
 
-      try {
-        const callsRef = collection(db, 'calls');
-        const cleanPayload = sanitizeData(newSessionData);
-        const docRef = await addDoc(callsRef, cleanPayload);
-        const session: CallSession = { id: docRef.id, ...newSessionData };
-        setActiveSession(session);
+      // 1. Initialize session with unified callId
+      const session: CallSession = { id: callId, ...newSessionData };
+      setActiveSession(session);
 
-        if (!isGroup && (user || (chat && chat.participants.length === 2))) {
-          const targetUserUid = user ? user.uid : chat!.participants.find((p) => p !== currentUser.uid)!;
-          await setupPeerConnectionAsCaller(session.id, targetUserUid, stream);
-        }
+      // 2. Persist in Supabase PostgreSQL & broadcast incoming_call to callee
+      await RealtimeCoordinator.createCallSession(session);
 
-        // Auto-end call after 45s if no answer
-        setTimeout(() => {
-          setActiveSession(current => {
-            if (current && current.id === session.id && current.status === 'ringing') {
-              cleanupCallState();
-              soundEngine.playCallEnd();
-              return null;
-            }
-            return current;
-          });
-        }, 45000);
-      } catch (err: any) {
-        console.error("Firestore call session error:", err);
-        soundEngine.stopDialTone();
-        cleanupCallState();
-        const isQuota = err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded') || err?.message?.includes('RESOURCE_EXHAUSTED');
-        setCallAlert({
-          title: isQuota ? "Database Daily Quota Reached" : "Call Connection Failed",
-          description: isQuota
-            ? "Firebase Spark daily free write limit (20,000 writes/day) has been reached on project 'woki-toki-69a0d'. Please upgrade to the Blaze plan in Firebase Console to enable unlimited calling."
-            : (err?.message || "Could not connect call signaling. Please check connection and retry."),
+      // 3. Establish WebRTC PeerConnection as caller immediately
+      if (!isGroup && (user || (chat && chat.participants.length === 2))) {
+        const targetUserUid = user ? user.uid : chat!.participants.find((p) => p !== currentUser.uid)!;
+        await setupPeerConnectionAsCaller(session.id, targetUserUid, stream);
+      }
+
+      // 4. Auto-end call after 45s if no answer
+      setTimeout(() => {
+        setActiveSession(current => {
+          if (current && current.id === session.id && current.status === 'ringing') {
+            cleanupCallState();
+            soundEngine.playCallEnd();
+            return null;
+          }
+          return current;
         });
-        return;
+      }, 45000);
+
+      // 5. Secondary background save to Firestore
+      try {
+        const cleanPayload = sanitizeData(newSessionData);
+        await setDoc(doc(db, 'calls', callId), cleanPayload, { merge: true });
+      } catch (err: any) {
+        console.warn("Firestore call sync notice (active in Supabase):", err);
       }
     } catch (err: any) {
       console.error("Start call error:", err);
@@ -493,6 +517,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       setCallHistory(prev => [historyItem, ...prev]);
 
+      // Update in Supabase
+      RealtimeCoordinator.updateCallSession(session.id, {
+        status: 'accepted',
+        startedAt: Date.now(),
+      }).catch(() => {});
+
       const sessionRef = doc(db, 'calls', session.id);
       await updateDoc(sessionRef, {
         status: 'accepted',
@@ -598,6 +628,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       starredBy: [],
     };
 
+    // Persist and broadcast call log in Supabase PostgreSQL
+    RealtimeCoordinator.persistAndBroadcastMessage(chatId, logMessage as any).catch(() => {});
+
     try {
       const messagesRef = collection(db, 'chats', chatId, 'messages');
       await addDoc(messagesRef, logMessage);
@@ -624,7 +657,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     } catch (err) {
-      console.warn("Could not post call log to chat:", err);
+      console.warn("Could not post call log to chat (persisted in Supabase):", err);
     }
   };
 
@@ -655,6 +688,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         0
       );
 
+      RealtimeCoordinator.updateCallSession(incomingSession.id, {
+        status: 'declined',
+      }).catch(() => {});
+
       const sessionRef = doc(db, 'calls', incomingSession.id);
       await updateDoc(sessionRef, {
         status: 'declined',
@@ -681,6 +718,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         callStatus,
         duration
       );
+
+      RealtimeCoordinator.updateCallSession(activeSession.id, {
+        status: 'ended',
+        endedAt: Date.now(),
+      }).catch(() => {});
 
       const sessionRef = doc(db, 'calls', activeSession.id);
       await updateDoc(sessionRef, {
