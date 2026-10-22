@@ -209,7 +209,7 @@ export const StatusView: React.FC = () => {
         </button>
       </div>
 
-      <div className="p-4 space-y-5 pb-24">
+      <div className="p-4 space-y-5 pb-32 sm:pb-24">
         {/* My Status Card */}
         <div
           onClick={handleOpenMyStatus}
@@ -352,7 +352,7 @@ export const StatusView: React.FC = () => {
       </div>
 
       {/* Floating Action Buttons (WhatsApp Style: Pencil for text, Camera for media) */}
-      <div className="fixed sm:absolute bottom-6 right-6 flex flex-col items-center gap-3 z-30">
+      <div className="fixed sm:absolute bottom-24 sm:bottom-6 right-5 sm:right-6 flex flex-col items-center gap-3 z-30 pb-safe">
         <button
           type="button"
           onClick={() => openNewStatus('text')}

@@ -32,7 +32,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
   onClose,
   onOpenNewGroup 
 }) => {
-  const { searchUsers, createDirectChat, startDirectChatWithContact, getAllContacts, chats, deleteChat } = useChat();
+  const { searchUsers, createDirectChat, startDirectChatWithContact, getAllContacts, chats, deleteChat, deleteContact } = useChat();
   const { currentUser, blockUser, unblockUser } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -111,13 +111,12 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
 
   const handleDeleteContact = async () => {
     if (!confirmDeleteUser) return;
+    if (confirmDeleteUser.uid === 'limochat_official_support' || confirmDeleteUser.uid.startsWith('support_')) {
+      setConfirmDeleteUser(null);
+      return;
+    }
     try {
-      const matchingChat = chats.find(
-        (c) => c.type === 'direct' && c.participants.includes(confirmDeleteUser.uid)
-      );
-      if (matchingChat) {
-        await deleteChat(matchingChat.id);
-      }
+      await deleteContact(confirmDeleteUser.uid);
       setAddedContacts((prev) => prev.filter((c) => c.uid !== confirmDeleteUser.uid));
     } catch (err: any) {
       console.warn("Could not delete contact:", err);
@@ -374,24 +373,28 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
 
                         {/* Quick Actions: Block, Delete, Chat */}
                         <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={(e) => handleToggleBlock(contact, e)}
-                            className={`p-2 rounded-xl transition cursor-pointer ${
-                              isBlocked
-                                ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                                : 'text-[#8696a0] hover:text-red-400 hover:bg-[#202c33]'
-                            }`}
-                            title={isBlocked ? "Unblock contact" : "Block contact"}
-                          >
-                            <Ban className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setConfirmDeleteUser(contact)}
-                            className="p-2 rounded-xl text-[#8696a0] hover:text-red-400 hover:bg-[#202c33] transition cursor-pointer"
-                            title="Delete contact"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {contact.uid !== 'limochat_official_support' && !contact.uid.startsWith('support_') && (
+                            <>
+                              <button
+                                onClick={(e) => handleToggleBlock(contact, e)}
+                                className={`p-2 rounded-xl transition cursor-pointer ${
+                                  isBlocked
+                                    ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                                    : 'text-[#8696a0] hover:text-red-400 hover:bg-[#202c33]'
+                                }`}
+                                title={isBlocked ? "Unblock contact" : "Block contact"}
+                              >
+                                <Ban className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteUser(contact)}
+                                className="p-2 rounded-xl text-[#8696a0] hover:text-red-400 hover:bg-[#202c33] transition cursor-pointer"
+                                title="Delete contact"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                           <button
                             onClick={() => handleSelectContact(contact)}
                             className="p-2 rounded-xl bg-[#00a884]/20 hover:bg-[#00a884] text-[#00a884] hover:text-white transition cursor-pointer"

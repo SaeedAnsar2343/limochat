@@ -1,7 +1,7 @@
 import { rtdb } from '../firebase/config';
 import { ref, set, push, onChildAdded, onValue, remove, off } from 'firebase/database';
 import { supabase } from '../supabase/config';
-import { Message, CallSession, Chat, UserProfile, StatusUpdate } from '../types';
+import { Message, CallSession, Chat, UserProfile, StatusUpdate, CallHistoryItem } from '../types';
 
 /**
  * Universal Dual-Engine Realtime & Persistence Coordinator
@@ -1316,5 +1316,172 @@ export class RealtimeCoordinator {
         supabase.removeChannel(dbSub);
       } catch {}
     };
+  }
+
+  // ==========================================
+  // 6. CROSS-DEVICE CALL LOGS SYNCHRONIZATION
+  // ==========================================
+
+  /**
+   * Save call log to Supabase PostgreSQL for cross-device sync
+   */
+  public static async saveCallLog(log: CallHistoryItem, userId: string): Promise<void> {
+    try {
+      const row = {
+        id: log.id,
+        user_id: userId,
+        caller_id: log.callerId,
+        caller_name: log.callerName || '',
+        caller_photo: log.callerPhoto || '',
+        receiver_id: log.receiverId || '',
+        receiver_name: log.receiverName || '',
+        receiver_photo: log.receiverPhoto || '',
+        call_type: log.callType,
+        direction: log.direction,
+        duration: log.duration || 0,
+        timestamp: log.timestamp || Date.now(),
+        is_group: !!log.isGroup,
+        group_name: log.groupName || '',
+      };
+      await supabase.from('call_logs').upsert(row);
+
+      // Realtime broadcast to user's other devices
+      const channel = supabase.channel(`user_call_logs:${userId}`);
+      await channel.send({
+        type: 'broadcast',
+        event: 'new_call_log',
+        payload: log,
+      });
+    } catch (e) {
+      console.warn('Supabase saveCallLog error:', e);
+    }
+  }
+
+  /**
+   * Fetch call logs from Supabase PostgreSQL
+   */
+  public static async fetchCallLogs(userId: string): Promise<CallHistoryItem[]> {
+    try {
+      const { data, error } = await supabase
+        .from('call_logs')
+        .select('*')
+        .or(`user_id.eq.${userId},caller_id.eq.${userId},receiver_id.eq.${userId}`)
+        .order('timestamp', { ascending: false })
+        .limit(100);
+
+      if (error || !data) return [];
+      return data.map((r: any) => ({
+        id: r.id,
+        callerId: r.caller_id,
+        callerName: r.caller_name,
+        callerPhoto: r.caller_photo,
+        receiverId: r.receiver_id,
+        receiverName: r.receiver_name,
+        receiverPhoto: r.receiver_photo,
+        callType: r.call_type,
+        direction: r.direction,
+        duration: Number(r.duration || 0),
+        timestamp: Number(r.timestamp),
+        isGroup: !!r.is_group,
+        groupName: r.group_name || undefined,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Subscribe to real-time call logs across devices
+   */
+  public static subscribeToCallLogs(
+    userId: string,
+    onNewLog: (log: CallHistoryItem) => void
+  ): () => void {
+    const channel = supabase
+      .channel(`user_call_logs:${userId}`)
+      .on('broadcast', { event: 'new_call_log' }, (payload: any) => {
+        if (payload?.payload) {
+          onNewLog(payload.payload);
+        }
+      })
+      .subscribe();
+
+    const dbSub = supabase
+      .channel(`db-call-logs:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'call_logs',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload: any) => {
+          const r = payload.new;
+          if (r) {
+            onNewLog({
+              id: r.id,
+              callerId: r.caller_id,
+              callerName: r.caller_name,
+              callerPhoto: r.caller_photo,
+              receiverId: r.receiver_id,
+              receiverName: r.receiver_name,
+              receiverPhoto: r.receiver_photo,
+              callType: r.call_type,
+              direction: r.direction,
+              duration: Number(r.duration || 0),
+              timestamp: Number(r.timestamp),
+              isGroup: !!r.is_group,
+              groupName: r.group_name || undefined,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
+      try {
+        supabase.removeChannel(dbSub);
+      } catch {}
+    };
+  }
+
+  /**
+   * Update Group Info and Permissions in Supabase
+   */
+  public static async updateGroupInfo(chatId: string, updates: Partial<Chat>): Promise<void> {
+    try {
+      const row: any = { updated_at: Date.now() };
+      if (updates.name !== undefined) row.name = updates.name;
+      if (updates.avatar !== undefined) row.avatar = updates.avatar;
+      if (updates.description !== undefined) row.description = updates.description;
+      if (updates.participants !== undefined) row.participants = updates.participants;
+      if (updates.adminIds !== undefined) row.admin_ids = updates.adminIds;
+      if (updates.moderatorIds !== undefined) row.moderator_ids = updates.moderatorIds;
+      if (updates.permissions !== undefined) row.permissions = updates.permissions;
+      if (updates.memberJoinedAt !== undefined) row.member_joined_at = updates.memberJoinedAt;
+      if (updates.memberHistoryRestricted !== undefined) row.member_history_restricted = updates.memberHistoryRestricted;
+
+      await supabase.from('chats').update(row).eq('id', chatId);
+    } catch (e) {
+      console.warn('Supabase updateGroupInfo error:', e);
+    }
+  }
+
+  /**
+   * Delete contact in Supabase user profile
+   */
+  public static async deleteContact(userId: string, targetUid: string): Promise<void> {
+    try {
+      const { data } = await supabase.from('users').select('deleted_contact_uids').eq('id', userId).single();
+      const current = (data?.deleted_contact_uids as string[]) || [];
+      const updated = Array.from(new Set([...current, targetUid]));
+      await supabase.from('users').update({ deleted_contact_uids: updated }).eq('id', userId);
+    } catch (e) {
+      console.warn('Supabase deleteContact error:', e);
+    }
   }
 }

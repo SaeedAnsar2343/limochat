@@ -11,22 +11,24 @@ import {
   ChevronDown,
   Volume2, 
   VolumeX, 
-  Grid, 
   RotateCcw,
   Wifi, 
   X,
-  UserPlus
+  UserPlus,
+  Search,
+  Check,
+  Sparkles
 } from 'lucide-react';
 import { useCall } from '../../context/CallContext';
 import { useAuth } from '../../context/AuthContext';
 import { useChat } from '../../context/ChatContext';
 import { Avatar } from '../common/Avatar';
 import { formatDuration } from '../../utils/formatters';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-import { UserProfile } from '../../types';
-
-const KEYPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
+import { UserProfile, CallParticipant } from '../../types';
+import { supabase } from '../../supabase/config';
+import { RealtimeCoordinator } from '../../utils/realtimeCoordinator';
 
 export const ActiveCallModal: React.FC = () => {
   const { 
@@ -45,13 +47,30 @@ export const ActiveCallModal: React.FC = () => {
   } = useCall();
 
   const { currentUser } = useAuth();
-  const { chats } = useChat();
+  const { getAllContacts } = useChat();
   const [duration, setDuration] = useState<number>(0);
   const [isMinimized, setIsMinimized] = useState<boolean>(false);
-  const [showKeypad, setShowKeypad] = useState(false);
-  const [keypadInput, setKeypadInput] = useState('');
+  const [showAddParticipant, setShowAddParticipant] = useState(false);
+  const [contactsList, setContactsList] = useState<UserProfile[]>([]);
+  const [contactSearch, setContactSearch] = useState('');
+  const [invitedUids, setInvitedUids] = useState<string[]>([]);
+  const [addedNotice, setAddedNotice] = useState<string | null>(null);
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
+
+  // Dynamic Island Draggable Coordinates
+  const [islandPos, setIslandPos] = useState<{ x: number; y: number }>(() => ({
+    x: typeof window !== 'undefined' ? Math.max(12, (window.innerWidth - 300) / 2) : 50,
+    y: 28,
+  }));
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef<{ startX: number; startY: number; initX: number; initY: number; moved: boolean }>({
+    startX: 0,
+    startY: 0,
+    initX: 0,
+    initY: 0,
+    moved: false,
+  });
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRefs = useRef<{ [uid: string]: HTMLVideoElement | null }>({});
@@ -72,6 +91,22 @@ export const ActiveCallModal: React.FC = () => {
     }, () => {});
     return () => unsub();
   }, [otherUid]);
+
+  // Load contacts for adding to call
+  useEffect(() => {
+    if (showAddParticipant && currentUser) {
+      getAllContacts().then((all) => {
+        const valid = all.filter(
+          (c) =>
+            c.uid !== currentUser.uid &&
+            c.uid !== 'limochat_official_support' &&
+            !(currentUser.blockedUsers || []).includes(c.uid) &&
+            !(activeSession?.participantUids || []).includes(c.uid)
+        );
+        setContactsList(valid);
+      });
+    }
+  }, [showAddParticipant, currentUser, activeSession?.participantUids]);
 
   const isConnected = activeSession?.status === 'accepted';
   const isCalleeOnline = otherUser?.isOnline === true && (Date.now() - (otherUser?.lastSeen || 0) < 60000);
@@ -113,7 +148,7 @@ export const ActiveCallModal: React.FC = () => {
     });
   }, [remoteStreams, isSpeakerOn]);
 
-  // Camera flip for mobile
+  // Flip camera for mobile video
   const flipCamera = async () => {
     if (!localStream) return;
     try {
@@ -139,6 +174,106 @@ export const ActiveCallModal: React.FC = () => {
     }
   };
 
+  // Draggable Pointer Event Handlers for iPhone Dynamic Island
+  useEffect(() => {
+    const handleMove = (e: PointerEvent) => {
+      if (!dragRef.current.startX && !dragRef.current.startY) return;
+      const dx = e.clientX - dragRef.current.startX;
+      const dy = e.clientY - dragRef.current.startY;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+        dragRef.current.moved = true;
+      }
+      const newX = Math.max(12, Math.min(window.innerWidth - 300, dragRef.current.initX + dx));
+      const newY = Math.max(12, Math.min(window.innerHeight - 80, dragRef.current.initY + dy));
+      setIslandPos({ x: newX, y: newY });
+    };
+
+    const handleUp = () => {
+      dragRef.current.startX = 0;
+      dragRef.current.startY = 0;
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      window.addEventListener('pointermove', handleMove);
+      window.addEventListener('pointerup', handleUp);
+      window.addEventListener('pointercancel', handleUp);
+    }
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
+    };
+  }, [isDragging]);
+
+  const onIslandPointerDown = (e: React.PointerEvent) => {
+    setIsDragging(true);
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initX: islandPos.x,
+      initY: islandPos.y,
+      moved: false,
+    };
+  };
+
+  // Invite an additional contact into the active call
+  const handleAddParticipant = async (contact: UserProfile) => {
+    if (!activeSession) return;
+    try {
+      const currentUids = activeSession.participantUids || [];
+      if (currentUids.includes(contact.uid)) return;
+
+      const nextUids = [...currentUids, contact.uid];
+      const nextParticipants: { [uid: string]: CallParticipant } = {
+        ...(activeSession.participants || {}),
+        [contact.uid]: {
+          uid: contact.uid,
+          displayName: contact.displayName || 'Participant',
+          photoURL: contact.photoURL,
+          status: 'invited',
+          audioMuted: false,
+          videoMuted: false,
+        },
+      };
+
+      // 1. Dual-Database: Update call session in Supabase
+      await RealtimeCoordinator.updateCallSession(activeSession.id, {
+        participantUids: nextUids,
+        participants: nextParticipants,
+      });
+
+      // 2. Broadcast live incoming call notification to new participant
+      const userCallChannel = supabase.channel(`user_calls:${contact.uid}`);
+      await userCallChannel.send({
+        type: 'broadcast',
+        event: 'incoming_call',
+        payload: {
+          ...activeSession,
+          participantUids: nextUids,
+          participants: nextParticipants,
+          isGroup: true,
+        },
+      });
+
+      // 3. Update call in Firestore
+      await updateDoc(doc(db, 'calls', activeSession.id), {
+        participantUids: nextUids,
+        [`participants.${contact.uid}`]: {
+          uid: contact.uid,
+          status: 'ringing',
+          joinedAt: Date.now(),
+        },
+      }).catch(() => {});
+
+      setInvitedUids((prev) => [...prev, contact.uid]);
+      setAddedNotice(`Call invitation dispatched to ${contact.displayName}`);
+      setTimeout(() => setAddedNotice(null), 3000);
+    } catch (e: any) {
+      console.warn("Could not invite contact:", e);
+    }
+  };
+
   if (!activeSession) return null;
 
   const isVideo = activeSession.callType === 'video';
@@ -152,33 +287,78 @@ export const ActiveCallModal: React.FC = () => {
     ? (otherUser?.photoURL || activeSession.callerPhoto)
     : activeSession.callerPhoto;
 
-  const handleKeyPress = (k: string) => {
-    setKeypadInput((prev) => prev + k);
-  };
+  const filteredContacts = contactsList.filter((c) => {
+    if (!contactSearch.trim()) return true;
+    const q = contactSearch.toLowerCase();
+    return (
+      c.displayName?.toLowerCase().includes(q) ||
+      c.phoneNumber?.includes(q) ||
+      c.email?.toLowerCase().includes(q)
+    );
+  });
 
-  // Minimized Floating Pill Mode
+  // Dynamic Island Minimized Call Widget (iPhone style + Draggable)
   if (isMinimized) {
     return (
       <div 
-        onClick={() => setIsMinimized(false)}
-        className="fixed bottom-6 right-6 z-50 bg-[#1f2c34] text-white px-4 py-3 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3 cursor-pointer animate-fade-in hover:bg-[#2a3942] transition"
+        style={{ left: `${islandPos.x}px`, top: `${islandPos.y}px`, touchAction: 'none' }}
+        onPointerDown={onIslandPointerDown}
+        onClick={() => {
+          if (!dragRef.current.moved) {
+            setIsMinimized(false);
+          }
+        }}
+        className={`fixed z-50 select-none cursor-grab active:cursor-grabbing bg-black/95 text-white px-3.5 py-2.5 rounded-full shadow-[0_12px_45px_rgba(0,0,0,0.85)] border border-white/20 backdrop-blur-2xl flex items-center gap-3 animate-scale-in transition-transform ${
+          isDragging ? 'scale-105 shadow-[0_18px_60px_rgba(0,0,0,0.95)] border-[#00a884]/50' : 'hover:scale-[1.02]'
+        }`}
       >
-        <div className="relative">
+        {/* Contact avatar with status beacon */}
+        <div className="relative flex-shrink-0">
           <Avatar src={displayPhoto} name={displayName} size="sm" />
-          <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-[#00a884]' : 'bg-amber-400'} ring-2 ring-[#1f2c34]`} />
+          <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-[#00a884]' : 'bg-amber-400'} ring-2 ring-black`} />
         </div>
-        <div className="flex flex-col">
-          <span className="text-xs font-semibold max-w-[120px] truncate">{displayName}</span>
-          <span className="text-[11px] text-[#00a884] font-mono">
+
+        {/* Dynamic Island Voice Waveform & Call Info */}
+        <div className="flex flex-col min-w-0 pr-1">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-white max-w-[100px] truncate">{displayName}</span>
+            {/* Live Audio Equalizer Waveform Bars */}
+            {isConnected && (
+              <div className="flex items-center gap-0.5 h-3">
+                <span className="w-0.5 bg-[#00a884] rounded-full animate-bounce h-2" style={{ animationDelay: '0ms' }} />
+                <span className="w-0.5 bg-[#00a884] rounded-full animate-bounce h-3" style={{ animationDelay: '150ms' }} />
+                <span className="w-0.5 bg-[#00a884] rounded-full animate-bounce h-1.5" style={{ animationDelay: '300ms' }} />
+              </div>
+            )}
+          </div>
+          <span className="text-[10px] text-[#00a884] font-mono font-medium">
             {isConnected ? formatDuration(duration) : callStateLabel}
           </span>
         </div>
+
+        {/* Mic Toggle Button */}
         <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleAudio();
+          }}
+          className={`p-1.5 rounded-full transition flex-shrink-0 cursor-pointer ${
+            isAudioMuted ? 'bg-red-500/20 text-red-400' : 'bg-white/10 text-white hover:bg-white/20'
+          }`}
+          title={isAudioMuted ? "Unmute mic" : "Mute mic"}
+        >
+          {isAudioMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+        </button>
+
+        {/* End Call Button */}
+        <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
             endCall();
           }}
-          className="p-2 bg-[#ea0038] hover:bg-[#c90030] text-white rounded-full ml-1"
+          className="p-2 bg-[#ea0038] hover:bg-[#c90030] text-white rounded-full flex-shrink-0 cursor-pointer shadow-md"
           title="End Call"
         >
           <PhoneOff className="w-3.5 h-3.5" />
@@ -189,7 +369,7 @@ export const ActiveCallModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 bg-[#0b141a] flex flex-col justify-between overflow-hidden select-none animate-fade-in">
-      {/* Background ambient gradient glow for WhatsApp feel */}
+      {/* Background ambient gradient glow for WhatsApp / iOS feel */}
       <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#122822]/40 via-[#0b141a] to-[#0b141a]" />
 
       {/* Top Header Bar */}
@@ -197,7 +377,7 @@ export const ActiveCallModal: React.FC = () => {
         <button
           onClick={() => setIsMinimized(true)}
           className="p-2.5 rounded-full hover:bg-white/10 text-white/80 hover:text-white transition cursor-pointer"
-          title="Minimize Call"
+          title="Minimize Call (Dynamic Island)"
         >
           <ChevronDown className="w-6 h-6" />
         </button>
@@ -243,15 +423,17 @@ export const ActiveCallModal: React.FC = () => {
               </div>
             ) : (
               /* Waiting for remote video */
-              <div className="flex flex-col items-center text-center space-y-4">
-                <div className="relative">
-                  <span className="absolute -inset-4 rounded-full bg-[#00a884]/20 animate-pulse-ring" />
-                  <Avatar
-                    src={displayPhoto}
-                    name={displayName}
-                    size="xl"
-                    className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-[#00a884] shadow-2xl relative z-10"
-                  />
+              <div className="flex flex-col items-center text-center space-y-5">
+                <div className="relative w-36 h-36 sm:w-44 sm:h-44 flex items-center justify-center">
+                  <span className={`absolute -inset-4 sm:-inset-6 rounded-full ${isConnected ? 'bg-[#00a884]/20' : 'bg-amber-400/20'} animate-ping opacity-30`} />
+                  <span className={`absolute -inset-8 sm:-inset-12 rounded-full ${isConnected ? 'bg-[#00a884]/15' : 'bg-amber-400/15'} animate-pulse`} />
+                  <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-full overflow-hidden border-4 border-[#00a884] shadow-2xl relative z-10 bg-[#182229]">
+                    <img
+                      src={displayPhoto || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(displayName)}`}
+                      alt={displayName}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
                 </div>
                 <div>
                   <h3 className="text-2xl sm:text-3xl font-semibold text-white tracking-wide">
@@ -294,19 +476,22 @@ export const ActiveCallModal: React.FC = () => {
             </div>
           </div>
         ) : (
-          /* Audio Call Stage (Authentic WhatsApp Audio Layout) */
+          /* Audio Call Stage (Centered WhatsApp Audio Layout with Concentric Glowing Rings) */
           <div className="flex flex-col items-center justify-center text-center space-y-6">
-            <div className="relative">
-              {/* Pulsing Voice Activity Rings */}
-              <span className={`absolute -inset-6 rounded-full ${isConnected ? 'bg-[#00a884]/20' : 'bg-amber-400/20'} animate-pulse-ring`} />
-              <span className={`absolute -inset-12 rounded-full ${isConnected ? 'bg-[#00a884]/10' : 'bg-amber-400/10'} animate-pulse`} />
+            <div className="relative w-36 h-36 sm:w-44 sm:h-44 flex items-center justify-center">
+              {/* Concentric Pulsing Green Rings centered exactly around avatar */}
+              <span className={`absolute -inset-4 sm:-inset-6 rounded-full ${isConnected ? 'bg-[#00a884]/20' : 'bg-amber-400/20'} animate-ping opacity-30`} />
+              <span className={`absolute -inset-8 sm:-inset-12 rounded-full ${isConnected ? 'bg-[#00a884]/15' : 'bg-amber-400/15'} animate-pulse`} />
+              <span className={`absolute -inset-1 sm:-inset-2 rounded-full border-2 ${isConnected ? 'border-[#00a884]/40' : 'border-amber-400/40'}`} />
               
-              <Avatar
-                src={displayPhoto}
-                name={displayName}
-                size="xl"
-                className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-[#00a884]/60 shadow-2xl relative z-10"
-              />
+              {/* Large Perfectly Centered Avatar */}
+              <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-full overflow-hidden border-4 border-[#00a884] shadow-[0_0_50px_rgba(0,168,132,0.35)] relative z-10 bg-[#182229] flex items-center justify-center select-none">
+                <img
+                  src={displayPhoto || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(displayName)}`}
+                  alt={displayName}
+                  className="w-full h-full object-cover"
+                />
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -314,7 +499,7 @@ export const ActiveCallModal: React.FC = () => {
                 {displayName}
               </h2>
               <div className="flex items-center justify-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-[#00a884]' : 'bg-amber-400'} animate-pulse`} />
+                <span className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-[#00a884]' : 'bg-amber-400'} animate-pulse`} />
                 <span className="text-sm sm:text-base text-[#00a884] font-mono font-medium">
                   {isConnected ? formatDuration(duration) : callStateLabel}
                 </span>
@@ -324,41 +509,99 @@ export const ActiveCallModal: React.FC = () => {
           </div>
         )}
 
-        {/* Dialpad Overlay Modal */}
-        {showKeypad && (
+        {/* Notice feedback banner */}
+        {addedNotice && (
+          <div className="absolute top-4 bg-[#00a884] text-white px-4 py-2 rounded-2xl text-xs font-semibold shadow-xl border border-white/20 animate-fade-in flex items-center gap-2">
+            <Check className="w-4 h-4" />
+            <span>{addedNotice}</span>
+          </div>
+        )}
+
+        {/* ADD PARTICIPANT MODAL SHEET */}
+        {showAddParticipant && (
           <div className="absolute inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center z-30 p-4 animate-scale-in">
-            <div className="bg-[#1f2c34] p-6 rounded-3xl border border-white/10 w-full max-w-xs text-center space-y-4 shadow-2xl">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-white">Touch-Tone Keypad</span>
+            <div className="bg-[#1f2c34] p-5 rounded-3xl border border-white/10 w-full max-w-sm text-left space-y-4 shadow-2xl flex flex-col max-h-[75vh]">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-[#00a884]" />
+                  <span className="text-sm font-bold text-white">Add Contact to Call</span>
+                </div>
                 <button
-                  onClick={() => setShowKeypad(false)}
+                  type="button"
+                  onClick={() => setShowAddParticipant(false)}
                   className="p-1 rounded-full text-[#8696a0] hover:text-white"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="h-10 bg-[#111b21] rounded-xl flex items-center justify-center text-lg font-mono text-white tracking-widest px-3">
-                {keypadInput || '—'}
+              {/* Search contacts */}
+              <div className="relative flex items-center">
+                <Search className="w-4 h-4 text-[#8696a0] absolute left-3" />
+                <input
+                  type="text"
+                  placeholder="Search contacts by name or phone..."
+                  value={contactSearch}
+                  onChange={(e) => setContactSearch(e.target.value)}
+                  className="w-full bg-[#111b21] border border-[#2e3b44] rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-[#8696a0] focus:outline-none focus:border-[#00a884]"
+                />
               </div>
 
-              <div className="grid grid-cols-3 gap-2.5">
-                {KEYPAD_KEYS.map((k) => (
-                  <button
-                    key={k}
-                    onClick={() => handleKeyPress(k)}
-                    className="p-3 bg-[#2a3942] hover:bg-[#32444f] active:bg-[#00a884] text-white rounded-2xl text-base font-semibold font-mono transition"
-                  >
-                    {k}
-                  </button>
-                ))}
+              {/* Contacts List */}
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-60">
+                {filteredContacts.length > 0 ? (
+                  filteredContacts.map((contact) => {
+                    const isInvited = invitedUids.includes(contact.uid);
+                    return (
+                      <div
+                        key={contact.uid}
+                        className="flex items-center justify-between p-2 rounded-xl bg-[#111b21] border border-white/5 hover:border-[#00a884]/40 transition"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <Avatar src={contact.photoURL} name={contact.displayName} size="sm" isOnline={contact.isOnline} />
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-white truncate">{contact.displayName}</div>
+                            <div className="text-[10px] text-[#00a884] font-mono">{contact.phoneNumber}</div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleAddParticipant(contact)}
+                          disabled={isInvited}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition cursor-pointer ${
+                            isInvited
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                              : 'bg-[#00a884] hover:bg-[#02906f] text-white shadow-md'
+                          }`}
+                        >
+                          {isInvited ? (
+                            <>
+                              <Check className="w-3 h-3" />
+                              <span>Invited</span>
+                            </>
+                          ) : (
+                            <>
+                              <UserPlus className="w-3 h-3" />
+                              <span>Add</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="py-8 text-center text-xs text-[#8696a0]">
+                    {contactSearch ? "No matching contacts found." : "No available contacts to add."}
+                  </div>
+                )}
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* WhatsApp Bottom Control Bar: Iconic Floating Pill */}
+      {/* WhatsApp Bottom Control Bar: Iconic Floating Pill with Add Contact */}
       <div className="relative z-20 pb-safe px-4 py-6">
         <div className="bg-[#1f2c34]/95 backdrop-blur-2xl rounded-full px-5 sm:px-8 py-3.5 shadow-2xl border border-white/10 flex items-center justify-between gap-3 sm:gap-6 max-w-md mx-auto">
           {/* Mute Microphone */}
@@ -402,15 +645,13 @@ export const ActiveCallModal: React.FC = () => {
             {isVideoMuted ? <VideoOff className="w-5 h-5 text-red-400" /> : <Video className="w-5 h-5" />}
           </button>
 
-          {/* Toggle Keypad */}
+          {/* Add Contact to Call (Replacing Keypad!) */}
           <button
-            onClick={() => setShowKeypad(!showKeypad)}
-            className={`p-3.5 rounded-full transition cursor-pointer ${
-              showKeypad ? 'bg-white text-black' : 'bg-[#2a3942] text-white hover:bg-[#32444f]'
-            }`}
-            title="Dialpad"
+            onClick={() => setShowAddParticipant(true)}
+            className="p-3.5 rounded-full bg-[#2a3942] hover:bg-[#32444f] text-white transition cursor-pointer"
+            title="Add contact to call"
           >
-            <Grid className="w-5 h-5" />
+            <UserPlus className="w-5 h-5 text-[#00a884]" />
           </button>
 
           {/* Screen Share (Desktop) */}

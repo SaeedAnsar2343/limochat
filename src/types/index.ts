@@ -205,6 +205,8 @@ export type Chat = {
   description?: string;
   participants: string[]; // uids
   adminIds?: string[]; // group admins
+  moderatorIds?: string[]; // group moderators
+  createdBy?: string; // group owner / creator
   communityId?: string; // If part of a community
   lastMessage?: {
     text: string;
@@ -274,6 +276,7 @@ export type CallSession = {
 
 export type CallHistoryItem = {
   id: string;
+  chatId?: string;
   callerId: string;
   callerName: string;
   callerPhoto?: string;

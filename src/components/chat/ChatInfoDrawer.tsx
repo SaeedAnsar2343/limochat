@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   ArrowLeft,
@@ -27,7 +27,13 @@ import {
   Download,
   Maximize2,
   ChevronRight,
-  Shield
+  Shield,
+  Crown,
+  Camera,
+  Edit2,
+  MoreVertical,
+  UserMinus,
+  History
 } from 'lucide-react';
 import { Chat, UserProfile, Message, GroupPermissions } from '../../types';
 import { Avatar } from '../common/Avatar';
@@ -36,6 +42,7 @@ import { formatTime, formatLastSeen } from '../../utils/formatters';
 import { doc, getDoc, updateDoc, arrayRemove, arrayUnion } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useChat } from '../../context/ChatContext';
+import { RealtimeCoordinator } from '../../utils/realtimeCoordinator';
 
 interface ChatInfoDrawerProps {
   chat: Chat;
@@ -87,11 +94,28 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [availableContacts, setAvailableContacts] = useState<UserProfile[]>([]);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [memberToAdd, setMemberToAdd] = useState<UserProfile | null>(null);
-  const [allowPastMessagesForMember, setAllowPastMessagesForMember] = useState(true);
+  const [selectedMembersToAdd, setSelectedMembersToAdd] = useState<UserProfile[]>([]);
+  const [allowPastMessages, setAllowPastMessages] = useState(true);
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [mediaTab, setMediaTab] = useState<MediaFilterTab>('media');
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+
+  // Editable Group Fields
+  const [chatName, setChatName] = useState(chat.name || '');
+  const [chatDescription, setChatDescription] = useState(chat.description || '');
+  const [chatAvatar, setChatAvatar] = useState(chat.avatar || '');
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameVal, setEditNameVal] = useState('');
+  const [isEditingDesc, setIsEditingDesc] = useState(false);
+  const [editDescVal, setEditDescVal] = useState('');
+  const [activeMemberMenuUid, setActiveMemberMenuUid] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setChatName(chat.name || '');
+    setChatDescription(chat.description || '');
+    setChatAvatar(chat.avatar || '');
+  }, [chat.id, chat.name, chat.description, chat.avatar]);
 
   const { updateGroupPermissions, deleteChat, deleteContact, getAllContacts, chats, exportChat } = useChat();
 
@@ -106,7 +130,8 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
     onConfirm: () => void;
   } | null>(null);
 
-  const isGroupAdmin = chat.adminIds?.includes(currentUser.uid);
+  const isGroupOwner = chat.createdBy === currentUser.uid;
+  const isGroupAdmin = (chat.adminIds || []).includes(currentUser.uid) || isGroupOwner;
   const groupPerms: GroupPermissions = chat.permissions || {
     whoCanSendMessage: 'all',
     whoCanAddMembers: 'all',
@@ -114,9 +139,13 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
     whoCanViewMembers: 'all',
   };
 
+  const canEditGroup = chat.type !== 'direct' && (isGroupAdmin || groupPerms.whoCanEditInfo === 'all');
+  const canAddMembers = chat.type !== 'direct' && (isGroupAdmin || groupPerms.whoCanAddMembers === 'all');
+
   const handleUpdatePerm = async (key: keyof GroupPermissions, val: 'all' | 'admins') => {
     const updated = { ...groupPerms, [key]: val };
     await updateGroupPermissions(chat.id, updated);
+    RealtimeCoordinator.updateGroupInfo(chat.id, { permissions: updated }).catch(() => {});
   };
 
   useEffect(() => {
@@ -167,42 +196,170 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleInitiateAddContact = (userToAdd: UserProfile) => {
-    setMemberToAdd(userToAdd);
-    setAllowPastMessagesForMember(true);
+  const handleSaveName = async () => {
+    if (!editNameVal.trim()) return;
+    const trimmed = editNameVal.trim();
+    setChatName(trimmed);
+    setIsEditingName(false);
+    try {
+      await updateDoc(doc(db, 'chats', chat.id), { name: trimmed });
+      RealtimeCoordinator.updateGroupInfo(chat.id, { name: trimmed }).catch(() => {});
+    } catch (err) {
+      console.warn("Update group name error:", err);
+    }
   };
 
-  const handleConfirmAddContact = async () => {
-    if (!memberToAdd) return;
-    const userToAdd = memberToAdd;
+  const handleSaveDescription = async () => {
+    const trimmed = editDescVal.trim();
+    setChatDescription(trimmed);
+    setIsEditingDesc(false);
+    try {
+      await updateDoc(doc(db, 'chats', chat.id), { description: trimmed });
+      RealtimeCoordinator.updateGroupInfo(chat.id, { description: trimmed }).catch(() => {});
+    } catch (err) {
+      console.warn("Update group description error:", err);
+    }
+  };
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      setChatAvatar(dataUrl);
+      try {
+        await updateDoc(doc(db, 'chats', chat.id), { avatar: dataUrl });
+        RealtimeCoordinator.updateGroupInfo(chat.id, { avatar: dataUrl }).catch(() => {});
+      } catch (err) {
+        console.warn("Update group avatar error:", err);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const toggleSelectMemberToAdd = (user: UserProfile) => {
+    if (selectedMembersToAdd.some((u) => u.uid === user.uid)) {
+      setSelectedMembersToAdd((prev) => prev.filter((u) => u.uid !== user.uid));
+    } else {
+      setSelectedMembersToAdd((prev) => [...prev, user]);
+    }
+  };
+
+  const handleConfirmAddMultipleMembers = async () => {
+    if (selectedMembersToAdd.length === 0) return;
     try {
       setIsAddingMember(true);
-      const chatRef = doc(db, 'chats', chat.id);
+      const newUids = selectedMembersToAdd.map((u) => u.uid);
+      const newParticipants = Array.from(new Set([...chat.participants, ...newUids]));
       const now = Date.now();
       const updates: any = {
-        participants: arrayUnion(userToAdd.uid),
+        participants: newParticipants,
       };
-      updates[`memberJoinedAt.${userToAdd.uid}`] = allowPastMessagesForMember ? 0 : now;
-      updates[`memberHistoryRestricted.${userToAdd.uid}`] = !allowPastMessagesForMember;
 
-      await updateDoc(chatRef, updates);
-      setParticipants((prev) => [...prev, userToAdd]);
-      setAvailableContacts((prev) => prev.filter((c) => c.uid !== userToAdd.uid));
-      setMemberToAdd(null);
+      const memberJoinedAtUpdates: Record<string, number> = { ...(chat.memberJoinedAt || {}) };
+      const memberHistoryRestrictedUpdates: Record<string, boolean> = { ...(chat.memberHistoryRestricted || {}) };
+
+      newUids.forEach((uid) => {
+        const joinedTime = allowPastMessages ? 0 : now;
+        updates[`memberJoinedAt.${uid}`] = joinedTime;
+        updates[`memberHistoryRestricted.${uid}`] = !allowPastMessages;
+        memberJoinedAtUpdates[uid] = joinedTime;
+        memberHistoryRestrictedUpdates[uid] = !allowPastMessages;
+      });
+
+      await updateDoc(doc(db, 'chats', chat.id), updates);
+      RealtimeCoordinator.updateGroupInfo(chat.id, {
+        participants: newParticipants,
+        memberJoinedAt: memberJoinedAtUpdates,
+        memberHistoryRestricted: memberHistoryRestrictedUpdates,
+      }).catch(() => {});
+
+      setParticipants((prev) => [...prev, ...selectedMembersToAdd]);
+      setAvailableContacts((prev) => prev.filter((c) => !newUids.includes(c.uid)));
+      setSelectedMembersToAdd([]);
+      setShowAddMember(false);
     } catch (err: any) {
       setConfirmConfig({
         isOpen: true,
-        title: "Could Not Add Member",
-        description: err.message || "Failed to add member to group.",
+        title: "Could Not Add Members",
+        description: err.message || "Failed to add selected members to group.",
         variant: "warning",
         singleAction: true,
         confirmText: "OK",
         onConfirm: () => setConfirmConfig(null),
       });
-      setMemberToAdd(null);
     } finally {
       setIsAddingMember(false);
     }
+  };
+
+  const handleMakeAdmin = async (targetUid: string) => {
+    const newAdmins = Array.from(new Set([...(chat.adminIds || []), targetUid]));
+    chat.adminIds = newAdmins;
+    await updateDoc(doc(db, 'chats', chat.id), { adminIds: newAdmins }).catch(() => {});
+    RealtimeCoordinator.updateGroupInfo(chat.id, { adminIds: newAdmins }).catch(() => {});
+    setActiveMemberMenuUid(null);
+  };
+
+  const handleDismissAdmin = async (targetUid: string) => {
+    const newAdmins = (chat.adminIds || []).filter((id) => id !== targetUid);
+    chat.adminIds = newAdmins;
+    await updateDoc(doc(db, 'chats', chat.id), { adminIds: newAdmins }).catch(() => {});
+    RealtimeCoordinator.updateGroupInfo(chat.id, { adminIds: newAdmins }).catch(() => {});
+    setActiveMemberMenuUid(null);
+  };
+
+  const handleMakeModerator = async (targetUid: string) => {
+    const newMods = Array.from(new Set([...(chat.moderatorIds || []), targetUid]));
+    chat.moderatorIds = newMods;
+    await updateDoc(doc(db, 'chats', chat.id), { moderatorIds: newMods }).catch(() => {});
+    RealtimeCoordinator.updateGroupInfo(chat.id, { moderatorIds: newMods }).catch(() => {});
+    setActiveMemberMenuUid(null);
+  };
+
+  const handleDismissModerator = async (targetUid: string) => {
+    const newMods = (chat.moderatorIds || []).filter((id) => id !== targetUid);
+    chat.moderatorIds = newMods;
+    await updateDoc(doc(db, 'chats', chat.id), { moderatorIds: newMods }).catch(() => {});
+    RealtimeCoordinator.updateGroupInfo(chat.id, { moderatorIds: newMods }).catch(() => {});
+    setActiveMemberMenuUid(null);
+  };
+
+  const handleRemoveMember = (targetUser: UserProfile) => {
+    setActiveMemberMenuUid(null);
+    setConfirmConfig({
+      isOpen: true,
+      title: `Remove "${targetUser.displayName}"?`,
+      description: `They will no longer be part of this group and cannot send or receive messages.`,
+      confirmText: "Remove Member",
+      cancelText: "Cancel",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmConfig(null);
+        const newParticipants = chat.participants.filter((id) => id !== targetUser.uid);
+        const newAdmins = (chat.adminIds || []).filter((id) => id !== targetUser.uid);
+        const newMods = (chat.moderatorIds || []).filter((id) => id !== targetUser.uid);
+        chat.participants = newParticipants;
+        chat.adminIds = newAdmins;
+        chat.moderatorIds = newMods;
+
+        await updateDoc(doc(db, 'chats', chat.id), {
+          participants: newParticipants,
+          adminIds: newAdmins,
+          moderatorIds: newMods,
+        }).catch(() => {});
+
+        RealtimeCoordinator.updateGroupInfo(chat.id, {
+          participants: newParticipants,
+          adminIds: newAdmins,
+          moderatorIds: newMods,
+        }).catch(() => {});
+
+        setParticipants((prev) => prev.filter((p) => p.uid !== targetUser.uid));
+        setAvailableContacts((prev) => [...prev, targetUser]);
+      },
+    });
   };
 
   const handleLeaveGroup = () => {
@@ -339,34 +496,104 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
 
       {/* Main Hero Card */}
       <div className="p-6 flex flex-col items-center border-b border-[#222e35] bg-[#111b21] text-center">
-        <div 
-          className="relative group cursor-pointer mb-3"
-          onClick={() => {
-            if (avatarUrl) {
-              onViewMedia({
-                url: avatarUrl,
-                type: 'image',
-                senderName: displayName,
-                caption: chat.type === 'direct' ? `${displayName}'s Profile Avatar` : `${displayName} Group Icon`,
-              });
-            }
-          }}
-          title="Click to view full photo"
-        >
-          <Avatar
-            src={avatarUrl}
-            name={displayName}
-            size="xl"
-            isOnline={chat.type === 'direct' ? targetUser?.isOnline : undefined}
-          />
-          <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-md">
-            <Maximize2 className="w-6 h-6 text-white" />
+        <input
+          ref={avatarInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleAvatarChange}
+        />
+
+        <div className="relative mb-3">
+          <div 
+            className="relative group cursor-pointer"
+            onClick={() => {
+              if (avatarUrl) {
+                onViewMedia({
+                  url: avatarUrl,
+                  type: 'image',
+                  senderName: displayName,
+                  caption: chat.type === 'direct' ? `${displayName}'s Profile Avatar` : `${displayName} Group Icon`,
+                });
+              }
+            }}
+            title="Click to view full photo"
+          >
+            <Avatar
+              src={avatarUrl}
+              name={displayName}
+              size="xl"
+              isOnline={chat.type === 'direct' ? targetUser?.isOnline : undefined}
+            />
+            <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-md">
+              <Maximize2 className="w-6 h-6 text-white" />
+            </div>
           </div>
+
+          {/* Group Photo Edit Overlay */}
+          {canEditGroup && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                avatarInputRef.current?.click();
+              }}
+              className="absolute bottom-0 right-0 p-2 rounded-full bg-[#00a884] hover:bg-[#02906f] text-white shadow-lg border-2 border-[#111b21] transition cursor-pointer active:scale-95"
+              title="Change group photo"
+            >
+              <Camera className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
-        <h2 className="text-lg sm:text-xl font-bold text-white truncate max-w-full">
-          {displayName}
-        </h2>
+        {/* Group or Direct Subject */}
+        {isEditingName ? (
+          <div className="flex items-center gap-1.5 w-full max-w-xs mt-1">
+            <input
+              type="text"
+              value={editNameVal}
+              onChange={(e) => setEditNameVal(e.target.value)}
+              autoFocus
+              placeholder="Group name..."
+              className="bg-[#202c33] border border-[#00a884] rounded-xl px-2.5 py-1 text-sm text-white w-full focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={handleSaveName}
+              className="p-1.5 rounded-lg bg-[#00a884] text-white hover:bg-[#02906f] cursor-pointer"
+              title="Save"
+            >
+              <Check className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsEditingName(false)}
+              className="p-1.5 rounded-lg bg-[#202c33] text-[#8696a0] hover:text-white cursor-pointer"
+              title="Cancel"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center gap-2 max-w-full">
+            <h2 className="text-lg sm:text-xl font-bold text-white truncate max-w-[280px]">
+              {displayName}
+            </h2>
+            {canEditGroup && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditNameVal(displayName || '');
+                  setIsEditingName(true);
+                }}
+                className="p-1 rounded-lg text-[#8696a0] hover:text-[#00a884] hover:bg-[#202c33] transition cursor-pointer"
+                title="Edit group name"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Online / Last Seen status */}
         {chat.type === 'direct' && targetUser && (
@@ -401,9 +628,53 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
 
         {/* Group Description */}
         {chat.type !== 'direct' && (
-          <p className="text-xs text-[#8696a0] mt-2 max-w-xs leading-relaxed">
-            {chat.description || 'Welcome to this community. Follow guidelines and chat respectfully.'}
-          </p>
+          isEditingDesc ? (
+            <div className="w-full max-w-xs mt-2.5 space-y-1.5">
+              <textarea
+                value={editDescVal}
+                onChange={(e) => setEditDescVal(e.target.value)}
+                rows={2}
+                autoFocus
+                placeholder="Group description..."
+                className="w-full bg-[#202c33] border border-[#00a884] rounded-xl p-2 text-xs text-white focus:outline-none resize-none"
+              />
+              <div className="flex justify-end gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingDesc(false)}
+                  className="px-2.5 py-1 rounded-lg text-xs text-[#8696a0] hover:text-white cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveDescription}
+                  className="px-3 py-1 rounded-lg bg-[#00a884] text-white text-xs font-semibold hover:bg-[#02906f] cursor-pointer shadow"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center gap-1.5 mt-2 max-w-xs">
+              <p className="text-xs text-[#8696a0] leading-relaxed">
+                {chatDescription || 'No description added yet.'}
+              </p>
+              {canEditGroup && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditDescVal(chatDescription);
+                    setIsEditingDesc(true);
+                  }}
+                  className="p-1 rounded-lg text-[#8696a0] hover:text-[#00a884] hover:bg-[#202c33] transition flex-shrink-0 cursor-pointer"
+                  title="Edit description"
+                >
+                  <Edit2 className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          )
         )}
       </div>
 
@@ -780,7 +1051,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
         </div>
       )}
 
-      {/* Group Permissions & Privacy Controls (For Group Admins) */}
+      {/* Group Permissions & Admin Rules (For Group Admins) */}
       {chat.type !== 'direct' && isGroupAdmin && (
         <div className="p-4 border-b border-[#222e35] bg-[#111b21] space-y-3">
           <div className="flex items-center gap-2 text-xs font-semibold text-white">
@@ -794,7 +1065,19 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
               <select
                 value={groupPerms.whoCanSendMessage}
                 onChange={(e) => handleUpdatePerm('whoCanSendMessage', e.target.value as any)}
-                className="bg-[#202c33] border border-[#2e3b44] rounded-lg px-2 py-0.5 text-xs text-white focus:outline-none focus:border-[#00a884]"
+                className="bg-[#202c33] border border-[#2e3b44] rounded-lg px-2 py-0.5 text-xs text-white focus:outline-none focus:border-[#00a884] cursor-pointer"
+              >
+                <option value="all">All Members</option>
+                <option value="admins">Only Admins</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-[#8696a0]">Edit Group Info (Name, Photo, Bio)</span>
+              <select
+                value={groupPerms.whoCanEditInfo || 'all'}
+                onChange={(e) => handleUpdatePerm('whoCanEditInfo', e.target.value as any)}
+                className="bg-[#202c33] border border-[#2e3b44] rounded-lg px-2 py-0.5 text-xs text-white focus:outline-none focus:border-[#00a884] cursor-pointer"
               >
                 <option value="all">All Members</option>
                 <option value="admins">Only Admins</option>
@@ -806,7 +1089,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
               <select
                 value={groupPerms.whoCanAddMembers}
                 onChange={(e) => handleUpdatePerm('whoCanAddMembers', e.target.value as any)}
-                className="bg-[#202c33] border border-[#2e3b44] rounded-lg px-2 py-0.5 text-xs text-white focus:outline-none focus:border-[#00a884]"
+                className="bg-[#202c33] border border-[#2e3b44] rounded-lg px-2 py-0.5 text-xs text-white focus:outline-none focus:border-[#00a884] cursor-pointer"
               >
                 <option value="all">All Members</option>
                 <option value="admins">Only Admins</option>
@@ -818,7 +1101,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
               <select
                 value={groupPerms.whoCanViewMembers}
                 onChange={(e) => handleUpdatePerm('whoCanViewMembers', e.target.value as any)}
-                className="bg-[#202c33] border border-[#2e3b44] rounded-lg px-2 py-0.5 text-xs text-white focus:outline-none focus:border-[#00a884]"
+                className="bg-[#202c33] border border-[#2e3b44] rounded-lg px-2 py-0.5 text-xs text-white focus:outline-none focus:border-[#00a884] cursor-pointer"
               >
                 <option value="all">All Members</option>
                 <option value="admins">Only Admins</option>
@@ -835,27 +1118,78 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
             <span className="text-white font-semibold">
               {participants.length} Participants
             </span>
-            {(isGroupAdmin || groupPerms.whoCanAddMembers === 'all') && (
+            {canAddMembers && (
               <button
+                type="button"
                 onClick={() => setShowAddMember(!showAddMember)}
                 className="flex items-center gap-1 text-[#00a884] hover:underline cursor-pointer font-medium"
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                <span>Add Member</span>
+                <span>{showAddMember ? 'Cancel' : 'Add Members'}</span>
               </button>
             )}
           </div>
 
+          {/* Multi-Select Add Members Box */}
           {showAddMember && (
-            <div className="p-3 bg-[#202c33] rounded-2xl space-y-2 border border-[#2e3b44] animate-scale-in">
+            <div className="p-3.5 bg-[#202c33] rounded-2xl space-y-3 border border-[#2e3b44] animate-scale-in shadow-xl">
               <div className="text-xs font-semibold text-white flex items-center justify-between">
-                <span>Select Contact to Add</span>
+                <span>Add Members</span>
                 <button
-                  onClick={() => setShowAddMember(false)}
-                  className="text-[#8696a0] hover:text-white"
+                  type="button"
+                  onClick={() => {
+                    setShowAddMember(false);
+                    setSelectedMembersToAdd([]);
+                  }}
+                  className="text-[#8696a0] hover:text-white cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
+              </div>
+
+              {/* Selected Contacts Chips */}
+              {selectedMembersToAdd.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                  {selectedMembersToAdd.map((u) => (
+                    <span
+                      key={u.uid}
+                      onClick={() => toggleSelectMemberToAdd(u)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#00a884]/20 border border-[#00a884]/40 text-[#00a884] text-xs cursor-pointer hover:bg-red-500/20 hover:border-red-500/40 hover:text-red-400 transition"
+                      title="Click to remove"
+                    >
+                      <span className="truncate max-w-[120px]">{u.displayName}</span>
+                      <X className="w-3 h-3 flex-shrink-0" />
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Past History Visibility Toggle */}
+              <div className="p-2.5 bg-[#111b21] rounded-xl border border-[#2e3b44] space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <History className="w-3.5 h-3.5 text-[#00a884]" />
+                    <span className="text-xs font-semibold text-white">View Past Messages</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAllowPastMessages(!allowPastMessages)}
+                    className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${
+                      allowPastMessages ? 'bg-[#00a884]' : 'bg-[#3b4a54]'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                        allowPastMessages ? 'right-0.5' : 'left-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+                <p className="text-[10px] text-[#8696a0] leading-snug">
+                  {allowPastMessages
+                    ? "✓ New members can read previous group messages."
+                    : "✗ Restricted: Members only see messages after joining."}
+                </p>
               </div>
 
               {/* Search contacts input */}
@@ -863,40 +1197,67 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
                 <Search className="w-3.5 h-3.5 text-[#8696a0] absolute left-2.5" />
                 <input
                   type="text"
-                  placeholder="Search contacts..."
+                  placeholder="Search contacts to add..."
                   value={memberSearchQuery}
                   onChange={(e) => setMemberSearchQuery(e.target.value)}
                   className="w-full bg-[#111b21] pl-8 pr-3 py-1.5 text-xs rounded-xl border border-[#2e3b44] text-white focus:outline-none focus:border-[#00a884]"
                 />
               </div>
 
-              {/* Contact list dropdown */}
-              <div className="max-h-40 overflow-y-auto space-y-1">
+              {/* Contact list multi-select dropdown */}
+              <div className="max-h-44 overflow-y-auto space-y-1 pr-1">
                 {filteredAvailableContacts.length > 0 ? (
-                  filteredAvailableContacts.map((c) => (
-                    <div
-                      key={c.uid}
-                      onClick={() => handleInitiateAddContact(c)}
-                      className="flex items-center justify-between p-1.5 rounded-xl hover:bg-[#111b21] cursor-pointer transition"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Avatar src={c.photoURL} name={c.displayName} size="sm" isOnline={c.isOnline} />
-                        <div className="min-w-0">
-                          <div className="text-xs text-white truncate font-medium">{c.displayName}</div>
-                          <div className="text-[10px] text-[#8696a0] font-mono">{c.phoneNumber}</div>
+                  filteredAvailableContacts.map((c) => {
+                    const isSelected = selectedMembersToAdd.some((u) => u.uid === c.uid);
+                    return (
+                      <div
+                        key={c.uid}
+                        onClick={() => toggleSelectMemberToAdd(c)}
+                        className={`flex items-center justify-between p-2 rounded-xl cursor-pointer transition ${
+                          isSelected
+                            ? 'bg-[#00a884]/20 border border-[#00a884]/40'
+                            : 'hover:bg-[#111b21] border border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Avatar src={c.photoURL} name={c.displayName} size="sm" isOnline={c.isOnline} />
+                          <div className="min-w-0">
+                            <div className="text-xs text-white truncate font-medium">{c.displayName}</div>
+                            <div className="text-[10px] text-[#8696a0] font-mono">{c.phoneNumber}</div>
+                          </div>
+                        </div>
+
+                        <div
+                          className={`w-5 h-5 rounded-md border flex items-center justify-center transition flex-shrink-0 ${
+                            isSelected ? 'bg-[#00a884] border-[#00a884] text-white' : 'border-[#3b4a54]'
+                          }`}
+                        >
+                          {isSelected && <Check className="w-3.5 h-3.5" />}
                         </div>
                       </div>
-                      <span className="text-[10px] text-[#00a884] font-semibold px-2 py-0.5 rounded-lg bg-[#00a884]/15 hover:bg-[#00a884] hover:text-white transition">
-                        + Add
-                      </span>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
-                  <div className="text-center py-3 text-xs text-[#8696a0] italic">
-                    {availableContacts.length === 0 ? "No more contacts to add" : "No matching contacts"}
+                  <div className="text-center py-4 text-xs text-[#8696a0] italic">
+                    {availableContacts.length === 0 ? "No more contacts to add" : "No matching contacts found"}
                   </div>
                 )}
               </div>
+
+              {/* Action Button */}
+              <button
+                type="button"
+                onClick={handleConfirmAddMultipleMembers}
+                disabled={selectedMembersToAdd.length === 0 || isAddingMember}
+                className="w-full py-2 bg-[#00a884] hover:bg-[#02906f] text-white rounded-xl text-xs font-semibold transition disabled:opacity-40 cursor-pointer shadow flex items-center justify-center gap-1.5"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>
+                  {isAddingMember
+                    ? "Adding..."
+                    : `Add ${selectedMembersToAdd.length || ''} Member${selectedMembersToAdd.length === 1 ? '' : 's'}`}
+                </span>
+              </button>
             </div>
           )}
 
@@ -905,25 +1266,122 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
               🔒 Member list is hidden by group administration.
             </div>
           ) : (
-            <div className="space-y-2 max-h-52 overflow-y-auto">
+            <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
               {participants.map((p) => {
-                const isAdmin = chat.adminIds?.includes(p.uid);
+                const isOwner = p.uid === (chat.createdBy || chat.adminIds?.[0]);
+                const isAdmin = (chat.adminIds || []).includes(p.uid);
+                const isMod = (chat.moderatorIds || []).includes(p.uid);
+                const isSelf = p.uid === currentUser.uid;
+                const canManageUser = (isGroupAdmin || isGroupOwner) && !isSelf && !isOwner;
+
                 return (
-                  <div key={p.uid} className="flex items-center justify-between py-1 px-1 rounded-lg hover:bg-[#182229]">
-                    <div className="flex items-center gap-2.5 min-w-0">
+                  <div
+                    key={p.uid}
+                    className="flex items-center justify-between py-1.5 px-2 rounded-xl hover:bg-[#182229] transition group relative"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
                       <Avatar src={p.photoURL} name={p.displayName} size="sm" isOnline={p.isOnline} />
                       <div className="min-w-0">
-                        <div className="text-xs font-medium text-white truncate">
-                          {p.uid === currentUser.uid ? 'You' : p.displayName}
+                        <div className="text-xs font-medium text-white truncate flex items-center gap-1.5">
+                          <span>{isSelf ? 'You' : p.displayName}</span>
                         </div>
                         <div className="text-[10px] text-[#8696a0] font-mono">{p.phoneNumber}</div>
                       </div>
                     </div>
-                    {isAdmin && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#00a884]/20 text-[#00a884] font-semibold">
-                        Admin
-                      </span>
-                    )}
+
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {/* Badges */}
+                      {isOwner && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 flex items-center gap-1">
+                          <Crown className="w-3 h-3 text-amber-300" />
+                          <span>Owner</span>
+                        </span>
+                      )}
+                      {!isOwner && isAdmin && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00a884]/20 text-[#00a884] font-semibold border border-[#00a884]/30 flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>Admin</span>
+                        </span>
+                      )}
+                      {isMod && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/30 flex items-center gap-1">
+                          <Shield className="w-3 h-3" />
+                          <span>Mod</span>
+                        </span>
+                      )}
+
+                      {/* Manage Member Menu Trigger */}
+                      {canManageUser && (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setActiveMemberMenuUid(activeMemberMenuUid === p.uid ? null : p.uid)
+                            }
+                            className="p-1 rounded-lg text-[#8696a0] hover:text-white hover:bg-[#202c33] transition cursor-pointer"
+                            title="Member options"
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Dropdown Menu */}
+                          {activeMemberMenuUid === p.uid && (
+                            <div className="absolute right-0 top-8 z-50 bg-[#202c33] border border-[#2e3b44] rounded-2xl shadow-2xl py-1.5 w-48 text-xs animate-scale-in">
+                              {isAdmin ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDismissAdmin(p.uid)}
+                                  className="w-full px-3 py-2 text-left text-[#8696a0] hover:text-white hover:bg-[#111b21] flex items-center gap-2 cursor-pointer transition"
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
+                                  <span>Dismiss as Admin</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMakeAdmin(p.uid)}
+                                  className="w-full px-3 py-2 text-left text-white hover:bg-[#111b21] flex items-center gap-2 cursor-pointer transition"
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5 text-[#00a884]" />
+                                  <span>Make Group Admin</span>
+                                </button>
+                              )}
+
+                              {isMod ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDismissModerator(p.uid)}
+                                  className="w-full px-3 py-2 text-left text-[#8696a0] hover:text-white hover:bg-[#111b21] flex items-center gap-2 cursor-pointer transition"
+                                >
+                                  <Shield className="w-3.5 h-3.5 text-red-400" />
+                                  <span>Dismiss Moderator</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMakeModerator(p.uid)}
+                                  className="w-full px-3 py-2 text-left text-white hover:bg-[#111b21] flex items-center gap-2 cursor-pointer transition"
+                                >
+                                  <Shield className="w-3.5 h-3.5 text-indigo-400" />
+                                  <span>Assign Moderator</span>
+                                </button>
+                              )}
+
+                              <div className="h-[1px] bg-[#2e3b44] my-1" />
+
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMember(p)}
+                                className="w-full px-3 py-2 text-left text-red-400 hover:bg-red-500/10 flex items-center gap-2 cursor-pointer transition"
+                              >
+                                <UserMinus className="w-3.5 h-3.5 text-red-400" />
+                                <span>Remove from Group</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -1019,56 +1477,6 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
           </button>
         )}
       </div>
-
-      {/* Confirm Add Member & Past Message History Access Modal */}
-      {memberToAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fade-in select-none">
-          <div className="bg-[#202c33] text-[#e9edef] rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-[#2e3b44] p-5 space-y-4">
-            <div className="flex items-center gap-3">
-              <Avatar src={memberToAdd.photoURL} name={memberToAdd.displayName} size="md" />
-              <div className="min-w-0">
-                <h4 className="font-semibold text-white text-sm truncate">Add to {chat.name}</h4>
-                <p className="text-xs text-[#8696a0] truncate">{memberToAdd.displayName} • {memberToAdd.phoneNumber || 'Member'}</p>
-              </div>
-            </div>
-
-            <div className="bg-[#111b21] p-3.5 rounded-2xl border border-[#2e3b44] space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-white">View Past Messages</span>
-                <input
-                  type="checkbox"
-                  checked={allowPastMessagesForMember}
-                  onChange={(e) => setAllowPastMessagesForMember(e.target.checked)}
-                  className="w-4 h-4 accent-[#00a884] rounded cursor-pointer"
-                />
-              </div>
-              <p className="text-[11px] text-[#8696a0] leading-relaxed">
-                {allowPastMessagesForMember
-                  ? "✓ Allowed: Member can read all previous message history in this group."
-                  : "✗ Restricted: Member can only view new messages sent after they join."}
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setMemberToAdd(null)}
-                className="px-4 py-2 rounded-xl text-xs text-[#8696a0] hover:text-white hover:bg-[#182229] transition font-medium cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isAddingMember}
-                onClick={handleConfirmAddContact}
-                className="px-4 py-2 rounded-xl text-xs bg-[#00a884] hover:bg-[#02906f] text-white transition font-medium shadow flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-              >
-                {isAddingMember ? "Adding..." : "Add Member"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {confirmConfig && (
         <ConfirmModal

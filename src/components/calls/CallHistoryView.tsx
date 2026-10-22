@@ -15,17 +15,62 @@ import { useAuth } from '../../context/AuthContext';
 import { useChat } from '../../context/ChatContext';
 import { Avatar } from '../common/Avatar';
 import { formatTime, formatDuration } from '../../utils/formatters';
-import { CallHistoryItem } from '../../types';
+import { CallHistoryItem, UserProfile } from '../../types';
 import { CallListSkeleton } from '../common/SkeletonLoading';
 
 export const CallHistoryView: React.FC = () => {
   const { callHistory, startCall } = useCall();
   const { currentUser } = useAuth();
-  const { chats } = useChat();
+  const { chats, setActiveChat, createDirectChat } = useChat();
   const [filter, setFilter] = useState<'all' | 'missed'>('all');
   const [search, setSearch] = useState('');
 
   if (!currentUser) return null;
+
+  const handleOpenChat = async (item: CallHistoryItem) => {
+    if (item.isGroup) {
+      const groupChat = chats.find(
+        (c) => (item.chatId && c.id === item.chatId) || c.name === item.groupName
+      );
+      if (groupChat) {
+        setActiveChat(groupChat);
+      }
+      return;
+    }
+    const targetUid = item.callerId === currentUser.uid ? item.receiverId : item.callerId;
+    const targetName = (item.callerId === currentUser.uid ? item.receiverName : item.callerName) || 'Contact';
+    const targetPhoto = item.callerId === currentUser.uid ? item.receiverPhoto : item.callerPhoto;
+    if (!targetUid) return;
+
+    const directChat = chats.find(
+      (c) => c.type === 'direct' && c.participants?.includes(targetUid)
+    );
+    if (directChat) {
+      setActiveChat(directChat);
+    } else {
+      const targetUser: UserProfile = {
+        uid: targetUid,
+        displayName: targetName,
+        photoURL: targetPhoto || '',
+        email: '',
+        phoneNumber: '',
+        about: '',
+        isOnline: false,
+        lastSeen: Date.now(),
+        blockedUsers: [],
+        createdAt: Date.now(),
+        privacy: {
+          lastSeen: 'everyone',
+          profilePhoto: 'everyone',
+          about: 'everyone',
+          readReceipts: true,
+          status: 'everyone',
+        },
+      };
+      const newChat = await createDirectChat(targetUser).catch(() => null);
+      if (newChat) setActiveChat(newChat);
+    }
+  };
 
   const filteredHistory = callHistory.filter((item) => {
     if (filter === 'missed' && item.direction !== 'missed') return false;
@@ -124,16 +169,21 @@ export const CallHistoryView: React.FC = () => {
                 key={item.id}
                 className="flex items-center justify-between p-3.5 hover:bg-[#202c33] transition group"
               >
-                <div className="flex items-center gap-3 min-w-0">
+                <div 
+                  onClick={() => handleOpenChat(item)}
+                  className="flex items-center gap-3 min-w-0 cursor-pointer flex-1 group-hover:opacity-95"
+                  title="Click to open chat"
+                >
                   <Avatar
                     src={displayPhoto}
                     name={displayName}
                     size="md"
+                    className="hover:scale-105 transition-transform"
                   />
 
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <h4
-                      className={`text-sm font-semibold truncate ${
+                      className={`text-sm font-semibold truncate hover:underline ${
                         isMissed ? 'text-red-400' : 'text-white'
                       }`}
                     >
@@ -143,16 +193,29 @@ export const CallHistoryView: React.FC = () => {
                     <div className="flex items-center gap-1.5 text-xs text-[#8696a0] mt-0.5">
                       {/* Direction Icon */}
                       {isMissed ? (
-                        <PhoneMissed className="w-3.5 h-3.5 text-red-400" />
+                        <span className="flex items-center gap-1 text-red-400 font-medium">
+                          <PhoneMissed className="w-3.5 h-3.5" />
+                          <span>Missed</span>
+                        </span>
                       ) : isMeCaller ? (
-                        <PhoneOutgoing className="w-3.5 h-3.5 text-[#00a884]" />
+                        <span className="flex items-center gap-1 text-[#00a884] font-medium">
+                          <PhoneOutgoing className="w-3.5 h-3.5" />
+                          <span>Outgoing</span>
+                        </span>
                       ) : (
-                        <PhoneIncoming className="w-3.5 h-3.5 text-[#00a884]" />
+                        <span className="flex items-center gap-1 text-[#00a884] font-medium">
+                          <PhoneIncoming className="w-3.5 h-3.5" />
+                          <span>Incoming</span>
+                        </span>
                       )}
 
                       <span>
-                        {formatTime(item.timestamp)}
-                        {item.duration ? ` • ${formatDuration(item.duration)}` : ''}
+                        • {formatTime(item.timestamp)}
+                        {item.duration !== undefined && item.duration > 0 && (
+                          <span className="ml-1 text-emerald-400 font-mono font-semibold">
+                            ({formatDuration(item.duration)})
+                          </span>
+                        )}
                       </span>
                     </div>
                   </div>

@@ -880,6 +880,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateGroupPermissions = async (chatId: string, permissions: GroupPermissions) => {
     try {
       await updateDoc(doc(db, 'chats', chatId), { permissions });
+      RealtimeCoordinator.updateGroupInfo(chatId, { permissions }).catch(() => {});
       setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, permissions } : c)));
       if (activeChat?.id === chatId) {
         setActiveChat((prev) => (prev ? { ...prev, permissions } : null));
@@ -1286,16 +1287,21 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const deleteContact = async (targetUid: string) => {
     if (!currentUser) return;
-    if (targetUid === SYSTEM_SUPPORT_USER.uid || targetUid === 'limochat_official_support') {
+    if (targetUid === SYSTEM_SUPPORT_USER.uid || targetUid === 'limochat_official_support' || targetUid.startsWith('support_')) {
       console.warn("LimoChat Support contact cannot be deleted.");
       return;
     }
     const updated = Array.from(new Set([...(currentUser.deletedContactUids || []), targetUid]));
+    currentUser.deletedContactUids = updated;
+
+    // Dual-database: Firestore + Supabase
     await updateDoc(doc(db, 'users', currentUser.uid), {
       deletedContactUids: updated
     }).catch(() => {});
 
-    // Delete direct chat if exists
+    RealtimeCoordinator.deleteContact(currentUser.uid, targetUid).catch(() => {});
+
+    // Delete direct chat if exists (deletes in both Supabase & Firestore)
     const directChat = chats.find(c => c.type === 'direct' && c.participants.includes(targetUid));
     if (directChat) {
       await deleteChat(directChat.id);

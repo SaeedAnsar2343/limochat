@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Users, Search, Check, ShieldCheck, History, Eye, EyeOff } from 'lucide-react';
+import { X, Users, Search, Check } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { Avatar } from '../common/Avatar';
 import { useChat } from '../../context/ChatContext';
@@ -19,7 +19,6 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({ isOpen, onClose })
   const [searchQuery, setSearchQuery] = useState('');
   const [contacts, setContacts] = useState<UserProfile[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<UserProfile[]>([]);
-  const [allowPastMessages, setAllowPastMessages] = useState(true);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -70,7 +69,7 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({ isOpen, onClose })
         description.trim(),
         selectedUsers.map((u) => u.uid),
         undefined,
-        allowPastMessages
+        true
       );
       onClose();
     } catch (err: any) {
@@ -123,37 +122,6 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({ isOpen, onClose })
                 rows={2}
                 className="w-full bg-[#111b21] border border-[#2e3b44] rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#00a884] resize-none"
               />
-            </div>
-          </div>
-
-          {/* Past History Visibility Toggle */}
-          <div className="p-3 bg-[#111b21] rounded-2xl border border-[#2e3b44] space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-1.5 rounded-lg bg-[#00a884]/20 text-[#00a884]">
-                  <History className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-white">View Past Message History</div>
-                  <div className="text-[11px] text-[#8696a0]">
-                    {allowPastMessages ? "New members can view all past messages" : "New members only see messages sent after joining"}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setAllowPastMessages(!allowPastMessages)}
-                className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${
-                  allowPastMessages ? 'bg-[#00a884]' : 'bg-[#3b4a54]'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-                    allowPastMessages ? 'right-0.5' : 'left-0.5'
-                  }`}
-                />
-              </button>
             </div>
           </div>
 

@@ -100,6 +100,65 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [callHistory]);
 
+  // Dual-Database: Load and subscribe to cross-device call history
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+
+    // 1. Fetch from Supabase PostgreSQL
+    RealtimeCoordinator.fetchCallLogs(currentUser.uid).then((logs) => {
+      if (logs.length > 0) {
+        setCallHistory((prev) => {
+          const map = new Map<string, CallHistoryItem>();
+          prev.forEach((item) => map.set(item.id, item));
+          logs.forEach((item) => map.set(item.id, item));
+          const sorted = Array.from(map.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          try {
+            localStorage.setItem('limochat_call_history', JSON.stringify(sorted));
+          } catch {}
+          return sorted;
+        });
+      }
+    }).catch(() => {});
+
+    // 2. Real-time subscription to incoming call logs from other devices
+    const unsubSupaLogs = RealtimeCoordinator.subscribeToCallLogs(currentUser.uid, (newLog) => {
+      setCallHistory((prev) => {
+        const map = new Map<string, CallHistoryItem>();
+        prev.forEach((item) => map.set(item.id, item));
+        map.set(newLog.id, newLog);
+        const sorted = Array.from(map.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        try {
+          localStorage.setItem('limochat_call_history', JSON.stringify(sorted));
+        } catch {}
+        return sorted;
+      });
+    });
+
+    // 3. Firestore call logs listener
+    const logsCol = collection(db, 'users', currentUser.uid, 'call_logs');
+    const unsubFsLogs = onSnapshot(query(logsCol, orderBy('timestamp', 'desc')), (snap) => {
+      const list: CallHistoryItem[] = [];
+      snap.forEach((d) => list.push({ ...d.data(), id: d.id } as CallHistoryItem));
+      if (list.length > 0) {
+        setCallHistory((prev) => {
+          const map = new Map<string, CallHistoryItem>();
+          prev.forEach((item) => map.set(item.id, item));
+          list.forEach((item) => map.set(item.id, item));
+          const sorted = Array.from(map.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          try {
+            localStorage.setItem('limochat_call_history', JSON.stringify(sorted));
+          } catch {}
+          return sorted;
+        });
+      }
+    }, () => {});
+
+    return () => {
+      unsubSupaLogs();
+      unsubFsLogs();
+    };
+  }, [currentUser?.uid]);
+
   // Listen for incoming calls targeted at current user (Dual Engine: Supabase + Firestore)
   useEffect(() => {
     if (!currentUser?.uid) return;
@@ -738,17 +797,30 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     soundEngine.stopRingtone();
     if (incomingSession && currentUser) {
       const historyItem: CallHistoryItem = {
-        id: `call_${Date.now()}`,
+        id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         callerId: incomingSession.callerId,
         callerName: incomingSession.callerName,
         callerPhoto: incomingSession.callerPhoto,
+        receiverId: currentUser.uid,
+        receiverName: currentUser.displayName || 'User',
+        receiverPhoto: currentUser.photoURL || '',
         callType: incomingSession.callType,
         direction: 'missed',
+        duration: 0,
         timestamp: Date.now(),
         isGroup: incomingSession.isGroup,
         groupName: incomingSession.groupName,
       };
+
       setCallHistory(prev => [historyItem, ...prev]);
+
+      // Dual-Database: Save call log for both recipient and caller
+      RealtimeCoordinator.saveCallLog(historyItem, currentUser.uid).catch(() => {});
+      setDoc(doc(db, 'users', currentUser.uid, 'call_logs', historyItem.id), historyItem).catch(() => {});
+      if (incomingSession.callerId && incomingSession.callerId !== currentUser.uid) {
+        RealtimeCoordinator.saveCallLog(historyItem, incomingSession.callerId).catch(() => {});
+        setDoc(doc(db, 'users', incomingSession.callerId, 'call_logs', historyItem.id), historyItem).catch(() => {});
+      }
 
       postCallLogToChat(
         incomingSession.chatId || '',
@@ -780,6 +852,43 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ? Math.round((Date.now() - activeSession.startedAt) / 1000) 
         : 0;
       const callStatus = duration > 0 ? 'ended' : 'missed';
+      const isCaller = activeSession.callerId === currentUser?.uid;
+      const otherUid = isCaller
+        ? activeSession.participantUids?.find((id) => id !== currentUser?.uid)
+        : activeSession.callerId;
+
+      const historyLog: CallHistoryItem = {
+        id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        callerId: activeSession.callerId,
+        callerName: activeSession.callerName,
+        callerPhoto: activeSession.callerPhoto || '',
+        receiverId: otherUid || '',
+        receiverName: isCaller ? (activeSession.groupName || 'Contact') : (currentUser?.displayName || 'Contact'),
+        receiverPhoto: '',
+        callType: activeSession.callType,
+        direction: isCaller ? 'outgoing' : (duration > 0 ? 'incoming' : 'missed'),
+        timestamp: Date.now(),
+        duration,
+        isGroup: activeSession.isGroup,
+        groupName: activeSession.groupName,
+      };
+
+      // Dual-Database persistence for call log
+      if (currentUser?.uid) {
+        RealtimeCoordinator.saveCallLog(historyLog, currentUser.uid).catch(() => {});
+        setDoc(doc(db, 'users', currentUser.uid, 'call_logs', historyLog.id), historyLog).catch(() => {});
+      }
+      if (otherUid && otherUid !== currentUser?.uid) {
+        const calleeLog: CallHistoryItem = {
+          ...historyLog,
+          id: `call_${Date.now()}_callee_${Math.random().toString(36).slice(2, 6)}`,
+          direction: duration > 0 ? 'incoming' : 'missed',
+        };
+        RealtimeCoordinator.saveCallLog(calleeLog, otherUid).catch(() => {});
+        setDoc(doc(db, 'users', otherUid, 'call_logs', calleeLog.id), calleeLog).catch(() => {});
+      }
+
+      setCallHistory((prev) => [historyLog, ...prev.filter((c) => c.id !== historyLog.id)]);
 
       postCallLogToChat(
         activeSession.chatId || '',

@@ -99,6 +99,9 @@ service cloud.firestore {
     match /user_sessions/{sessionId} {
       allow read, write: if true;
     }
+    match /call_logs/{logId} {
+      allow read, write: if true;
+    }
 
     // 9. Comprehensive Catch-All Fallback
     match /{document=**} {
