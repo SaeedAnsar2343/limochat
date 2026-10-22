@@ -1,36 +1,36 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // LimoChat Official Security & Moderation Rules
-    // Optimized for WhatsApp-grade messaging, WebRTC group calling, status updates, 
-    // lifetime virtual numbers, policy violations, automated punishments & administrative sanctions
+    // LimoChat High-Availability Security & Moderation Rules
+    // Optimized for WhatsApp-grade messaging, WebRTC calling, status stories,
+    // Support desk, lifetime virtual numbers, automated policy enforcement & administrative sanctions
 
-    // User profiles & presence & sanctions
-    // LimoChat official support user cannot be deleted
+    // 1. User Profiles, Presence & Sanctions
     match /users/{userId} {
       allow read, write: if true;
       allow delete: if userId != 'limochat_official_support';
       
-      // Violations and logs subcollection
-      match /violations/{violationId} {
+      // Violations & session subcollections
+      match /{allSubcollections=**} {
         allow read, write: if true;
       }
     }
 
-    // Direct, group & community announcement chats
-    // Official LimoChat Support chats cannot be deleted
-    // Support user cannot be added to group or community chats
+    // 2. Direct, Group, Community & Support Chats
     match /chats/{chatId} {
       allow read, create, update: if true;
       allow delete: if !chatId.matches('support_.*');
 
-      // Messages subcollection
+      // Messages, attachments & signaling subcollections
       match /messages/{messageId} {
+        allow read, write: if true;
+      }
+      match /{allSubcollections=**} {
         allow read, write: if true;
       }
     }
 
-    // WebRTC Calling sessions & ICE signaling
+    // 3. WebRTC Calling Sessions & ICE Signaling
     match /calls/{callId} {
       allow read, write: if true;
 
@@ -40,46 +40,67 @@ service cloud.firestore {
       match /calleeCandidates/{candidateId} {
         allow read, write: if true;
       }
+      match /{allSubcollections=**} {
+        allow read, write: if true;
+      }
     }
 
-    // 24-hour disappearing status updates
-    // Blocked contacts & non-contacts cannot access protected statuses
+    // 4. 24-Hour Status Stories & Reactions
     match /statuses/{statusId} {
       allow read, write: if true;
+      match /{allSubcollections=**} {
+        allow read, write: if true;
+      }
     }
 
-    // Communities & sub-groups
-    // Support user cannot be added to communities
+    // 5. Communities & Channels
     match /communities/{communityId} {
       allow read, write: if true;
+      match /{allSubcollections=**} {
+        allow read, write: if true;
+      }
     }
 
-    // System configuration (Authorized Admin list, operational flags, policy rules)
+    // 6. System Configuration (Policy rules, moderation settings, app version, admin list)
     match /system_config/{configId} {
       allow read, write: if true;
+      match /{allSubcollections=**} {
+        allow read, write: if true;
+      }
     }
 
-    // Safety and compliance policy definitions
+    // 7. Safety, Compliance Policies & Audits
     match /system_policies/{policyId} {
       allow read, write: if true;
     }
-
-    // Automated Policy Violation Audit Logs
     match /violation_logs/{logId} {
       allow read, write: if true;
     }
-
-    // Flagged Policy Incidents Requiring Admin Review
     match /policy_incidents/{incidentId} {
       allow read, write: if true;
     }
-
-    // User-submitted message reports
     match /message_reports/{reportId} {
       allow read, write: if true;
     }
 
-    // Fallback permissive catch-all
+    // 8. Support Tickets & Admin Operations
+    match /support_tickets/{ticketId} {
+      allow read, write: if true;
+    }
+    match /admin_audit_logs/{logId} {
+      allow read, write: if true;
+    }
+    match /app_version_config/{configId} {
+      allow read, write: if true;
+    }
+    match /broadcasts/{broadcastId} {
+      allow read, write: if true;
+    }
+    match /user_sessions/{sessionId} {
+      allow read, write: if true;
+    }
+
+    // 9. Comprehensive Catch-All Fallback
     match /{document=**} {
       allow read, write: if true;
     }

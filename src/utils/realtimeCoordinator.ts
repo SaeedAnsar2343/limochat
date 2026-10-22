@@ -357,6 +357,25 @@ export class RealtimeCoordinator {
   }
 
   /**
+   * Delete a single message from Supabase
+   */
+  public static async deleteMessage(chatId: string, messageId: string): Promise<void> {
+    try {
+      await supabase.from('messages').delete().eq('id', messageId);
+    } catch {}
+  }
+
+  /**
+   * Purge all messages from a chat in Supabase
+   */
+  public static async purgeAllMessages(chatId: string): Promise<void> {
+    try {
+      await supabase.from('messages').delete().eq('chat_id', chatId);
+      await supabase.from('chats').update({ last_message: null, updated_at: Date.now() }).eq('id', chatId);
+    } catch {}
+  }
+
+  /**
    * Subscribe to real-time messages for an active chat
    */
   public static subscribeToLiveMessages(
@@ -488,7 +507,7 @@ export class RealtimeCoordinator {
 
   public static async syncUserProfile(profile: UserProfile): Promise<void> {
     try {
-      await supabase.from('users').upsert({
+      const row: any = {
         uid: profile.uid,
         email: profile.email || '',
         display_name: profile.displayName || '',
@@ -501,7 +520,130 @@ export class RealtimeCoordinator {
         blocked_users: profile.blockedUsers || [],
         created_at: profile.createdAt || Date.now(),
         updated_at: Date.now(),
+      };
+      if (profile.isAdmin !== undefined) row.is_admin = profile.isAdmin;
+      if (profile.isBanned !== undefined) row.is_banned = profile.isBanned;
+      if (profile.punishment !== undefined) row.punishment = profile.punishment;
+      if (profile.allowSupportCalls !== undefined) row.allow_support_calls = profile.allowSupportCalls;
+
+      await supabase.from('users').upsert(row);
+    } catch {}
+  }
+
+  public static async fetchAllUsers(): Promise<UserProfile[]> {
+    try {
+      const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
+      if (error || !data) return [];
+      return data.map((r: any) => ({
+        uid: r.uid,
+        displayName: r.display_name,
+        email: r.email,
+        photoURL: r.photo_url,
+        phoneNumber: r.phone_number,
+        about: r.about,
+        isOnline: r.is_online,
+        lastSeen: Number(r.last_seen || 0),
+        privacy: r.privacy || {},
+        blockedUsers: r.blocked_users || [],
+        isAdmin: !!r.is_admin,
+        isBanned: !!r.is_banned,
+        punishment: r.punishment || null,
+        allowSupportCalls: !!r.allow_support_calls,
+        createdAt: Number(r.created_at || Date.now()),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  public static async updateUserAdmin(uid: string, updates: any): Promise<void> {
+    try {
+      const row: any = {};
+      if ('phoneNumber' in updates) row.phone_number = updates.phoneNumber;
+      if ('isAdmin' in updates) row.is_admin = updates.isAdmin;
+      if ('isBanned' in updates) row.is_banned = updates.isBanned;
+      if ('isBannedReason' in updates) row.is_banned_reason = updates.isBannedReason;
+      if ('punishment' in updates) row.punishment = updates.punishment;
+      if ('allowSupportCalls' in updates) row.allow_support_calls = updates.allowSupportCalls;
+      row.updated_at = Date.now();
+      await supabase.from('users').update(row).eq('uid', uid);
+    } catch (e) {
+      console.warn('Supabase updateUserAdmin error:', e);
+    }
+  }
+
+  public static async deleteUserAdmin(uid: string): Promise<void> {
+    try {
+      await supabase.from('users').delete().eq('uid', uid);
+    } catch {}
+  }
+
+  public static async fetchAllChatsAdmin(): Promise<Chat[]> {
+    try {
+      const { data, error } = await supabase.from('chats').select('*').order('updated_at', { ascending: false });
+      if (error || !data) return [];
+      return data.map((r: any) => ({
+        id: r.id,
+        type: r.type,
+        participants: r.participants || [],
+        name: r.name,
+        avatar: r.avatar,
+        lastMessage: r.last_message,
+        unreadCount: r.unread_count || {},
+        createdAt: Number(r.created_at || Date.now()),
+        updatedAt: Number(r.updated_at || Date.now()),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  public static async saveSystemConfig(id: string, data: any): Promise<void> {
+    try {
+      await supabase.from('system_config').upsert({ id, data, updated_at: Date.now() });
+    } catch {}
+  }
+
+  public static async fetchSystemConfig(id: string): Promise<any | null> {
+    try {
+      const { data } = await supabase.from('system_config').select('data').eq('id', id).maybeSingle();
+      return data?.data || null;
+    } catch {
+      return null;
+    }
+  }
+
+  public static async savePolicyIncident(incident: any): Promise<void> {
+    try {
+      await supabase.from('policy_incidents').upsert({
+        id: incident.id,
+        user_id: incident.userId,
+        user_name: incident.userName,
+        chat_id: incident.chatId,
+        message_text: incident.messageText,
+        matched_term: incident.matchedTerm,
+        rule_id: incident.ruleId,
+        rule_name: incident.ruleName,
+        status: incident.status || 'pending_review',
+        timestamp: incident.timestamp || Date.now(),
+        raw_incident: incident,
       });
+    } catch {}
+  }
+
+  public static async fetchPendingIncidents(): Promise<any[]> {
+    try {
+      const { data } = await supabase.from('policy_incidents').select('*').eq('status', 'pending_review').order('timestamp', { ascending: false });
+      if (!data) return [];
+      return data.map(r => r.raw_incident || r);
+    } catch {
+      return [];
+    }
+  }
+
+  public static async updateIncidentStatus(id: string, status: string): Promise<void> {
+    try {
+      await supabase.from('policy_incidents').update({ status }).eq('id', id);
     } catch {}
   }
 

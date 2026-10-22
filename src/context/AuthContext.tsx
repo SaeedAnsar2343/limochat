@@ -28,6 +28,7 @@ import {
 } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase/config';
 import { UserProfile, UserPrivacy, UserPreferences, UserPunishment, PolicyWarning, UserSession } from '../types';
+import { RealtimeCoordinator } from '../utils/realtimeCoordinator';
 import { generateTemporaryNumber, getOrAssignLifetimeNumber } from '../utils/formatters';
 
 export const getClientDeviceInfo = () => {
@@ -595,6 +596,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     await updateDoc(doc(db, 'users', targetUid), { phoneNumber: trimmed });
+    await RealtimeCoordinator.updateUserAdmin(targetUid, { phoneNumber: trimmed }).catch(() => {});
     try {
       localStorage.setItem(`limochat_assigned_phone_${targetUid}`, trimmed);
     } catch {}
@@ -624,14 +626,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         punishment, 
         isBanned: punishment.isSuspended 
       });
+      await RealtimeCoordinator.updateUserAdmin(targetUid, { punishment, isBanned: punishment.isSuspended }).catch(() => {});
       if (currentUser?.uid === targetUid) {
         setCurrentUser((prev) => (prev ? { ...prev, punishment, isBanned: punishment.isSuspended } : null));
       }
     } else {
       await updateDoc(userRef, { 
-        punishment: null, 
-        isBanned: false 
+        punishment: null,
+        isBanned: false
       });
+      await RealtimeCoordinator.updateUserAdmin(targetUid, { punishment: null, isBanned: false }).catch(() => {});
       if (currentUser?.uid === targetUid) {
         setCurrentUser((prev) => (prev ? { ...prev, punishment: undefined, isBanned: false } : null));
       }

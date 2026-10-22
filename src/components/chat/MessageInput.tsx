@@ -61,6 +61,18 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const typingTimeoutRef = useRef<any>(null);
 
+  // Auto-focus input when a chat is opened on desktop / web
+  useEffect(() => {
+    if (!activeChat?.id) return;
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+    if (!isMobileDevice && inputRef.current) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [activeChat?.id]);
+
   const commonEmojis = ['😀', '😂', '😍', '🔥', '👍', '🙏', '🎉', '❤️', '😎', '👏', '🥳', '💯', '✨', '👋', '🚀', '⭐', '🤝', '🙌'];
 
   // Load group members for @ mentions

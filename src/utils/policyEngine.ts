@@ -15,6 +15,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db, auth } from '../firebase/config';
+import { RealtimeCoordinator } from './realtimeCoordinator';
 import { 
   UserProfile, 
   UserPunishment, 
@@ -155,6 +156,15 @@ export const getModerationSettings = async (): Promise<PolicyModerationSettings>
     console.warn("Could not fetch moderation settings from Firestore:", err);
   }
 
+  // Fallback to Supabase
+  try {
+    const remote = await RealtimeCoordinator.fetchSystemConfig('moderation_settings');
+    if (remote) {
+      localStorage.setItem(LOCAL_STORAGE_MODERATION_SETTINGS_KEY, JSON.stringify(remote));
+      return remote as PolicyModerationSettings;
+    }
+  } catch {}
+
   try {
     const cached = localStorage.getItem(LOCAL_STORAGE_MODERATION_SETTINGS_KEY);
     if (cached) return JSON.parse(cached);
@@ -164,7 +174,7 @@ export const getModerationSettings = async (): Promise<PolicyModerationSettings>
 };
 
 /**
- * Save Moderation Settings to Firestore and localStorage
+ * Save Moderation Settings to Firestore, Supabase and localStorage
  */
 export const saveModerationSettings = async (
   settings: PolicyModerationSettings,
@@ -178,14 +188,15 @@ export const saveModerationSettings = async (
     };
     localStorage.setItem(LOCAL_STORAGE_MODERATION_SETTINGS_KEY, JSON.stringify(payload));
     const docRef = doc(db, 'system_config', 'moderation_settings');
-    await setDoc(docRef, payload, { merge: true });
+    await setDoc(docRef, payload, { merge: true }).catch(() => {});
+    await RealtimeCoordinator.saveSystemConfig('moderation_settings', payload).catch(() => {});
   } catch (err) {
-    console.warn("Could not save moderation settings to Firestore:", err);
+    console.warn("Could not save moderation settings:", err);
   }
 };
 
 /**
- * Fetch all policy rules from Firestore or fallback to localStorage / defaults
+ * Fetch all policy rules from Firestore or fallback to Supabase / localStorage / defaults
  */
 export const getPolicyRules = async (): Promise<PolicyRule[]> => {
   try {
@@ -197,8 +208,17 @@ export const getPolicyRules = async (): Promise<PolicyRule[]> => {
       return rules;
     }
   } catch (err) {
-    console.warn("Could not fetch remote policy rules, using local cache:", err);
+    console.warn("Could not fetch remote policy rules from Firestore:", err);
   }
+
+  // Fallback to Supabase
+  try {
+    const remote = await RealtimeCoordinator.fetchSystemConfig('policy_rules');
+    if (remote?.rules) {
+      localStorage.setItem(LOCAL_STORAGE_RULES_KEY, JSON.stringify(remote.rules));
+      return remote.rules as PolicyRule[];
+    }
+  } catch {}
 
   // Fallback to local storage
   try {
@@ -213,15 +233,17 @@ export const getPolicyRules = async (): Promise<PolicyRule[]> => {
 };
 
 /**
- * Save policy rules to Firestore and local cache
+ * Save policy rules to Firestore, Supabase and local cache
  */
 export const savePolicyRules = async (rules: PolicyRule[]): Promise<void> => {
   try {
+    const payload = { rules, updatedAt: Date.now() };
     localStorage.setItem(LOCAL_STORAGE_RULES_KEY, JSON.stringify(rules));
     const docRef = doc(db, 'system_config', 'policy_rules');
-    await setDoc(docRef, { rules, updatedAt: Date.now() }, { merge: true });
+    await setDoc(docRef, payload, { merge: true }).catch(() => {});
+    await RealtimeCoordinator.saveSystemConfig('policy_rules', payload).catch(() => {});
   } catch (err) {
-    console.warn("Error saving policy rules to Firestore:", err);
+    console.warn("Error saving policy rules:", err);
   }
 };
 
@@ -485,6 +507,7 @@ export const handleViolationIncident = async (
 
   try {
     await setDoc(doc(db, 'policy_incidents', incidentId), incident);
+    await RealtimeCoordinator.savePolicyIncident(incident).catch(() => {});
   } catch (err) {
     console.warn("Could not save incident to Firestore:", err);
   }
@@ -666,11 +689,27 @@ export const getPendingPolicyIncidents = async (): Promise<PolicyIncident[]> => 
     snap.forEach((d) => {
       list.push({ ...d.data(), id: d.id } as PolicyIncident);
     });
+    
+    // Also fetch from Supabase and merge
+    try {
+      const supaIncidents = await RealtimeCoordinator.fetchPendingIncidents();
+      supaIncidents.forEach((si: any) => {
+        if (!list.find((item) => item.id === si.id)) {
+          list.push(si as PolicyIncident);
+        }
+      });
+    } catch {}
+
     list.sort((a, b) => b.timestamp - a.timestamp);
     return list;
   } catch (err) {
-    console.warn("Could not fetch pending policy incidents:", err);
-    return [];
+    console.warn("Could not fetch pending policy incidents from Firestore, checking Supabase:", err);
+    try {
+      const supaIncidents = await RealtimeCoordinator.fetchPendingIncidents();
+      return supaIncidents as PolicyIncident[];
+    } catch {
+      return [];
+    }
   }
 };
 
@@ -763,6 +802,11 @@ export const approvePolicyIncident = async (
       });
     }
     await updateDoc(userRef, updatePayload);
+    // Dual-Database: Update Supabase user admin state
+    await RealtimeCoordinator.updateUserAdmin(incident.userId, {
+      punishment: punishment || null,
+      isBanned: punishment ? punishment.isSuspended : false,
+    }).catch(() => {});
   } catch (err) {
     console.warn("Could not update user profile on approval:", err);
   }
@@ -814,6 +858,8 @@ export const approvePolicyIncident = async (
       reviewedBy: adminEmail,
       reviewedAt: now,
     });
+    // Dual-Database: Update status in Supabase
+    await RealtimeCoordinator.updateIncidentStatus(incident.id, 'approved').catch(() => {});
   } catch {}
 
   // 4. Record in violation logs
@@ -845,6 +891,8 @@ export const dismissPolicyIncident = async (
       reviewedBy: adminEmail,
       reviewedAt: Date.now(),
     });
+    // Dual-Database: Update status in Supabase
+    await RealtimeCoordinator.updateIncidentStatus(incidentId, 'dismissed').catch(() => {});
   } catch (err) {
     console.warn("Could not dismiss policy incident:", err);
   }

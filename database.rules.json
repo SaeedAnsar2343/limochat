@@ -1,6 +1,23 @@
 {
   "rules": {
     ".read": true,
-    ".write": true
+    ".write": true,
+    "live_chats": {
+      "$chatId": {
+        ".indexOn": ["timestamp"]
+      }
+    },
+    "calls": {
+      "$callId": {
+        "signals": {
+          ".indexOn": ["timestamp"]
+        }
+      }
+    },
+    "typing": {
+      "$chatId": {
+        ".indexOn": [".value"]
+      }
+    }
   }
 }

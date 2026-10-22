@@ -2,7 +2,7 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     // LimoChat Storage Security Rules
-    // Allows avatars, voice notes, photos, videos and attachments
+    // Supports avatars, voice notes, photos, videos, support files and attachments
     match /avatars/{allPaths=**} {
       allow read, write: if true;
     }
@@ -13,6 +13,12 @@ service firebase.storage {
       allow read, write: if true;
     }
     match /voice_notes/{allPaths=**} {
+      allow read, write: if true;
+    }
+    match /support_media/{allPaths=**} {
+      allow read, write: if true;
+    }
+    match /documents/{allPaths=**} {
       allow read, write: if true;
     }
     match /{allPaths=**} {

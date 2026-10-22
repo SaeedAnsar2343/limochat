@@ -57,7 +57,7 @@ interface ChatContextType {
   setEnterIsSend: (enabled: boolean) => void;
   setFontSize: (size: 'sm' | 'base' | 'lg') => void;
   sendMessage: (text: string, type?: MessageType, mediaUrl?: string, extra?: Partial<Message>) => Promise<void>;
-  sendSupportReply: (chatId: string, text: string) => Promise<void>;
+  sendSupportReply: (chatId: string, text: string, type?: MessageType, mediaUrl?: string, extra?: Partial<Message>) => Promise<void>;
   deleteMessageForEveryone: (messageId: string) => Promise<void>;
   deleteMessageForMe: (messageId: string) => Promise<void>;
   deleteMessagesBulk: (messageIds: string[], deleteForEveryone: boolean) => Promise<void>;
@@ -889,9 +889,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Reply from Admin Portal on behalf of LimoChat Support
-  const sendSupportReply = async (chatId: string, text: string) => {
-    if (!text.trim()) return;
+  // Reply from Admin Portal on behalf of LimoChat Support (Dual-Engine: Supabase + Firestore)
+  const sendSupportReply = async (
+    chatId: string,
+    text: string,
+    type: MessageType = 'text',
+    mediaUrl?: string,
+    extra?: Partial<Message>
+  ) => {
+    if (!text.trim() && !mediaUrl) return;
 
     const now = Date.now();
     const msgId = `msg_${now}_support`;
@@ -903,8 +909,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       senderName: SYSTEM_SUPPORT_USER.displayName,
       senderPhoto: SYSTEM_SUPPORT_USER.photoURL,
       text: text.trim(),
-      type: 'text',
-      status: 'read',
+      type,
+      mediaUrl: mediaUrl || '',
+      mediaDuration: extra?.mediaDuration || 0,
+      fileName: extra?.fileName || '',
+      fileSize: extra?.fileSize || '',
+      status: 'delivered',
       timestamp: now,
       isDeletedForEveryone: false,
       deletedForUsers: [],
@@ -912,6 +922,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const targetUserId = chatId.startsWith('support_') ? chatId.replace('support_', '') : null;
+    const participants = targetUserId ? [SYSTEM_SUPPORT_USER.uid, targetUserId] : [SYSTEM_SUPPORT_USER.uid];
+
+    // 1. Primary High-Availability: Save to Supabase PostgreSQL (UNLIMITED writes)
+    await RealtimeCoordinator.persistAndBroadcastMessage(chatId, supportMsg, {
+      participants,
+      name: 'LimoChat Support',
+      avatar: SYSTEM_SUPPORT_USER.photoURL,
+      type: 'direct',
+    });
 
     // Update local messages if viewing this chat
     if (activeChat?.id === chatId) {
@@ -922,43 +941,57 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     }
 
-    // Update local chats list to show latest message and unread count
-    setChats(prev => prev.map(c => {
-      if (c.id === chatId) {
-        const nextUnread = { ...(c.unreadCount || {}) };
-        if (targetUserId) {
-          nextUnread[targetUserId] = (nextUnread[targetUserId] || 0) + 1;
-        }
-        nextUnread['limochat_official_support'] = 0;
-        return {
-          ...c,
-          updatedAt: now,
-          unreadCount: nextUnread,
-          lastMessage: {
-            text: supportMsg.text,
-            senderId: SYSTEM_SUPPORT_USER.uid,
-            timestamp: now,
-            type: 'text',
-            status: 'read'
-          }
-        };
-      }
-      return c;
-    }));
+    const lastMsgPreview = type === 'image' 
+      ? '📷 Photo' 
+      : type === 'voice' 
+      ? '🎤 Voice message' 
+      : type === 'file' 
+      ? '📎 Attachment' 
+      : supportMsg.text;
 
-    // Try Firestore update
+    // Update local chats list to show latest message and unread count
+    setChats(prev => {
+      const updated = prev.map(c => {
+        if (c.id === chatId) {
+          const nextUnread = { ...(c.unreadCount || {}) };
+          if (targetUserId) {
+            nextUnread[targetUserId] = (nextUnread[targetUserId] || 0) + 1;
+          }
+          nextUnread['limochat_official_support'] = 0;
+          return {
+            ...c,
+            updatedAt: now,
+            unreadCount: nextUnread,
+            lastMessage: {
+              text: lastMsgPreview,
+              senderId: SYSTEM_SUPPORT_USER.uid,
+              timestamp: now,
+              type,
+              status: 'delivered' as const,
+            }
+          };
+        }
+        return c;
+      });
+      try {
+        localStorage.setItem('limochat_cached_chats', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // 2. Secondary Firestore background persistence
     try {
-      const messagesRef = collection(db, 'chats', chatId, 'messages');
-      await addDoc(messagesRef, supportMsg);
-      
+      const msgRef = doc(db, 'chats', chatId, 'messages', msgId);
+      await setDoc(msgRef, sanitizeData(supportMsg), { merge: true });
+
       const updatePayload: any = {
         updatedAt: now,
         lastMessage: {
-          text: supportMsg.text,
+          text: lastMsgPreview,
           senderId: SYSTEM_SUPPORT_USER.uid,
           timestamp: now,
-          type: 'text',
-          status: 'read'
+          type,
+          status: 'delivered',
         },
         'unreadCount.limochat_official_support': 0,
       };
@@ -967,9 +1000,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updatePayload[`unreadCount.${targetUserId}`] = increment(1);
       }
 
-      await setDoc(doc(db, 'chats', chatId), updatePayload, { merge: true });
+      await setDoc(doc(db, 'chats', chatId), sanitizeData(updatePayload), { merge: true });
     } catch (err) {
-      console.warn("Support reply saved locally:", err);
+      console.warn("Support reply saved in Supabase:", err);
     }
   };
 

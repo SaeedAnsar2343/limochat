@@ -32,8 +32,17 @@ import {
   ExternalLink,
   Eraser,
   Filter,
-  Sparkles
+  Sparkles,
+  Paperclip,
+  Image as ImageIcon,
+  Video as VideoIcon,
+  Play,
+  Pause,
+  Download,
+  Database,
+  Mic
 } from 'lucide-react';
+import { RealtimeCoordinator } from '../../utils/realtimeCoordinator';
 import { AppVersionAdminTab } from './AppVersionAdminTab';
 import { 
   collection, 
@@ -96,6 +105,169 @@ const DURATION_PRESETS = [
   { label: '7 Days', minutes: 10080 },
   { label: '30 Days', minutes: 43200 },
 ];
+
+const AdminVoicePlayer: React.FC<{ url: string; duration?: number }> = ({ url, duration }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(duration || 0);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().catch(() => {});
+      setIsPlaying(true);
+    }
+  };
+
+  const formatSeconds = (sec: number) => {
+    if (isNaN(sec) || sec < 0) return '0:00';
+    const mins = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${mins}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  return (
+    <div className="flex items-center gap-2.5 bg-black/30 dark:bg-black/40 p-2.5 rounded-2xl border border-white/10 my-1 w-full max-w-xs">
+      <audio
+        ref={audioRef}
+        src={url}
+        onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
+        onLoadedMetadata={() => audioRef.current && setAudioDuration(audioRef.current.duration)}
+        onEnded={() => {
+          setIsPlaying(false);
+          setCurrentTime(0);
+        }}
+      />
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="w-8 h-8 rounded-full bg-[#00a884] hover:bg-[#02906f] text-white flex items-center justify-center flex-shrink-0 transition shadow cursor-pointer"
+        title={isPlaying ? "Pause voice note" : "Play voice note"}
+      >
+        {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+      </button>
+      <div className="flex-1 min-w-0">
+        <div 
+          className="w-full bg-white/20 h-1.5 rounded-full overflow-hidden cursor-pointer" 
+          onClick={(e) => {
+            if (!audioRef.current || !audioDuration) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const pos = (e.clientX - rect.left) / rect.width;
+            audioRef.current.currentTime = pos * audioDuration;
+          }}
+        >
+          <div
+            className="bg-[#00a884] h-full transition-all"
+            style={{ width: `${audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0}%` }}
+          />
+        </div>
+        <div className="flex justify-between items-center text-[10px] text-gray-300 font-mono mt-1">
+          <span>{formatSeconds(currentTime)}</span>
+          <span className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+            {formatSeconds(audioDuration)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AdminMessageItem: React.FC<{
+  message: Message;
+  isSupportStaff: boolean;
+  onPreviewImage?: (url: string) => void;
+  onDelete?: () => void;
+}> = ({ message, isSupportStaff, onPreviewImage, onDelete }) => {
+  return (
+    <div
+      className={`p-3 rounded-2xl border transition-all ${
+        isSupportStaff
+          ? 'bg-[#005c4b]/80 border-[#00a884]/40 ml-auto text-white max-w-[85%]'
+          : 'bg-[#182229] border-[#2e3b44] text-[#d1d7db] mr-auto max-w-[85%]'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <span className="text-[10px] font-semibold text-[#8696a0]">
+          {isSupportStaff ? 'LimoChat Staff' : message.senderName || message.senderId || 'User'}
+        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] text-[#8696a0]">
+            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="text-red-400 hover:text-red-300 p-0.5 transition cursor-pointer"
+              title="Delete message"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Voice note playback */}
+      {message.type === 'voice' && message.mediaUrl && (
+        <AdminVoicePlayer url={message.mediaUrl} duration={message.mediaDuration} />
+      )}
+
+      {/* Image attachment */}
+      {message.type === 'image' && message.mediaUrl && (
+        <div className="my-1.5 rounded-xl overflow-hidden border border-white/10 max-w-sm">
+          <img
+            src={message.mediaUrl}
+            alt="Support Photo"
+            className="w-full max-h-60 object-cover cursor-pointer hover:opacity-95 transition"
+            onClick={() => onPreviewImage ? onPreviewImage(message.mediaUrl!) : window.open(message.mediaUrl, '_blank')}
+          />
+        </div>
+      )}
+
+      {/* Video attachment */}
+      {message.type === 'video' && message.mediaUrl && (
+        <div className="my-1.5 rounded-xl overflow-hidden border border-white/10 max-w-sm">
+          <video
+            src={message.mediaUrl}
+            controls
+            preload="metadata"
+            className="w-full max-h-60 rounded-xl object-cover"
+          />
+        </div>
+      )}
+
+      {/* Document / File attachment */}
+      {message.type === 'file' && message.mediaUrl && (
+        <a
+          href={message.mediaUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          download={message.fileName || 'attachment'}
+          className="my-1.5 flex items-center gap-2.5 p-2.5 bg-black/30 rounded-xl border border-white/10 hover:bg-black/40 transition text-left cursor-pointer"
+        >
+          <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center flex-shrink-0">
+            <FileText className="w-4 h-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-semibold text-white truncate">{message.fileName || 'Document'}</div>
+            <div className="text-[10px] text-[#8696a0]">{message.fileSize || 'Attachment'}</div>
+          </div>
+          <Download className="w-4 h-4 text-[#8696a0] hover:text-white flex-shrink-0" />
+        </a>
+      )}
+
+      {/* Message text */}
+      {message.text && (
+        <p className="text-xs leading-relaxed whitespace-pre-wrap break-words">{message.text}</p>
+      )}
+    </div>
+  );
+};
 
 export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({ 
   isOpen, 
@@ -185,6 +357,15 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   const [sendingSupportReply, setSendingSupportReply] = useState(false);
   const [supportFilter, setSupportFilter] = useState<'pending' | 'all'>('all');
   const supportUnsubRef = React.useRef<(() => void) | null>(null);
+  const supportFileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [supportAttachment, setSupportAttachment] = useState<{
+    file?: File;
+    type: 'image' | 'video' | 'voice' | 'file';
+    dataUrl: string;
+    name: string;
+    size: string;
+  } | null>(null);
+  const [previewMediaUrl, setPreviewMediaUrl] = useState<string | null>(null);
 
   // Broadcast announcement
   const [broadcastText, setBroadcastText] = useState('');
@@ -225,26 +406,41 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   const loadSystemData = async () => {
     try {
       setLoadingData(true);
-      // 1. Fetch all users
-      const usersSnap = await getDocs(collection(db, 'users')).catch(() => null);
-      const uList: UserProfile[] = [];
+      // 1. Dual-Database: Fetch all users from Supabase + Firestore
+      const [supaUsers, usersSnap] = await Promise.all([
+        RealtimeCoordinator.fetchAllUsers().catch(() => []),
+        getDocs(collection(db, 'users')).catch(() => null),
+      ]);
+      const userMap = new Map<string, UserProfile>();
+      supaUsers.forEach((u) => userMap.set(u.uid, u));
       if (usersSnap) {
-        usersSnap.forEach((d) => uList.push({ ...d.data(), uid: d.id } as UserProfile));
+        usersSnap.forEach((d) => {
+          const u = { ...d.data(), uid: d.id } as UserProfile;
+          userMap.set(u.uid, { ...(userMap.get(u.uid) || {}), ...u });
+        });
       }
-      setUsersList(uList);
+      setUsersList(Array.from(userMap.values()));
 
-      // 2. Fetch all chats
-      const chatsSnap = await getDocs(collection(db, 'chats')).catch(() => null);
-      const cList: Chat[] = [];
+      // 2. Dual-Database: Fetch all chats from Supabase + Firestore
+      const [supaChats, chatsSnap] = await Promise.all([
+        RealtimeCoordinator.fetchAllChatsAdmin().catch(() => []),
+        getDocs(collection(db, 'chats')).catch(() => null),
+      ]);
+      const chatMap = new Map<string, Chat>();
+      supaChats.forEach((c) => chatMap.set(c.id, c));
       if (chatsSnap) {
-        chatsSnap.forEach((d) => cList.push({ ...d.data(), id: d.id } as Chat));
+        chatsSnap.forEach((d) => {
+          const c = { ...d.data(), id: d.id } as Chat;
+          chatMap.set(c.id, { ...(chatMap.get(c.id) || {}), ...c });
+        });
       }
-      const map = new Map<string, Chat>();
-      cList.forEach(c => map.set(c.id, c));
-      activeChatsContext.forEach(c => {
-        if (!map.has(c.id)) map.set(c.id, c);
+      activeChatsContext.forEach((c) => {
+        if (!chatMap.has(c.id)) chatMap.set(c.id, c);
       });
-      setChatsList(Array.from(map.values()));
+      const sortedChats = Array.from(chatMap.values()).sort(
+        (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
+      );
+      setChatsList(sortedChats);
 
       // 3. Fetch all communities
       const commSnap = await getDocs(collection(db, 'communities')).catch(() => null);
@@ -332,8 +528,8 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     };
   }, [isOpen]);
 
-  // Load messages for room inspection with real-time streaming
-  const handleInspectChat = (chat: Chat) => {
+  // Load messages for room inspection with dual-database streaming
+  const handleInspectChat = async (chat: Chat) => {
     setSelectedChat(chat);
     setLoadingMessages(true);
 
@@ -342,12 +538,24 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       inspectChatUnsubRef.current = null;
     }
 
+    // 1. Dual-Database: Fetch messages from Supabase first for instantaneous loading
+    try {
+      const supaMsgs = await RealtimeCoordinator.fetchChatMessages(chat.id);
+      if (supaMsgs && supaMsgs.length > 0) {
+        setChatMessages(supaMsgs);
+        setLoadingMessages(false);
+      }
+    } catch {}
+
+    // 2. Real-time Firestore stream
     const msgRef = collection(db, 'chats', chat.id, 'messages');
     inspectChatUnsubRef.current = onSnapshot(msgRef, (snap) => {
       const list: Message[] = [];
       snap.forEach((d) => list.push({ ...d.data(), id: d.id } as Message));
       list.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-      setChatMessages(list);
+      if (list.length > 0) {
+        setChatMessages(list);
+      }
       setLoadingMessages(false);
     }, (err) => {
       console.warn("Chat inspect snapshot notice:", err);
@@ -355,24 +563,29 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     });
   };
 
-  // Purge all messages inside a room
+  // Purge all messages inside a room across both databases
   const handlePurgeAllMessages = async (chatId: string) => {
     setConfirmConfig({
       isOpen: true,
       title: "Purge All Room Messages?",
-      description: "This will permanently delete all messages inside this chat room. This action cannot be undone.",
+      description: "This will permanently delete all messages inside this chat room from both Firebase and Supabase. This action cannot be undone.",
       variant: "danger",
       confirmText: "Purge Everything",
       onConfirm: async () => {
         try {
-          const msgSnap = await getDocs(collection(db, 'chats', chatId, 'messages'));
-          const deletes = msgSnap.docs.map((d) => deleteDoc(d.ref));
-          await Promise.all(deletes);
+          const msgSnap = await getDocs(collection(db, 'chats', chatId, 'messages')).catch(() => null);
+          if (msgSnap) {
+            const deletes = msgSnap.docs.map((d) => deleteDoc(d.ref));
+            await Promise.all(deletes).catch(() => {});
+          }
           setChatMessages([]);
           await updateDoc(doc(db, 'chats', chatId), {
             lastMessage: null,
             updatedAt: Date.now(),
           }).catch(() => {});
+
+          // Dual-Database: Purge in Supabase
+          await RealtimeCoordinator.purgeAllMessages(chatId).catch(() => {});
         } catch (err: any) {
           alert("Failed to purge messages: " + err.message);
         } finally {
@@ -382,10 +595,11 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     });
   };
 
-  // Select user support conversation
-  const handleSelectSupportTicket = (chat: Chat) => {
+  // Select user support conversation with dual-database streaming
+  const handleSelectSupportTicket = async (chat: Chat) => {
     setSelectedSupportChat(chat);
     setLoadingSupportMessages(true);
+    setSupportAttachment(null);
 
     // Reset unread indicator for support desk
     try {
@@ -406,27 +620,68 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       supportUnsubRef.current = null;
     }
 
+    // 1. Dual-Database: Load messages from Supabase first
+    try {
+      const supaMsgs = await RealtimeCoordinator.fetchChatMessages(chat.id);
+      if (supaMsgs && supaMsgs.length > 0) {
+        setSupportMessages(supaMsgs);
+        setLoadingSupportMessages(false);
+      }
+    } catch {}
+
+    // 2. Real-time Firestore stream
     const messagesRef = collection(db, 'chats', chat.id, 'messages');
     supportUnsubRef.current = onSnapshot(messagesRef, (snapshot) => {
       const list: Message[] = [];
       snapshot.forEach((d) => list.push({ ...d.data(), id: d.id } as Message));
       list.sort((a, b) => a.timestamp - b.timestamp);
-      setSupportMessages(list);
+      if (list.length > 0) {
+        setSupportMessages(list);
+      }
       setLoadingSupportMessages(false);
     }, () => {
       setLoadingSupportMessages(false);
     });
   };
 
-  // Send official support reply
+  // Handle support media attachment
+  const handleSupportFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const isImg = file.type.startsWith('image/');
+    const isVid = file.type.startsWith('video/');
+    const isAud = file.type.startsWith('audio/');
+    const mediaType: 'image' | 'video' | 'voice' | 'file' = isImg ? 'image' : isVid ? 'video' : isAud ? 'voice' : 'file';
+    
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setSupportAttachment({
+        file,
+        type: mediaType,
+        dataUrl: reader.result as string,
+        name: file.name,
+        size: `${Math.round(file.size / 1024)} KB`,
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  // Send official support reply with media and dual-database sync
   const handleSendSupportReply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSupportChat || !supportReplyText.trim()) return;
+    if (!selectedSupportChat || (!supportReplyText.trim() && !supportAttachment)) return;
 
     try {
       setSendingSupportReply(true);
-      await sendSupportReply(selectedSupportChat.id, supportReplyText.trim());
+      const text = supportReplyText.trim();
+      const type = supportAttachment ? supportAttachment.type : 'text';
+      const mediaUrl = supportAttachment ? supportAttachment.dataUrl : undefined;
+      const extra = supportAttachment ? { fileName: supportAttachment.name, fileSize: supportAttachment.size } : undefined;
+
+      await sendSupportReply(selectedSupportChat.id, text, type, mediaUrl, extra);
       setSupportReplyText('');
+      setSupportAttachment(null);
     } catch (err: any) {
       setConfirmConfig({
         isOpen: true,
@@ -447,12 +702,14 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     try {
       await updateDoc(doc(db, 'chats', chat.id), {
         supportCallsAllowed: newState,
-      });
+      }).catch(() => {});
       const clientUid = chat.participants.find((p) => p !== 'limochat_official_support');
       if (clientUid) {
         await updateDoc(doc(db, 'users', clientUid), {
           allowSupportCalls: newState,
         }).catch(() => {});
+        // Dual-Database: Update Supabase
+        await RealtimeCoordinator.updateUserAdmin(clientUid, { allowSupportCalls: newState }).catch(() => {});
       }
       setSelectedSupportChat((prev) => (prev ? { ...prev, supportCallsAllowed: newState } : null));
       setChatsList((prev) =>
@@ -470,19 +727,20 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     }
   };
 
-  // Delete user from system with smooth popup
+  // Delete user from system with smooth popup across both databases
   const handleDeleteUser = (uid: string, name: string) => {
     setConfirmConfig({
       isOpen: true,
       title: `Delete user "${name}"?`,
-      description: "This will permanently remove the user profile and their data from Firestore.",
+      description: "This will permanently remove the user profile and their data from both Firebase and Supabase.",
       confirmText: "Delete User",
       cancelText: "Cancel",
       variant: "danger",
       onConfirm: async () => {
         setConfirmConfig(null);
         try {
-          await deleteDoc(doc(db, 'users', uid));
+          await deleteDoc(doc(db, 'users', uid)).catch(() => {});
+          await RealtimeCoordinator.deleteUserAdmin(uid).catch(() => {});
           setUsersList((prev) => prev.filter((u) => u.uid !== uid));
         } catch (err: any) {
           setConfirmConfig({
@@ -498,19 +756,20 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     });
   };
 
-  // Delete message with smooth popup
+  // Delete message with smooth popup across both databases
   const handleDeleteMessage = (chatId: string, messageId: string) => {
     setConfirmConfig({
       isOpen: true,
       title: "Purge Message?",
-      description: "Permanently delete this message from the database.",
+      description: "Permanently delete this message from both Firebase and Supabase databases.",
       confirmText: "Purge",
       cancelText: "Cancel",
       variant: "danger",
       onConfirm: async () => {
         setConfirmConfig(null);
         try {
-          await deleteDoc(doc(db, 'chats', chatId, 'messages', messageId));
+          await deleteDoc(doc(db, 'chats', chatId, 'messages', messageId)).catch(() => {});
+          await RealtimeCoordinator.deleteMessage(chatId, messageId).catch(() => {});
           setChatMessages((prev) => prev.filter((m) => m.id !== messageId));
         } catch (err: any) {
           setConfirmConfig({
@@ -526,19 +785,20 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     });
   };
 
-  // Delete entire chat with smooth popup
+  // Delete entire chat with smooth popup across both databases
   const handleDeleteChat = (chatId: string) => {
     setConfirmConfig({
       isOpen: true,
       title: "Delete entire chat?",
-      description: "All messages and logs in this chat will be permanently removed.",
+      description: "All messages and logs in this chat will be permanently removed from Firebase and Supabase.",
       confirmText: "Delete Chat",
       cancelText: "Cancel",
       variant: "danger",
       onConfirm: async () => {
         setConfirmConfig(null);
         try {
-          await deleteDoc(doc(db, 'chats', chatId));
+          await deleteDoc(doc(db, 'chats', chatId)).catch(() => {});
+          await RealtimeCoordinator.deleteChat(chatId).catch(() => {});
           setChatsList((prev) => prev.filter((c) => c.id !== chatId));
           if (selectedChat?.id === chatId) setSelectedChat(null);
         } catch (err: any) {
@@ -1158,10 +1418,14 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
               <ShieldAlert className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-bold text-white text-base">LimoChat Master Administration</h3>
                 <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-500/30 font-mono">
                   LIVE SECURE
+                </span>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30 font-mono flex items-center gap-1.5 shadow-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>DUAL-DATABASE SYNC (FIREBASE + SUPABASE)</span>
                 </span>
               </div>
               <p className="text-xs text-[#8696a0]">
@@ -1424,56 +1688,110 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                   )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-2 py-3">
+                <div className="flex-1 overflow-y-auto space-y-2.5 py-3 pr-1">
                   {loadingSupportMessages ? (
-                    <div className="text-center text-xs text-[#8696a0] py-8">Loading ticket messages...</div>
+                    <div className="text-center text-xs text-[#8696a0] py-8 flex flex-col items-center gap-2">
+                      <RefreshCw className="w-5 h-5 animate-spin text-[#00a884]" />
+                      <span>Loading ticket messages...</span>
+                    </div>
                   ) : supportMessages.length > 0 ? (
                     supportMessages.map((m) => {
                       const isSupportStaff = m.senderId === 'limochat_official_support';
                       return (
-                        <div
+                        <AdminMessageItem
                           key={m.id}
-                          className={`p-2.5 rounded-xl border max-w-[85%] ${
-                            isSupportStaff
-                              ? 'bg-[#005c4b]/80 border-[#00a884]/40 ml-auto text-white'
-                              : 'bg-[#182229] border-[#2e3b44] text-[#d1d7db]'
-                          }`}
-                        >
-                          <div className="text-[10px] text-[#8696a0] mb-0.5">
-                            {isSupportStaff ? 'LimoChat Staff' : m.senderName || 'User'}
-                          </div>
-                          <p className="text-xs leading-relaxed whitespace-pre-wrap">{m.text}</p>
-                          <div className="text-[9px] text-[#8696a0] mt-1 text-right">
-                            {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                        </div>
+                          message={m}
+                          isSupportStaff={isSupportStaff}
+                          onPreviewImage={(url) => setPreviewMediaUrl(url)}
+                        />
                       );
                     })
                   ) : (
-                    <div className="text-center text-xs text-[#8696a0] py-8">
-                      {selectedSupportChat ? 'No messages yet in this ticket.' : 'Select a ticket on the left to start replying.'}
+                    <div className="text-center text-xs text-[#8696a0] py-12 flex flex-col items-center gap-2">
+                      <Headphones className="w-8 h-8 opacity-25" />
+                      <span>{selectedSupportChat ? 'No messages yet in this ticket.' : 'Select a ticket on the left to start replying.'}</span>
                     </div>
                   )}
                 </div>
 
                 {selectedSupportChat && (
-                  <form onSubmit={handleSendSupportReply} className="pt-2 border-t border-[#2e3b44] flex gap-2">
-                    <input
-                      type="text"
-                      value={supportReplyText}
-                      onChange={(e) => setSupportReplyText(e.target.value)}
-                      placeholder={`Reply as LimoChat Support...`}
-                      className="flex-1 bg-[#182229] border border-[#2e3b44] rounded-xl px-3 py-2 text-xs text-white placeholder-[#8696a0] focus:outline-none focus:border-[#00a884]"
-                    />
-                    <button
-                      type="submit"
-                      disabled={sendingSupportReply || !supportReplyText.trim()}
-                      className="px-3.5 py-2 bg-[#00a884] hover:bg-[#02906f] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-50 flex-shrink-0 cursor-pointer"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      <span>{sendingSupportReply ? 'Sending...' : 'Send as Support'}</span>
-                    </button>
-                  </form>
+                  <div className="pt-2 border-t border-[#2e3b44] flex flex-col gap-2">
+                    {/* Attachment preview bar */}
+                    {supportAttachment && (
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-[#182229] border border-[#00a884]/40 animate-fade-in">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {supportAttachment.type === 'image' && (
+                            <img src={supportAttachment.dataUrl} alt="preview" className="w-8 h-8 rounded-lg object-cover" />
+                          )}
+                          {supportAttachment.type === 'video' && (
+                            <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                              <VideoIcon className="w-4 h-4" />
+                            </div>
+                          )}
+                          {supportAttachment.type === 'voice' && (
+                            <div className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+                              <Mic className="w-4 h-4" />
+                            </div>
+                          )}
+                          {supportAttachment.type === 'file' && (
+                            <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                              <FileText className="w-4 h-4" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-white truncate max-w-[200px]">{supportAttachment.name}</div>
+                            <div className="text-[10px] text-[#8696a0]">{supportAttachment.size}</div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSupportAttachment(null)}
+                          className="p-1 text-[#8696a0] hover:text-red-400 rounded-lg hover:bg-white/5 transition cursor-pointer"
+                          title="Remove attachment"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    <form onSubmit={handleSendSupportReply} className="flex items-center gap-2">
+                      {/* Hidden file input */}
+                      <input
+                        type="file"
+                        ref={supportFileInputRef}
+                        onChange={handleSupportFileSelect}
+                        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt"
+                        className="hidden"
+                      />
+
+                      {/* Attach button */}
+                      <button
+                        type="button"
+                        onClick={() => supportFileInputRef.current?.click()}
+                        className="p-2 text-[#8696a0] hover:text-[#00a884] hover:bg-[#182229] rounded-xl border border-transparent hover:border-[#2e3b44] transition flex-shrink-0 cursor-pointer"
+                        title="Attach photo, video, audio, or document"
+                      >
+                        <Paperclip className="w-4 h-4" />
+                      </button>
+
+                      <input
+                        type="text"
+                        value={supportReplyText}
+                        onChange={(e) => setSupportReplyText(e.target.value)}
+                        placeholder="Reply as LimoChat Support..."
+                        className="flex-1 bg-[#182229] border border-[#2e3b44] rounded-xl px-3 py-2 text-xs text-white placeholder-[#8696a0] focus:outline-none focus:border-[#00a884]"
+                      />
+
+                      <button
+                        type="submit"
+                        disabled={sendingSupportReply || (!supportReplyText.trim() && !supportAttachment)}
+                        className="px-3.5 py-2 bg-[#00a884] hover:bg-[#02906f] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-50 flex-shrink-0 cursor-pointer shadow-md"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>{sendingSupportReply ? 'Sending...' : 'Send as Support'}</span>
+                      </button>
+                    </form>
+                  </div>
                 )}
               </div>
             </div>
@@ -1771,7 +2089,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                     )}
                   </div>
 
-                  <div className="flex-1 overflow-y-auto space-y-2 py-3 pr-1">
+                  <div className="flex-1 overflow-y-auto space-y-2.5 py-3 pr-1">
                     {loadingMessages ? (
                       <div className="text-center text-xs text-[#8696a0] py-12 flex flex-col items-center gap-2">
                         <RefreshCw className="w-5 h-5 animate-spin text-[#00a884]" />
@@ -1779,38 +2097,13 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                       </div>
                     ) : chatMessages.length > 0 ? (
                       chatMessages.map((m) => (
-                        <div
+                        <AdminMessageItem
                           key={m.id}
-                          className="p-2.5 bg-[#182229] border border-[#2e3b44] rounded-xl flex items-start justify-between gap-2 text-left"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 mb-0.5">
-                              <span className="text-[10px] text-[#00a884] font-semibold">
-                                {m.senderName || m.senderId}
-                              </span>
-                              <span className="text-[9px] text-[#8696a0]">
-                                {new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                            <div className="text-xs text-[#d1d7db] break-words">
-                              {m.type === 'image' && <span className="text-emerald-400 font-mono text-[11px] block">📷 [Photo Attachment]</span>}
-                              {(m.type as any) === 'video' && <span className="text-purple-400 font-mono text-[11px] block">🎥 [Video Attachment]</span>}
-                              {m.type === 'voice' && <span className="text-cyan-400 font-mono text-[11px] block">🎤 [Voice Note]</span>}
-                              {m.type === 'file' && <span className="text-amber-400 font-mono text-[11px] block">📎 [File: {m.fileName || 'Document'}]</span>}
-                              {m.text || ''}
-                            </div>
-                          </div>
-                          {selectedChat && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteMessage(selectedChat.id, m.id)}
-                              className="text-red-400 hover:text-red-300 p-1 flex-shrink-0 cursor-pointer"
-                              title="Delete message"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
+                          message={m}
+                          isSupportStaff={m.senderId === 'limochat_official_support'}
+                          onPreviewImage={(url) => setPreviewMediaUrl(url)}
+                          onDelete={selectedChat ? () => handleDeleteMessage(selectedChat.id, m.id) : undefined}
+                        />
                       ))
                     ) : (
                       <div className="text-center text-xs text-[#8696a0] py-16 flex flex-col items-center gap-2">
@@ -2710,6 +3003,24 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* IMAGE PREVIEW MODAL */}
+      {previewMediaUrl && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => setPreviewMediaUrl(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center">
+            <img src={previewMediaUrl} alt="Preview" className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain border border-white/10" />
+            <button
+              onClick={() => setPreviewMediaUrl(null)}
+              className="absolute top-2 right-2 p-2 bg-black/70 hover:bg-black text-white rounded-full transition cursor-pointer border border-white/20"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
       )}

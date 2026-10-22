@@ -108,6 +108,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
   const [isEditingName, setIsEditingName] = useState(false);
   const [displayName, setDisplayName] = useState(user.displayName);
   const [about, setAbout] = useState(user.about);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isEditingAbout, setIsEditingAbout] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -1775,7 +1776,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
             {/* Sign Out Button */}
             <div className="pt-2">
               <button
-                onClick={signOut}
+                onClick={() => setShowLogoutConfirm(true)}
                 className="w-full py-3 rounded-2xl bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer border border-red-200 dark:border-red-500/20 shadow-sm"
               >
                 <LogOut className="w-4 h-4 text-red-600 dark:text-red-400" />
@@ -1871,6 +1872,23 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
           variant={confirmConfig.variant}
           onConfirm={confirmConfig.onConfirm}
           onCancel={() => setConfirmConfig(null)}
+        />
+      )}
+
+      {showLogoutConfirm && (
+        <ConfirmModal
+          isOpen={showLogoutConfirm}
+          title="Log Out of LimoChat?"
+          description="Are you sure you want to log out? You will need to sign in again to access your messages, calls, and encrypted chats."
+          confirmText="Log Out"
+          cancelText="Cancel"
+          variant="danger"
+          icon={<LogOut className="w-5 h-5 text-red-500" />}
+          onConfirm={() => {
+            setShowLogoutConfirm(false);
+            signOut();
+          }}
+          onCancel={() => setShowLogoutConfirm(false)}
         />
       )}
     </>
