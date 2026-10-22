@@ -51,6 +51,7 @@ import {
   updateDoc, 
   deleteDoc, 
   setDoc,
+  addDoc,
   onSnapshot 
 } from 'firebase/firestore';
 import { db } from '../../firebase/config';
@@ -889,6 +890,28 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
         } catch {}
       }
 
+      // Dual-Database: Persist broadcast announcement in Supabase and Firestore
+      const broadcastId = `bcast_${now}`;
+      await RealtimeCoordinator.saveBroadcast({
+        id: broadcastId,
+        title: 'Official Announcement',
+        text,
+        senderId: currentUser?.uid || 'limochat_official_support',
+        senderName: currentUser?.displayName || 'LimoChat Admin',
+        createdAt: now,
+        deliveredCount,
+      }).catch(() => {});
+
+      await setDoc(doc(db, 'broadcasts', broadcastId), {
+        id: broadcastId,
+        title: 'Official Announcement',
+        text,
+        senderId: currentUser?.uid || 'limochat_official_support',
+        senderName: currentUser?.displayName || 'LimoChat Admin',
+        createdAt: now,
+        deliveredCount,
+      }).catch(() => {});
+
       setBroadcastText('');
       setConfirmConfig({
         isOpen: true,
@@ -1076,6 +1099,21 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       };
 
       await applyUserPunishment(punishingUser.uid, punishment);
+
+      // Dual-Database: Record sanction in Firestore & Supabase violation_logs
+      const logId = `vlog_${now}_${Math.random().toString(36).substring(2, 7)}`;
+      const vlogEntry = {
+        id: logId,
+        userId: punishingUser.uid,
+        userName: punishingUser.displayName || 'Unknown',
+        userPhone: punishingUser.phoneNumber || '',
+        action: isPerm ? 'permanent_ban' : isTemp ? 'temporary_ban' : 'restriction',
+        reason: punishmentReason.trim(),
+        adminEmail: currentUser?.email || 'admin@limochat.app',
+        timestamp: now,
+      };
+      await addDoc(collection(db, 'violation_logs'), vlogEntry).catch(() => {});
+      await RealtimeCoordinator.saveViolationLog(vlogEntry).catch(() => {});
 
       // Auto-send official notice to user via Support Chat!
       const targetChatId = `support_${punishingUser.uid}`;

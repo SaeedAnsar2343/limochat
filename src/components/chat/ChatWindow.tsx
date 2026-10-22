@@ -332,6 +332,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
           </div>
         ) : (
           <ChatHeader
+            key={activeChat.id}
             chat={activeChat}
             currentUser={currentUser}
             isBlocked={isBlocked}

@@ -1,5 +1,6 @@
-import { rtdb } from '../firebase/config';
+import { rtdb, db } from '../firebase/config';
 import { ref, set, push, onChildAdded, onValue, remove, off } from 'firebase/database';
+import { doc, updateDoc } from 'firebase/firestore';
 import { supabase } from '../supabase/config';
 import { Message, CallSession, Chat, UserProfile, StatusUpdate, CallHistoryItem } from '../types';
 
@@ -743,11 +744,26 @@ export class RealtimeCoordinator {
   }
 
   /**
+   * Broadcast instant call termination directly to a participant's personal channel
+   */
+  public static async sendUserCallEnded(targetUid: string, callId: string): Promise<void> {
+    try {
+      const channel = supabase.channel(`user_calls:${targetUid}`);
+      await channel.send({
+        type: 'broadcast',
+        event: 'call_ended',
+        payload: { callId },
+      });
+    } catch {}
+  }
+
+  /**
    * Listen for incoming calls targeted at current user
    */
   public static subscribeToIncomingCalls(
     currentUid: string,
-    onIncoming: (call: CallSession) => void
+    onIncoming: (call: CallSession) => void,
+    onCallEnded?: (callId: string) => void
   ): () => void {
     // 1. Supabase Broadcast for user
     const userCallChannel = supabase
@@ -756,6 +772,11 @@ export class RealtimeCoordinator {
         const session = payload.payload as CallSession;
         if (session && session.callerId !== currentUid) {
           onIncoming(session);
+        }
+      })
+      .on('broadcast', { event: 'call_ended' }, (payload: any) => {
+        if (payload?.payload?.callId && onCallEnded) {
+          onCallEnded(payload.payload.callId);
         }
       })
       .subscribe();
@@ -773,6 +794,10 @@ export class RealtimeCoordinator {
         (payload: any) => {
           const r = payload.new;
           if (!r || !r.id) return;
+          if ((r.status === 'ended' || r.status === 'declined') && onCallEnded) {
+            onCallEnded(r.id);
+            return;
+          }
           if (r.status === 'ringing' && r.caller_id !== currentUid) {
             const uids = r.participant_uids || [];
             const ageMs = Date.now() - Number(r.created_at);
@@ -1482,6 +1507,149 @@ export class RealtimeCoordinator {
       await supabase.from('users').update({ deleted_contact_uids: updated }).eq('id', userId);
     } catch (e) {
       console.warn('Supabase deleteContact error:', e);
+    }
+  }
+
+  /**
+   * Save broadcast announcement to Supabase PostgreSQL
+   */
+  public static async saveBroadcast(broadcast: {
+    id: string;
+    text: string;
+    title?: string;
+    senderId: string;
+    senderName: string;
+    createdAt: number;
+    deliveredCount?: number;
+  }): Promise<void> {
+    try {
+      await supabase.from('broadcasts').upsert({
+        id: broadcast.id,
+        text: broadcast.text,
+        title: broadcast.title || 'Official Broadcast',
+        sender_id: broadcast.senderId,
+        sender_name: broadcast.senderName,
+        created_at: broadcast.createdAt,
+        delivered_count: broadcast.deliveredCount || 0,
+      });
+    } catch (e) {
+      console.warn('Supabase saveBroadcast error:', e);
+    }
+  }
+
+  /**
+   * Save violation log to Supabase PostgreSQL
+   */
+  public static async saveViolationLog(log: any): Promise<void> {
+    try {
+      await supabase.from('violation_logs').upsert({
+        id: log.id,
+        incident_id: log.incidentId || null,
+        user_id: log.userId,
+        user_name: log.userName || '',
+        action: log.action || 'sanction',
+        rule_id: log.ruleId || null,
+        rule_name: log.ruleName || '',
+        reason: log.reason || '',
+        admin_id: log.adminId || null,
+        admin_email: log.adminEmail || '',
+        timestamp: log.timestamp || Date.now(),
+        raw_log: log,
+      });
+    } catch (e) {
+      console.warn('Supabase saveViolationLog error:', e);
+    }
+  }
+
+  /**
+   * Save Support Ticket to Supabase PostgreSQL
+   */
+  public static async saveSupportTicket(ticket: any): Promise<void> {
+    try {
+      await supabase.from('support_tickets').upsert({
+        id: ticket.id,
+        user_id: ticket.userId,
+        user_name: ticket.userName,
+        user_email: ticket.userEmail || '',
+        user_phone: ticket.userPhone || '',
+        chat_id: ticket.chatId,
+        status: ticket.status || 'open',
+        priority: ticket.priority || 'normal',
+        category: ticket.category || 'general',
+        last_message: ticket.lastMessage || '',
+        last_message_at: ticket.lastMessageAt || Date.now(),
+        created_at: ticket.createdAt || Date.now(),
+        updated_at: ticket.updatedAt || Date.now(),
+      });
+    } catch (e) {
+      console.warn('Supabase saveSupportTicket error:', e);
+    }
+  }
+
+  /**
+   * Fetch violation logs from Supabase PostgreSQL (Dual-database fallback)
+   */
+  public static async fetchViolationLogs(maxCount = 50): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from('violation_logs')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(maxCount);
+      if (error || !data) return [];
+      return data.map((r: any) => ({
+        id: r.id,
+        userId: r.user_id,
+        userName: r.user_name,
+        userPhone: r.raw_log?.userPhone || '',
+        ruleId: r.rule_id,
+        ruleName: r.rule_name,
+        matchedTerm: r.raw_log?.matchedTerm || '',
+        snippet: r.raw_log?.snippet || '',
+        actionTaken: r.action,
+        timestamp: Number(r.timestamp),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Fetch broadcasts from Supabase PostgreSQL
+   */
+  public static async fetchBroadcasts(maxCount = 20): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from('broadcasts')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(maxCount);
+      if (error || !data) return [];
+      return data.map((r: any) => ({
+        id: r.id,
+        title: r.title,
+        text: r.text,
+        senderId: r.sender_id,
+        senderName: r.sender_name,
+        createdAt: Number(r.created_at),
+        deliveredCount: Number(r.delivered_count || 0),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Save FCM Push Notification Token to both Supabase and Firestore
+   */
+  public static async saveFcmToken(uid: string, token: string): Promise<void> {
+    try {
+      // 1. Supabase PostgreSQL
+      await supabase.from('users').update({ fcm_token: token, updated_at: Date.now() }).eq('uid', uid);
+      // 2. Firestore
+      await updateDoc(doc(db, 'users', uid), { fcmToken: token }).catch(() => {});
+    } catch (e) {
+      console.warn('saveFcmToken error:', e);
     }
   }
 }

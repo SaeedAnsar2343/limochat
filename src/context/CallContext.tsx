@@ -17,7 +17,7 @@ import { useAuth } from './AuthContext';
 import { CallSession, CallType, CallStatus, Chat, UserProfile, CallHistoryItem } from '../types';
 import { ConfirmModal } from '../components/common/ConfirmModal';
 import { soundEngine } from '../utils/sound';
-import { getLocalUserMedia, getScreenShareMedia, rtcConfiguration } from '../utils/webrtc';
+import { getLocalUserMedia, getScreenShareMedia, getFlippedCameraTrack, rtcConfiguration } from '../utils/webrtc';
 import { NativeNotificationService } from '../utils/nativeNotifications';
 
 interface CallContextType {
@@ -29,12 +29,14 @@ interface CallContextType {
   isAudioMuted: boolean;
   isVideoMuted: boolean;
   isScreenSharing: boolean;
+  cameraFacing: 'user' | 'environment';
   startCall: (target: { chat?: Chat; user?: UserProfile; callType: CallType }) => Promise<void>;
   acceptCall: () => Promise<void>;
   declineCall: () => Promise<void>;
   endCall: () => Promise<void>;
   toggleAudio: () => void;
   toggleVideo: () => void;
+  flipCamera: () => Promise<void>;
   toggleScreenShare: () => Promise<void>;
   isSpeakerOn: boolean;
   toggleSpeaker: () => void;
@@ -164,17 +166,27 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentUser?.uid) return;
 
     // 1. Supabase incoming call listener (Instant WebSocket broadcast + Postgres changes)
-    const unsubSupa = RealtimeCoordinator.subscribeToIncomingCalls(currentUser.uid, (session) => {
-      if (!incomingSessionRef.current || incomingSessionRef.current.id !== session.id) {
-        setIncomingSession(session);
-        soundEngine.startIncomingRingtone();
-        NativeNotificationService.notifyCall({
-          callerName: session.callerName,
-          callType: session.callType,
-          callId: session.id,
-        });
+    const unsubSupa = RealtimeCoordinator.subscribeToIncomingCalls(
+      currentUser.uid,
+      (session) => {
+        if (!incomingSessionRef.current || incomingSessionRef.current.id !== session.id) {
+          setIncomingSession(session);
+          soundEngine.startIncomingRingtone();
+          NativeNotificationService.notifyCall({
+            callerName: session.callerName,
+            callType: session.callType,
+            callId: session.id,
+          });
+        }
+      },
+      (callId) => {
+        // Immediate termination if remote user ended or declined the call
+        if (activeSession?.id === callId || incomingSessionRef.current?.id === callId) {
+          soundEngine.playCallEnd();
+          cleanupCallState();
+        }
       }
-    });
+    );
 
     // 2. Firestore listener as secondary companion
     const callsRef = collection(db, 'calls');
@@ -248,9 +260,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [activeSession?.id]);
 
+  const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
+
   const cleanupCallState = () => {
     soundEngine.stopDialTone();
     soundEngine.stopRingtone();
+    NativeNotificationService.dismissCallNotification();
 
     if (localStream) {
       localStream.getTracks().forEach((track) => track.stop());
@@ -266,6 +281,35 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsAudioMuted(false);
     setIsVideoMuted(false);
     setIsScreenSharing(false);
+  };
+
+  const flipCamera = async () => {
+    if (!localStream) return;
+    try {
+      const { track: newVideoTrack, facing } = await getFlippedCameraTrack(cameraFacing);
+      const oldVideoTrack = localStream.getVideoTracks()[0];
+
+      if (oldVideoTrack) {
+        localStream.removeTrack(oldVideoTrack);
+        oldVideoTrack.stop();
+      }
+
+      localStream.addTrack(newVideoTrack);
+
+      // Seamlessly replace video track on all active WebRTC senders without renegotiation
+      const replacePromises = Object.values(pcMap.current).map((pc) => {
+        const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+        if (sender) {
+          return sender.replaceTrack(newVideoTrack).catch(() => {});
+        }
+        return Promise.resolve();
+      });
+      await Promise.all(replacePromises);
+
+      setCameraFacing(facing);
+    } catch (err) {
+      console.warn("Could not flip camera:", err);
+    }
   };
 
   // Start 1-on-1 or Group Call
@@ -427,8 +471,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 2. Persist in Supabase PostgreSQL & broadcast incoming_call to callee
       await RealtimeCoordinator.createCallSession(session);
 
-      // 3. Establish WebRTC PeerConnection as caller immediately
-      if (!isGroup && otherUid) {
+      // 3. Establish WebRTC PeerConnection as caller immediately for all participants
+      if (isGroup) {
+        const otherParticipantUids = Object.keys(targetParticipants).filter((id) => id !== currentUser.uid);
+        for (const targetUid of otherParticipantUids) {
+          await setupPeerConnectionAsCaller(session.id, targetUid, stream).catch((err) => {
+            console.warn(`Group peer connection notice for ${targetUid}:`, err);
+          });
+        }
+      } else if (otherUid) {
         await setupPeerConnectionAsCaller(session.id, otherUid, stream);
       }
 
@@ -531,7 +582,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // 4. Live signaling listener via Supabase persistent signals & Realtime broadcast
       RealtimeCoordinator.subscribeToCallSignals(sessionId, async (signal) => {
-        if (signal.type === 'answer') {
+        if (signal.type === 'end') {
+          soundEngine.playCallEnd();
+          cleanupCallState();
+          return;
+        } else if (signal.type === 'answer') {
           await applyAnswer(signal.answer);
         } else if (signal.type === 'candidate' && signal.role === 'callee') {
           if (pc.remoteDescription) {
@@ -680,7 +735,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // 3. Dual-channel listener for caller candidates and offers
       RealtimeCoordinator.subscribeToCallSignals(session.id, async (signal) => {
-        if (signal.type === 'offer') {
+        if (signal.type === 'end') {
+          soundEngine.playCallEnd();
+          cleanupCallState();
+          return;
+        } else if (signal.type === 'offer') {
           await applyOfferAndAnswer(signal.offer);
         } else if (signal.type === 'candidate' && signal.role === 'caller') {
           if (pc.remoteDescription) {
@@ -795,6 +854,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Decline Call
   const declineCall = async () => {
     soundEngine.stopRingtone();
+    NativeNotificationService.dismissCallNotification();
     if (incomingSession && currentUser) {
       const historyItem: CallHistoryItem = {
         id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -832,6 +892,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         0
       );
 
+      // Instant WebRTC signal termination
+      RealtimeCoordinator.sendCallSignal(incomingSession.id, {
+        type: 'end',
+      }).catch(() => {});
+
+      if (incomingSession.callerId && incomingSession.callerId !== currentUser.uid) {
+        RealtimeCoordinator.sendUserCallEnded(incomingSession.callerId, incomingSession.id).catch(() => {});
+      }
+
       RealtimeCoordinator.updateCallSession(incomingSession.id, {
         status: 'declined',
       }).catch(() => {});
@@ -847,30 +916,31 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // End Call
   const endCall = async () => {
-    if (activeSession) {
-      const duration = activeSession.startedAt 
-        ? Math.round((Date.now() - activeSession.startedAt) / 1000) 
+    const sessionToEnd = activeSession || incomingSession;
+    if (sessionToEnd) {
+      const duration = sessionToEnd.startedAt 
+        ? Math.round((Date.now() - sessionToEnd.startedAt) / 1000) 
         : 0;
       const callStatus = duration > 0 ? 'ended' : 'missed';
-      const isCaller = activeSession.callerId === currentUser?.uid;
+      const isCaller = sessionToEnd.callerId === currentUser?.uid;
       const otherUid = isCaller
-        ? activeSession.participantUids?.find((id) => id !== currentUser?.uid)
-        : activeSession.callerId;
+        ? sessionToEnd.participantUids?.find((id) => id !== currentUser?.uid)
+        : sessionToEnd.callerId;
 
       const historyLog: CallHistoryItem = {
         id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        callerId: activeSession.callerId,
-        callerName: activeSession.callerName,
-        callerPhoto: activeSession.callerPhoto || '',
+        callerId: sessionToEnd.callerId,
+        callerName: sessionToEnd.callerName,
+        callerPhoto: sessionToEnd.callerPhoto || '',
         receiverId: otherUid || '',
-        receiverName: isCaller ? (activeSession.groupName || 'Contact') : (currentUser?.displayName || 'Contact'),
+        receiverName: isCaller ? (sessionToEnd.groupName || 'Contact') : (currentUser?.displayName || 'Contact'),
         receiverPhoto: '',
-        callType: activeSession.callType,
+        callType: sessionToEnd.callType,
         direction: isCaller ? 'outgoing' : (duration > 0 ? 'incoming' : 'missed'),
         timestamp: Date.now(),
         duration,
-        isGroup: activeSession.isGroup,
-        groupName: activeSession.groupName,
+        isGroup: sessionToEnd.isGroup,
+        groupName: sessionToEnd.groupName,
       };
 
       // Dual-Database persistence for call log
@@ -891,21 +961,34 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCallHistory((prev) => [historyLog, ...prev.filter((c) => c.id !== historyLog.id)]);
 
       postCallLogToChat(
-        activeSession.chatId || '',
-        activeSession.callerId,
-        activeSession.callerName,
-        activeSession.callerPhoto || '',
-        activeSession.callType,
+        sessionToEnd.chatId || '',
+        sessionToEnd.callerId,
+        sessionToEnd.callerName,
+        sessionToEnd.callerPhoto || '',
+        sessionToEnd.callType,
         callStatus,
         duration
       );
 
-      RealtimeCoordinator.updateCallSession(activeSession.id, {
+      // 1. Instant WebRTC signal termination
+      RealtimeCoordinator.sendCallSignal(sessionToEnd.id, {
+        type: 'end',
+      }).catch(() => {});
+
+      // 2. Broadcast call_ended directly to all remote participants' user_calls channel
+      const allUids = sessionToEnd.participantUids || [sessionToEnd.callerId, otherUid].filter(Boolean);
+      allUids.forEach((uid) => {
+        if (uid && uid !== currentUser?.uid) {
+          RealtimeCoordinator.sendUserCallEnded(uid as string, sessionToEnd.id).catch(() => {});
+        }
+      });
+
+      RealtimeCoordinator.updateCallSession(sessionToEnd.id, {
         status: 'ended',
         endedAt: Date.now(),
       }).catch(() => {});
 
-      const sessionRef = doc(db, 'calls', activeSession.id);
+      const sessionRef = doc(db, 'calls', sessionToEnd.id);
       await updateDoc(sessionRef, {
         status: 'ended',
         endedAt: Date.now(),
@@ -1000,12 +1083,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAudioMuted,
         isVideoMuted,
         isScreenSharing,
+        cameraFacing,
         startCall,
         acceptCall,
         declineCall,
         endCall,
         toggleAudio,
         toggleVideo,
+        flipCamera,
         toggleScreenShare,
         isSpeakerOn,
         toggleSpeaker,

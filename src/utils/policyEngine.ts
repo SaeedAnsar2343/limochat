@@ -654,9 +654,11 @@ export const executePolicyEnforcement = async (
     console.warn("Could not dispatch support warning message:", err);
   }
 
-  // 3. Log audit event in Firestore `violation_logs`
+  // 3. Dual-Database Log audit event in Firestore & Supabase `violation_logs`
   try {
-    await addDoc(collection(db, 'violation_logs'), {
+    const logId = `vlog_${now}_${Math.random().toString(36).substring(2, 7)}`;
+    const logEntry = {
+      id: logId,
       userId: user.uid,
       userName: user.displayName || 'Unknown',
       userPhone: user.phoneNumber || '',
@@ -665,10 +667,13 @@ export const executePolicyEnforcement = async (
       matchedTerm,
       snippet: snippet.slice(0, 150),
       actionTaken: actionDescription,
+      action: actionDescription,
       timestamp: now,
-    });
+    };
+    await addDoc(collection(db, 'violation_logs'), logEntry).catch(() => {});
+    await RealtimeCoordinator.saveViolationLog(logEntry).catch(() => {});
   } catch (err) {
-    console.warn("Could not record audit log in Firestore:", err);
+    console.warn("Could not record audit log:", err);
   }
 
   return { punishment, warningMessage };
@@ -862,9 +867,12 @@ export const approvePolicyIncident = async (
     await RealtimeCoordinator.updateIncidentStatus(incident.id, 'approved').catch(() => {});
   } catch {}
 
-  // 4. Record in violation logs
+  // 4. Dual-Database: Record in Firestore and Supabase violation logs
   try {
-    await addDoc(collection(db, 'violation_logs'), {
+    const logId = `vlog_${now}_${Math.random().toString(36).substring(2, 7)}`;
+    const vlogEntry = {
+      id: logId,
+      incidentId: incident.id,
       userId: incident.userId,
       userName: incident.userName,
       userPhone: incident.userPhone,
@@ -873,8 +881,12 @@ export const approvePolicyIncident = async (
       matchedTerm: incident.matchedTerm,
       snippet: incident.messageText.slice(0, 150),
       actionTaken: `${noticeAction} (Enforced by ${adminEmail})`,
+      action: noticeAction,
       timestamp: now,
-    });
+      adminEmail,
+    };
+    await addDoc(collection(db, 'violation_logs'), vlogEntry).catch(() => {});
+    await RealtimeCoordinator.saveViolationLog(vlogEntry).catch(() => {});
   } catch {}
 };
 
@@ -899,19 +911,33 @@ export const dismissPolicyIncident = async (
 };
 
 /**
- * Fetch violation audit logs for Admin Portal
+ * Fetch violation audit logs for Admin Portal (Dual-Database Fallback)
  */
 export const getViolationAuditLogs = async (maxCount = 50): Promise<ViolationAuditLog[]> => {
+  const logsMap = new Map<string, ViolationAuditLog>();
+
+  // 1. Try Firestore
   try {
     const q = query(collection(db, 'violation_logs'), orderBy('timestamp', 'desc'), limit(maxCount));
     const snap = await getDocs(q);
-    const logs: ViolationAuditLog[] = [];
     snap.forEach((doc) => {
-      logs.push({ id: doc.id, ...doc.data() } as ViolationAuditLog);
+      logsMap.set(doc.id, { id: doc.id, ...doc.data() } as ViolationAuditLog);
     });
-    return logs;
   } catch (err) {
-    console.warn("Could not fetch remote violation logs:", err);
-    return [];
+    console.warn("Firestore violation logs notice:", err);
   }
+
+  // 2. Dual-Database Fallback / Enrichment: Supabase PostgreSQL
+  try {
+    const supaLogs = await RealtimeCoordinator.fetchViolationLogs(maxCount);
+    supaLogs.forEach((sl) => {
+      if (!logsMap.has(sl.id)) {
+        logsMap.set(sl.id, sl as ViolationAuditLog);
+      }
+    });
+  } catch (err) {
+    console.warn("Supabase violation logs notice:", err);
+  }
+
+  return Array.from(logsMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 };

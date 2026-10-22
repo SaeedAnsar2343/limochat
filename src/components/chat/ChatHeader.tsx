@@ -62,15 +62,37 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
+  const isSupportChat =
+    chat.id.startsWith('support_') ||
+    chat.participants?.includes('limochat_official_support') ||
+    chat.name === 'LimoChat Support';
+
+  const isUserSideSupport = isSupportChat && currentUser.uid !== 'limochat_official_support';
+
   // If direct chat, listen to other user's real-time presence & profile
   useEffect(() => {
-    if (chat.type !== 'direct') {
-      setOtherUser(null);
-      return;
-    }
+    setOtherUser(null);
+    if (chat.type !== 'direct') return;
 
     const otherUid = chat.participants.find((p) => p !== currentUser.uid);
     if (!otherUid) return;
+
+    if (otherUid === 'limochat_official_support') {
+      setOtherUser({
+        uid: 'limochat_official_support',
+        displayName: 'LimoChat Support',
+        phoneNumber: '+991 100 0001',
+        photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=LimoSupport',
+        email: 'support@limochat.app',
+        about: 'Official LimoChat Assistant & Support Desk',
+        isOnline: true,
+        lastSeen: Date.now(),
+        createdAt: Date.now(),
+        privacy: { lastSeen: 'everyone', profilePhoto: 'everyone', about: 'everyone', readReceipts: true, status: 'everyone' },
+        blockedUsers: [],
+      });
+      return;
+    }
 
     const userRef = doc(db, 'users', otherUid);
     const unsub = onSnapshot(userRef, (snap) => {
@@ -90,6 +112,15 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   const getSubtitle = () => {
     if (isTyping) {
       return <span className="text-[#00a884] font-medium animate-pulse">typing...</span>;
+    }
+
+    if (isUserSideSupport) {
+      return (
+        <span className="text-[#00a884] font-medium flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#00a884] animate-pulse" />
+          Official Support Desk • 24/7 Verified
+        </span>
+      );
     }
 
     if (chat.type === 'group') {
@@ -120,8 +151,22 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
     return null;
   };
 
-  const displayName = chat.type === 'direct' ? otherUser?.displayName || chat.name || 'Chat' : chat.name;
-  const avatarUrl = chat.type === 'direct' ? otherUser?.photoURL || chat.avatar : chat.avatar;
+  let displayName = chat.name || 'Chat';
+  let avatarUrl = chat.avatar;
+
+  if (isUserSideSupport) {
+    displayName = 'LimoChat Support';
+    avatarUrl = 'https://api.dicebear.com/7.x/bottts/svg?seed=LimoSupport';
+  } else if (chat.type === 'direct') {
+    if (otherUser?.displayName) {
+      displayName = otherUser.displayName;
+      avatarUrl = otherUser.photoURL || avatarUrl;
+    } else if (chat.name && chat.name !== currentUser.displayName) {
+      displayName = chat.name;
+    } else {
+      displayName = 'Contact';
+    }
+  }
 
   return (
     <div className="pt-safe mobile-header-safe min-h-16 px-3 sm:px-4 bg-[#202c33]/95 dark:bg-[#202c33]/95 backdrop-blur-2xl border-b border-white/[0.08] flex items-center justify-between select-none z-10 shadow-sm transition-all">
@@ -154,6 +199,12 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
               <h3 className="font-semibold text-white text-sm sm:text-[15px] truncate group-hover:text-[#00a884] transition-colors">
                 {displayName}
               </h3>
+              {isUserSideSupport && (
+                <span className="text-[10px] text-[#00a884] bg-[#00a884]/20 border border-[#00a884]/30 px-1.5 py-0.5 rounded-full font-semibold flex items-center gap-0.5">
+                  <ShieldCheck className="w-3 h-3 text-[#00a884]" />
+                  <span>Verified</span>
+                </span>
+              )}
               {chat.type === 'direct' && otherUser?.phoneNumber && (
                 <span className="text-[10px] text-[#8696a0] bg-[#111b21] px-1.5 py-0.5 rounded border border-[#2e3b44] font-mono hidden md:inline">
                   {otherUser.phoneNumber}

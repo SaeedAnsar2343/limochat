@@ -39,6 +39,8 @@ export const ActiveCallModal: React.FC = () => {
     isVideoMuted, 
     isScreenSharing, 
     isSpeakerOn,
+    cameraFacing,
+    flipCamera,
     toggleAudio, 
     toggleVideo, 
     toggleScreenShare, 
@@ -56,7 +58,6 @@ export const ActiveCallModal: React.FC = () => {
   const [invitedUids, setInvitedUids] = useState<string[]>([]);
   const [addedNotice, setAddedNotice] = useState<string | null>(null);
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
-  const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
 
   // Dynamic Island Draggable Coordinates
   const [islandPos, setIslandPos] = useState<{ x: number; y: number }>(() => ({
@@ -130,49 +131,27 @@ export const ActiveCallModal: React.FC = () => {
     return () => clearInterval(interval);
   }, [activeSession?.status, activeSession?.startedAt]);
 
-  // Bind local stream
+  // Bind local stream without flickering
   useEffect(() => {
     if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
+      if (localVideoRef.current.srcObject !== localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
     }
   }, [localStream, activeSession]);
 
-  // Bind remote streams
+  // Bind remote streams without flickering
   useEffect(() => {
     Object.entries(remoteStreams).forEach(([uid, stream]) => {
       const el = remoteVideoRefs.current[uid];
       if (el && stream) {
-        el.srcObject = stream;
+        if (el.srcObject !== stream) {
+          el.srcObject = stream;
+        }
         el.volume = isSpeakerOn ? 1.0 : 0.4;
       }
     });
   }, [remoteStreams, isSpeakerOn]);
-
-  // Flip camera for mobile video
-  const flipCamera = async () => {
-    if (!localStream) return;
-    try {
-      const nextFacing = cameraFacing === 'user' ? 'environment' : 'user';
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: nextFacing, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      });
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      const oldVideoTrack = localStream.getVideoTracks()[0];
-
-      if (oldVideoTrack) {
-        localStream.removeTrack(oldVideoTrack);
-        oldVideoTrack.stop();
-      }
-      localStream.addTrack(newVideoTrack);
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStream;
-      }
-      setCameraFacing(nextFacing);
-    } catch (e) {
-      console.warn('Camera flip error:', e);
-    }
-  };
 
   // Draggable Pointer Event Handlers for iPhone Dynamic Island
   useEffect(() => {
@@ -388,8 +367,18 @@ export const ActiveCallModal: React.FC = () => {
           <span>End-to-end encrypted</span>
         </div>
 
-        {/* Quality indicator / Speaker state */}
-        <div className="flex items-center gap-1.5">
+        {/* Quality indicator & Header Flip camera */}
+        <div className="flex items-center gap-2">
+          {isVideo && (
+            <button
+              onClick={flipCamera}
+              className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition cursor-pointer flex items-center gap-1.5 text-xs"
+              title={`Switch to ${cameraFacing === 'user' ? 'Back' : 'Front'} Camera`}
+            >
+              <RotateCcw className="w-4 h-4 text-[#00a884]" />
+              <span className="hidden sm:inline text-[11px] font-medium">{cameraFacing === 'user' ? 'Rear' : 'Front'}</span>
+            </button>
+          )}
           <div className="flex items-center gap-1 text-[11px] text-[#00a884] font-mono bg-[#00a884]/10 px-2.5 py-1 rounded-full border border-[#00a884]/20">
             <Wifi className="w-3 h-3" />
             <span>HD</span>
@@ -398,28 +387,85 @@ export const ActiveCallModal: React.FC = () => {
       </div>
 
       {/* Center Stage: Audio vs Video Layout */}
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-4">
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-2 sm:p-4 min-h-0 overflow-hidden">
         {isVideo ? (
-          /* Video Call Stage */
-          <div className="w-full h-full relative flex items-center justify-center">
+          /* Video Call Stage (Adaptive Grid for 1, 2, 3, 4, 5+ participants) */
+          <div className="w-full h-full relative flex items-center justify-center min-h-0">
             {remoteUids.length > 0 ? (
-              <div className="absolute inset-0 w-full h-full">
-                {remoteUids.map((uid) => (
-                  <video
-                    key={uid}
-                    ref={(el) => {
-                      remoteVideoRefs.current[uid] = el;
-                      if (el && remoteStreams[uid]) el.srcObject = remoteStreams[uid];
-                    }}
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
-                ))}
-                {/* Remote Participant overlay */}
-                <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full text-xs text-white">
-                  {displayName}
-                </div>
+              <div className="w-full h-full p-1 sm:p-2">
+                {remoteUids.length === 1 ? (
+                  /* Single Remote Participant */
+                  <div className="relative w-full h-full bg-[#182229] rounded-2xl overflow-hidden border border-white/10 shadow-2xl flex items-center justify-center">
+                    <video
+                      ref={(el) => {
+                        remoteVideoRefs.current[remoteUids[0]] = el;
+                        if (el && remoteStreams[remoteUids[0]] && el.srcObject !== remoteStreams[remoteUids[0]]) {
+                          el.srcObject = remoteStreams[remoteUids[0]];
+                        }
+                      }}
+                      autoPlay
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3.5 py-1.5 rounded-xl text-xs text-white flex items-center gap-2 z-10 shadow-lg border border-white/10">
+                      <span className="font-semibold">{displayName}</span>
+                      {activeSession.participants?.[remoteUids[0]]?.audioMuted && (
+                        <MicOff className="w-3.5 h-3.5 text-red-400" />
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  /* Group Adaptive Responsive Video Grid */
+                  <div
+                    className={`w-full h-full ${
+                      remoteUids.length === 2
+                        ? 'grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3'
+                        : remoteUids.length <= 4
+                        ? 'grid grid-cols-2 grid-rows-2 gap-2 sm:gap-3'
+                        : 'grid grid-cols-2 sm:grid-cols-3 auto-rows-fr gap-2 sm:gap-3'
+                    }`}
+                  >
+                    {remoteUids.map((uid) => {
+                      const p = activeSession.participants?.[uid];
+                      const pName = p?.displayName || (uid === otherUid ? (otherUser?.displayName || 'Contact') : 'Participant');
+                      const pPhoto = p?.photoURL || (uid === otherUid ? otherUser?.photoURL : undefined);
+                      const stream = remoteStreams[uid];
+                      const hasLiveVideo = stream && stream.getVideoTracks().some((t) => t.enabled && t.readyState === 'live');
+
+                      return (
+                        <div
+                          key={uid}
+                          className="relative w-full h-full bg-[#182229] rounded-2xl overflow-hidden border border-white/10 shadow-lg flex items-center justify-center min-h-0"
+                        >
+                          <video
+                            ref={(el) => {
+                              remoteVideoRefs.current[uid] = el;
+                              if (el && stream && el.srcObject !== stream) {
+                                el.srcObject = stream;
+                              }
+                            }}
+                            autoPlay
+                            playsInline
+                            className={`w-full h-full object-cover ${hasLiveVideo ? 'block' : 'hidden'}`}
+                          />
+                          {!hasLiveVideo && (
+                            <div className="flex flex-col items-center justify-center space-y-2 p-3 text-center">
+                              <Avatar src={pPhoto} name={pName} size="md" />
+                              <span className="text-xs text-white font-medium truncate max-w-[120px]">{pName}</span>
+                              <span className="text-[10px] text-[#8696a0] flex items-center gap-1">
+                                <VideoOff className="w-3 h-3 text-red-400" /> Camera Off
+                              </span>
+                            </div>
+                          )}
+                          <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-lg text-xs text-white flex items-center gap-1.5 z-10 shadow border border-white/5">
+                            <span className="truncate max-w-[110px] font-medium">{pName}</span>
+                            {p?.audioMuted && <MicOff className="w-3 h-3 text-red-400" />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ) : (
               /* Waiting for remote video */
@@ -466,9 +512,9 @@ export const ActiveCallModal: React.FC = () => {
               <button
                 onClick={flipCamera}
                 className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition cursor-pointer"
-                title="Flip Camera"
+                title={`Switch camera (current: ${cameraFacing})`}
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <RotateCcw className="w-3.5 h-3.5 text-[#00a884]" />
               </button>
               <div className="absolute bottom-2 left-2 bg-black/60 px-2 py-0.5 rounded text-[10px] text-white">
                 You {isAudioMuted && '• Muted'}
@@ -644,6 +690,17 @@ export const ActiveCallModal: React.FC = () => {
           >
             {isVideoMuted ? <VideoOff className="w-5 h-5 text-red-400" /> : <Video className="w-5 h-5" />}
           </button>
+
+          {/* Flip Camera Button (Always available in Video Mode) */}
+          {isVideo && (
+            <button
+              onClick={flipCamera}
+              className="p-3.5 rounded-full bg-[#2a3942] hover:bg-[#32444f] text-white transition cursor-pointer active:scale-90"
+              title={`Flip camera (${cameraFacing === 'user' ? 'Rear' : 'Front'})`}
+            >
+              <RotateCcw className="w-5 h-5 text-[#00a884]" />
+            </button>
+          )}
 
           {/* Add Contact to Call (Replacing Keypad!) */}
           <button

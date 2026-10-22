@@ -129,6 +129,46 @@ export class NativeNotificationService {
     }
   }
 
+  /**
+   * Request all Android and browser permissions (Push, Background Alerts, Camera, Mic)
+   */
+  public static async requestAllPermissions(): Promise<{
+    notifications: boolean;
+    camera: boolean;
+    microphone: boolean;
+  }> {
+    let notifGranted = false;
+    let cameraGranted = false;
+    let micGranted = false;
+
+    // 1. Notifications (Local & Push Notifications)
+    try {
+      notifGranted = await this.init();
+    } catch {}
+
+    // 2. Camera & Microphone Media Permission
+    try {
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        micGranted = stream.getAudioTracks().length > 0;
+        cameraGranted = stream.getVideoTracks().length > 0;
+        stream.getTracks().forEach((t) => t.stop());
+      }
+    } catch {
+      try {
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        micGranted = audioStream.getAudioTracks().length > 0;
+        audioStream.getTracks().forEach((t) => t.stop());
+      } catch {}
+    }
+
+    return {
+      notifications: notifGranted,
+      camera: cameraGranted,
+      microphone: micGranted,
+    };
+  }
+
   // 1. All message types push notification
   public static async notifyMessage(params: {
     title: string;

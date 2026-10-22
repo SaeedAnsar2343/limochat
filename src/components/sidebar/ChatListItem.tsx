@@ -75,8 +75,30 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
     return () => unsub();
   }, [chat.id, chat.type, currentUser.uid]);
 
-  const displayName = chat.type === 'direct' ? otherUser?.displayName || chat.name || 'Contact' : chat.name;
-  const avatarUrl = chat.type === 'direct' ? otherUser?.photoURL || chat.avatar : chat.avatar;
+  const isSupportChat =
+    chat.id.startsWith('support_') ||
+    chat.participants?.includes('limochat_official_support') ||
+    chat.name === 'LimoChat Support';
+
+  const isUserSideSupport = isSupportChat && currentUser.uid !== 'limochat_official_support';
+
+  let displayName = chat.name || 'Chat';
+  let avatarUrl = chat.avatar;
+
+  if (isUserSideSupport) {
+    displayName = 'LimoChat Support';
+    avatarUrl = 'https://api.dicebear.com/7.x/bottts/svg?seed=LimoSupport';
+  } else if (chat.type === 'direct') {
+    if (otherUser?.displayName) {
+      displayName = otherUser.displayName;
+      avatarUrl = otherUser.photoURL || avatarUrl;
+    } else if (chat.name && chat.name !== currentUser.displayName) {
+      displayName = chat.name;
+    } else {
+      displayName = 'Contact';
+    }
+  }
+
   const isOnline = chat.type === 'direct' ? otherUser?.isOnline : undefined;
   const isMeSender = chat.lastMessage?.senderId === currentUser.uid;
 
@@ -141,10 +163,6 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
       },
     });
   };
-
-  const isSupportChat =
-    chat.id.startsWith('support_') ||
-    chat.participants?.includes('limochat_official_support');
 
   const handleDeleteChat = (e: React.MouseEvent) => {
     e.stopPropagation();

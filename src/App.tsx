@@ -7,6 +7,7 @@ import { Sidebar } from './components/sidebar/Sidebar';
 import { ChatWindow } from './components/chat/ChatWindow';
 import { IncomingCallModal } from './components/calls/IncomingCallModal';
 import { ActiveCallModal } from './components/calls/ActiveCallModal';
+import { PermissionPromptModal } from './components/common/PermissionPromptModal';
 import { OnboardingModal } from './components/auth/OnboardingModal';
 import { SuspensionScreen } from './components/common/SuspensionScreen';
 import { AppLockScreen } from './components/auth/AppLockScreen';
@@ -183,6 +184,7 @@ const MainLayout: React.FC = () => {
       {/* Global In-Call Modals */}
       <IncomingCallModal />
       <ActiveCallModal />
+      <PermissionPromptModal />
 
       {/* First-time Onboarding Flow */}
       <OnboardingModal

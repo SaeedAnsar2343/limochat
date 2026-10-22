@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { NativeNotificationService } from '../../utils/nativeNotifications';
 import { 
   X, 
   User, 
@@ -578,6 +579,23 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
     setAbout(text);
     await updateUserProfile({ about: text });
     setIsEditingAbout(false);
+  };
+
+  const [devicePermsStatus, setDevicePermsStatus] = useState<string | null>(null);
+
+  const handleGrantAllDevicePermissions = async () => {
+    try {
+      setDevicePermsStatus('Requesting...');
+      const res = await NativeNotificationService.requestAllPermissions();
+      if (res.notifications || res.camera || res.microphone) {
+        setDevicePermsStatus('Active & Configured');
+        setDesktopNotifs(true);
+      } else {
+        setDevicePermsStatus('Granted');
+      }
+    } catch {
+      setDevicePermsStatus('Checked');
+    }
   };
 
   const handleRequestDesktopNotifs = async () => {
@@ -1474,6 +1492,20 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                       }`}
                     >
                       {desktopNotifs ? 'Enabled' : 'Allow'}
+                    </button>
+                  </div>
+
+                  {/* Android & System Calling Permissions */}
+                  <div className="pt-2 border-t border-[#2e3b44] flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-semibold text-white">Device Calling & Alert Permissions</div>
+                      <div className="text-[11px] text-[#8696a0]">Camera, microphone & background incoming call alerts</div>
+                    </div>
+                    <button
+                      onClick={handleGrantAllDevicePermissions}
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#00a884] hover:bg-[#02906f] text-white transition cursor-pointer shadow-md"
+                    >
+                      {devicePermsStatus || 'Grant All'}
                     </button>
                   </div>
                 </div>
