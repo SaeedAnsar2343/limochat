@@ -31,8 +31,10 @@ import {
   FileText,
   ExternalLink,
   Eraser,
-  Filter
+  Filter,
+  Sparkles
 } from 'lucide-react';
+import { AppVersionAdminTab } from './AppVersionAdminTab';
 import { 
   collection, 
   getDocs, 
@@ -72,7 +74,7 @@ import {
 interface AdminPortalModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: 'overview' | 'support' | 'users' | 'chats' | 'policies' | 'admins';
+  initialTab?: 'overview' | 'support' | 'users' | 'chats' | 'policies' | 'admins' | 'version';
   onSelectChat?: (chat: Chat) => void;
 }
 
@@ -112,7 +114,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   } = useAuth();
   const { sendSupportReply, chats: activeChatsContext } = useChat();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'support' | 'users' | 'chats' | 'policies' | 'admins'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'support' | 'users' | 'chats' | 'policies' | 'admins' | 'version'>('overview');
 
   useEffect(() => {
     if (isOpen && initialTab) {
@@ -1205,6 +1207,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
             },
             { id: 'chats', label: 'Rooms & Chat Moderation', icon: <MessageSquare className="w-4 h-4" />, count: chatsList.length },
             { id: 'admins', label: 'Administrators', icon: <ShieldCheck className="w-4 h-4" />, count: adminEmails.length },
+            { id: 'version', label: 'App Version & Updates', icon: <Sparkles className="w-4 h-4 text-emerald-400" /> },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -2430,6 +2433,10 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
           )}
         </div>
 
+          {/* TAB: APP VERSION & OTA RELEASES */}
+          {activeTab === 'version' && (
+            <AppVersionAdminTab adminEmail={currentUser?.email || ''} />
+          )}
         {/* Footer */}
         <div className="px-6 py-4 bg-[#111b21] border-t border-[#2e3b44] flex items-center justify-between text-xs text-[#8696a0]">
           <span>LimoChat Administrative Layer • All records synchronized with Firebase</span>

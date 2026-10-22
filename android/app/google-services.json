@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "482808339600",
+    "project_id": "woki-toki-69a0d",
+    "storage_bucket": "woki-toki-69a0d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:482808339600:android:01fe28b3543d281ebfcc15",
+        "android_client_info": {
+          "package_name": "com.limochat.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "482808339600-p90lmf2pdf339ookj0077q1qtn8onu1e.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.limochat.app",
+            "certificate_hash": "f2211f3e99aa112479cbbab62f60d80fe2a2c498"
+          }
+        },
+        {
+          "client_id": "482808339600-te8a14jbo0rbrnqckmutjf0jt3lj9euj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD_oGBDFAj1beIMz3FRn0YPygU3mHkMTfg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "482808339600-te8a14jbo0rbrnqckmutjf0jt3lj9euj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

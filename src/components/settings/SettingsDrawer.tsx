@@ -63,6 +63,7 @@ import { AdminPortalModal } from '../admin/AdminPortalModal';
 import { useAuth, getClientDeviceInfo } from '../../context/AuthContext';
 import { useChat, SYSTEM_SUPPORT_USER } from '../../context/ChatContext';
 import { soundEngine } from '../../utils/sound';
+import { subscribeToAppVersion, getCachedAppVersion, AppVersionData } from '../../utils/versionConfig';
 import { SUPPORTED_LANGUAGES, translateText } from '../../utils/translate';
 
 interface SettingsDrawerProps {
@@ -119,7 +120,13 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
   const [showStatus, setShowStatus] = useState(false);
   const [showWhatsNew, setShowWhatsNew] = useState(false);
   const [showAdminPortal, setShowAdminPortal] = useState(false);
-  const [adminPortalInitialTab, setAdminPortalInitialTab] = useState<'overview' | 'support' | 'users' | 'chats' | 'policies' | 'admins'>('overview');
+  const [adminPortalInitialTab, setAdminPortalInitialTab] = useState<'overview' | 'support' | 'users' | 'chats' | 'policies' | 'admins' | 'version'>('overview');
+  const [appVersionData, setAppVersionData] = useState<AppVersionData>(getCachedAppVersion);
+
+  useEffect(() => {
+    const unsub = subscribeToAppVersion((data) => setAppVersionData(data));
+    return () => unsub();
+  }, []);
   
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -1706,6 +1713,45 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                 </div>
               </div>
             )}
+
+            {/* WhatsApp-Style App Info & Dynamic Version Card */}
+            <div className="p-4 rounded-2xl bg-[#202c33]/70 border border-[#2e3b44] flex flex-col items-center justify-center text-center space-y-2 select-none shadow-inner">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-[#005c4b] to-[#00a884] flex items-center justify-center shadow-md">
+                  <MessageCircle className="w-3.5 h-3.5 text-white fill-white" />
+                </div>
+                <span className="text-xs font-bold text-white tracking-wide">LimoChat for Android</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-mono font-bold text-emerald-400">
+                  Version {appVersionData.version}
+                </span>
+                <span className="text-[10px] text-[#8696a0] font-mono">
+                  (Build {appVersionData.buildNumber})
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-[10px] text-[#8696a0]">
+                <Lock className="w-3 h-3 text-[#00a884]" />
+                <span>End-to-End Encrypted • Private & Secure</span>
+              </div>
+
+              {/* Admin shortcut to change version */}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminPortalInitialTab('version');
+                    setShowAdminPortal(true);
+                  }}
+                  className="mt-1 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-[11px] font-semibold text-amber-400 flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Sparkles className="w-3 h-3 text-amber-400" />
+                  <span>Change Version in Admin Portal</span>
+                </button>
+              )}
+            </div>
 
             {/* Sign Out Button */}
             <div className="pt-2">

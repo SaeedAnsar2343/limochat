@@ -10,12 +10,20 @@ import { ActiveCallModal } from './components/calls/ActiveCallModal';
 import { OnboardingModal } from './components/auth/OnboardingModal';
 import { SuspensionScreen } from './components/common/SuspensionScreen';
 import { AppLockScreen } from './components/auth/AppLockScreen';
+import { SplashScreen } from './components/common/SplashScreen';
 import { MessageSquare, Lock, ShieldCheck, Sparkles, Ban } from 'lucide-react';
+import { NativeNotificationService } from './utils/nativeNotifications';
 
 const MainLayout: React.FC = () => {
   const { currentUser, loading, signOut, isAdmin } = useAuth();
   const { activeChat, setActiveChat } = useChat();
   const [mobileView, setMobileView] = useState<'sidebar' | 'chat'>('sidebar');
+  const [splashFinished, setSplashFinished] = useState(false);
+
+  // Initialize native push and local notifications on start
+  useEffect(() => {
+    NativeNotificationService.init();
+  }, []);
 
   // App Passcode Lock state & active enforcement
   const isLockConfigured = !!currentUser?.preferences?.appLockEnabled && !!currentUser?.preferences?.appLockPin;
@@ -79,19 +87,18 @@ const MainLayout: React.FC = () => {
   }, [activeChat]);
 
   if (loading) {
-    return (
-      <div className="h-screen w-screen bg-[#111b21] flex flex-col items-center justify-center text-white">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#005c4b] to-[#00a884] flex items-center justify-center shadow-lg animate-pulse mb-4">
-          <MessageSquare className="w-8 h-8 text-white" />
-        </div>
-        <div className="text-sm font-semibold text-[#00a884]">LimoChat</div>
-        <div className="text-xs text-[#8696a0] mt-1">Connecting securely...</div>
-      </div>
-    );
+    return <SplashScreen isReady={false} minDisplayTimeMs={1800} />;
   }
 
   if (!currentUser) {
-    return <LoginModal />;
+    return (
+      <>
+        {!splashFinished && (
+          <SplashScreen isReady={true} onFinish={() => setSplashFinished(true)} />
+        )}
+        <LoginModal />
+      </>
+    );
   }
 
   // Administrators CANNOT be suspended or banned
@@ -119,7 +126,11 @@ const MainLayout: React.FC = () => {
   }
 
   return (
-    <div className="h-screen w-screen flex bg-[#111b21] overflow-hidden app-layout-root">
+    <>
+      {!splashFinished && (
+        <SplashScreen isReady={true} onFinish={() => setSplashFinished(true)} />
+      )}
+      <div className="h-screen w-screen flex bg-[#111b21] overflow-hidden app-layout-root">
       {/* Sidebar: Visible on desktop, or on mobile when mobileView is 'sidebar' */}
       <div
         className={`h-full ${
@@ -179,6 +190,7 @@ const MainLayout: React.FC = () => {
         onComplete={() => {}}
       />
     </div>
+    </>
   );
 };
 

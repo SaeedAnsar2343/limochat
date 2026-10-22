@@ -28,6 +28,7 @@ import {
   GroupPermissions 
 } from '../types';
 import { soundEngine } from '../utils/sound';
+import { NativeNotificationService } from '../utils/nativeNotifications';
 import { generateTemporaryNumber } from '../utils/formatters';
 import { 
   getPolicyRules, 
@@ -367,6 +368,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               navigator.vibrate(100);
             } catch {}
           }
+          NativeNotificationService.notifyMessage({
+            title: activeChat?.name || 'New Message',
+            body: last.text || (last.type === 'image' ? '📷 Photo' : last.type === 'voice' ? '🎤 Voice note' : '📎 Attachment'),
+            chatId: activeChat?.id || '',
+          });
         }
       }
 

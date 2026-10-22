@@ -17,6 +17,7 @@ import { CallSession, CallType, CallStatus, Chat, UserProfile, CallHistoryItem }
 import { ConfirmModal } from '../components/common/ConfirmModal';
 import { soundEngine } from '../utils/sound';
 import { getLocalUserMedia, getScreenShareMedia, rtcConfiguration } from '../utils/webrtc';
+import { NativeNotificationService } from '../utils/nativeNotifications';
 
 interface CallContextType {
   activeSession: CallSession | null;
@@ -104,11 +105,17 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!incomingSessionRef.current || incomingSessionRef.current.id !== foundIncoming.id) {
           setIncomingSession(foundIncoming);
           soundEngine.startIncomingRingtone();
+          NativeNotificationService.notifyCall({
+            callerName: foundIncoming.callerName,
+            callType: foundIncoming.callType,
+            callId: foundIncoming.id,
+          });
         }
       } else {
         if (incomingSessionRef.current) {
           setIncomingSession(null);
           soundEngine.stopRingtone();
+          NativeNotificationService.dismissCallNotification();
         }
       }
     }, (err) => {

@@ -888,3 +888,24 @@
 .light-theme .mobile-glass-dock [class*="text-white"] {
   color: #111b21 !important;
 }
+
+/* WhatsApp-Style Splash Loader Animation */
+@keyframes progressIndeterminate {
+  0% {
+    left: -40%;
+    width: 30%;
+  }
+  50% {
+    left: 20%;
+    width: 55%;
+  }
+  100% {
+    left: 100%;
+    width: 30%;
+  }
+}
+
+.animate-progress-indeterminate {
+  animation: progressIndeterminate 1.5s ease-in-out infinite;
+}
+

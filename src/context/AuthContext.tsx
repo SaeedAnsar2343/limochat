@@ -7,8 +7,12 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInAnonymously,
-  updateProfile as updateFbProfile
+  updateProfile as updateFbProfile,
+  GoogleAuthProvider,
+  signInWithCredential
 } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { 
   doc, 
   getDoc, 
@@ -66,6 +70,7 @@ interface AuthContextType {
   currentUser: UserProfile | null;
   firebaseUser: FirebaseUser | null;
   loading: boolean;
+  isAuthenticating: boolean;
   authError: string | null;
   isAdmin: boolean;
   adminEmails: string[];
@@ -96,7 +101,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isAuthenticating, setIsAuthenticating] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  // Safety watchdog: reset authenticating spinner if returning to foreground without completing
+  useEffect(() => {
+    if (!isAuthenticating) return;
+    const handleForeground = () => {
+      const timer = setTimeout(() => {
+        if (!auth.currentUser) {
+          setIsAuthenticating(false);
+        }
+      }, 3500);
+      return () => clearTimeout(timer);
+    };
+    window.addEventListener('focus', handleForeground);
+    document.addEventListener('visibilitychange', handleForeground);
+    return () => {
+      window.removeEventListener('focus', handleForeground);
+      document.removeEventListener('visibilitychange', handleForeground);
+    };
+  }, [isAuthenticating]);
   const [adminEmails, setAdminEmails] = useState<string[]>(getInitialAdminEmails);
 
   // Sync admin configuration from Firestore
@@ -284,8 +309,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithGoogle = async () => {
     try {
-      setLoading(true);
+      setIsAuthenticating(true);
       setAuthError(null);
+
+      // 1. Native Android Google Sign-In via Credential Manager (never leaves the app)
+      if (Capacitor.isNativePlatform()) {
+        try {
+          console.log("[Auth] Initiating native Android Google Sign-In via Credential Manager...");
+          const result = await FirebaseAuthentication.signInWithGoogle();
+          console.log("[Auth] Native Google Sign-In response received:", result);
+
+          if (result?.credential?.idToken) {
+            const credential = GoogleAuthProvider.credential(result.credential.idToken);
+            await signInWithCredential(auth, credential);
+            return;
+          } else if (result?.user) {
+            return;
+          }
+        } catch (nativeErr: any) {
+          console.warn("[Auth] Native Google Sign-In error:", nativeErr);
+          const msg = (nativeErr?.message || '').toLowerCase();
+          if (msg.includes('cancel') || msg.includes('16') || msg.includes('12501')) {
+            setAuthError("Sign-in cancelled.");
+            return;
+          }
+          // If native failed with another error, fall back to browser popup
+        }
+      }
+
+      // 2. Web Popup Sign-In
       await signInWithPopup(auth, googleProvider);
     } catch (error: any) {
       console.error("Google sign in error:", error);
@@ -303,13 +355,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAuthError(error.message || "Failed to sign in with Google.");
       }
     } finally {
-      setLoading(false);
+      setIsAuthenticating(false);
     }
   };
 
   const signInWithEmail = async (email: string, password = 'Password123!') => {
     try {
-      setLoading(true);
+      setIsAuthenticating(true);
       setAuthError(null);
       const cleanEmail = email.trim();
 
@@ -335,13 +387,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setAuthError(error.message || "Sign in failed.");
       throw error;
     } finally {
-      setLoading(false);
+      setIsAuthenticating(false);
     }
   };
 
   const signUpWithEmail = async (displayName: string, email: string, password = 'Password123!') => {
     try {
-      setLoading(true);
+      setIsAuthenticating(true);
       setAuthError(null);
 
       const cleanEmail = email.trim();
@@ -373,7 +425,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setAuthError(error.message || "Failed to create account.");
       throw error;
     } finally {
-      setLoading(false);
+      setIsAuthenticating(false);
     }
   };
 
@@ -639,6 +691,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         firebaseUser,
         loading,
+        isAuthenticating,
         authError,
         isAdmin,
         adminEmails,
