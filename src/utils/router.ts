@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 
-export type AppRoute = '/login' | '/home' | '/adminportal';
+export type AppRoute = '/login' | '/home' | '/adminportal' | '/terms' | '/privacy';
 
 /**
  * Normalizes browser pathname or hash into one of the supported AppRoutes:
  * - /login
  * - /home
  * - /adminportal (alias /admin)
+ * - /terms (alias /terms-and-conditions)
+ * - /privacy (alias /privacy-policy)
  */
 export function normalizePath(pathOrHash?: string): AppRoute {
   let raw = pathOrHash;
@@ -19,7 +21,9 @@ export function normalizePath(pathOrHash?: string): AppRoute {
         hash.startsWith('/login') ||
         hash.startsWith('/home') ||
         hash.startsWith('/adminportal') ||
-        hash.startsWith('/admin')
+        hash.startsWith('/admin') ||
+        hash.startsWith('/terms') ||
+        hash.startsWith('/privacy')
       ) {
         raw = hash;
       }
@@ -36,6 +40,8 @@ export function normalizePath(pathOrHash?: string): AppRoute {
 
   if (clean === '/login') return '/login';
   if (clean === '/adminportal' || clean === '/admin') return '/adminportal';
+  if (clean === '/terms' || clean === '/terms-and-conditions') return '/terms';
+  if (clean === '/privacy' || clean === '/privacy-policy') return '/privacy';
   if (clean === '/home') return '/home';
 
   // Default root /

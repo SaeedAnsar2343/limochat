@@ -15,6 +15,8 @@ import { SuspensionScreen } from './components/common/SuspensionScreen';
 import { AppLockScreen } from './components/auth/AppLockScreen';
 import { SplashScreen } from './components/common/SplashScreen';
 import { AdminPortalModal } from './components/admin/AdminPortalModal';
+import { TermsPage } from './components/pages/TermsPage';
+import { PrivacyPage } from './components/pages/PrivacyPage';
 import { MessageSquare, Lock, ShieldAlert, ArrowLeft } from 'lucide-react';
 import { NativeNotificationService } from './utils/nativeNotifications';
 import { navigationManager } from './utils/navigationManager';
@@ -115,6 +117,14 @@ const MainLayout: React.FC = () => {
   useEffect(() => {
     navigationManager.init();
     return navigationManager.registerCustomBackHandler(() => {
+      if (currentRoute === '/terms' || currentRoute === '/privacy') {
+        if (currentUser) {
+          navigate('/home');
+        } else {
+          navigate('/login');
+        }
+        return true;
+      }
       if (currentRoute === '/adminportal') {
         navigate('/home');
         return true;
@@ -126,7 +136,7 @@ const MainLayout: React.FC = () => {
       }
       return false;
     });
-  }, [activeChat, mobileView, setActiveChat, currentRoute, navigate]);
+  }, [activeChat, mobileView, setActiveChat, currentRoute, navigate, currentUser]);
 
   // Auto-switch to chat view on mobile when an active chat is selected
   useEffect(() => {
@@ -144,7 +154,15 @@ const MainLayout: React.FC = () => {
     return <SplashScreen isReady={false} minDisplayTimeMs={1800} />;
   }
 
-  // 2. Unauthenticated Guard: Redirect any unauthorized route to /login
+  // 2. Public Static Legal Documentation Routes (Accessible to everyone)
+  if (currentRoute === '/terms') {
+    return <TermsPage />;
+  }
+  if (currentRoute === '/privacy') {
+    return <PrivacyPage />;
+  }
+
+  // 3. Unauthenticated Guard: Redirect any unauthorized route to /login
   if (!currentUser) {
     if (currentRoute !== '/login') {
       navigate('/login', true);
@@ -159,7 +177,7 @@ const MainLayout: React.FC = () => {
     );
   }
 
-  // 3. Authenticated Guard: Redirect logged-in user away from /login to /home
+  // 4. Authenticated Guard: Redirect logged-in user away from /login to /home
   if (currentRoute === '/login') {
     navigate('/home', true);
   }

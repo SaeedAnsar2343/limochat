@@ -35,6 +35,7 @@ import { formatAuthErrorMessage } from '../../utils/authErrors';
 import { RealtimeCoordinator } from '../../utils/realtimeCoordinator';
 import { supabase } from '../../supabase/config';
 import { verifyTotpToken, verifyRecoveryCode } from '../../utils/totp';
+import { router } from '../../utils/router';
 
 export const LoginModal: React.FC = () => {
   const { 
@@ -1695,15 +1696,15 @@ export const LoginModal: React.FC = () => {
           <span>By continuing, you agree to our</span>
           <button
             type="button"
-            onClick={() => setShowTerms(true)}
+            onClick={() => router.navigate('/terms')}
             className="text-[#00a884] font-semibold hover:underline cursor-pointer"
           >
-            Terms
+            Terms of Service
           </button>
           <span>and</span>
           <button
             type="button"
-            onClick={() => setShowPrivacy(true)}
+            onClick={() => router.navigate('/privacy')}
             className="text-[#00a884] font-semibold hover:underline cursor-pointer"
           >
             Privacy Policy

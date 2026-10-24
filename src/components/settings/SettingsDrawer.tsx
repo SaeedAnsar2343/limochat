@@ -1746,7 +1746,10 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                 <div className="p-4 bg-[#111b21] rounded-2xl border border-[#2e3b44] space-y-3">
                   {/* Full-Page Privacy Policy Button */}
                   <button
-                    onClick={() => setShowPolicy(true)}
+                    onClick={() => {
+                      onClose();
+                      router.navigate('/privacy');
+                    }}
                     className="w-full p-3 rounded-xl bg-[#202c33] hover:bg-[#2a3942] border border-[#2e3b44] flex items-center justify-between transition cursor-pointer text-left"
                   >
                     <div className="flex items-center gap-2.5">
@@ -1761,7 +1764,10 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
 
                   {/* Full-Page Terms of Service Button */}
                   <button
-                    onClick={() => setShowTerms(true)}
+                    onClick={() => {
+                      onClose();
+                      router.navigate('/terms');
+                    }}
                     className="w-full p-3 rounded-xl bg-[#202c33] hover:bg-[#2a3942] border border-[#2e3b44] flex items-center justify-between transition cursor-pointer text-left"
                   >
                     <div className="flex items-center gap-2.5">

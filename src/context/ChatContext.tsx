@@ -126,6 +126,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
+  const activeChatRef = React.useRef<Chat | null>(null);
+  activeChatRef.current = activeChat;
   const [messages, setMessages] = useState<Message[]>([]);
   const [communities, setCommunities] = useState<Community[]>([]);
   const [replyingTo, setReplyingTo] = useState<QuotedMessage | null>(null);
@@ -889,39 +891,47 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 3. Automated Support Bot Command Processor
     const isSupportConversation = !!(
-      activeChat.id.startsWith('support_') ||
-      activeChat.participants.includes('limochat_official_support') ||
-      activeChat.name === 'LimoChat Support'
+      activeChat.id?.startsWith('support_') ||
+      activeChat.id?.includes('limochat_official_support') ||
+      activeChat.participants?.includes('limochat_official_support') ||
+      activeChat.participants?.includes(SYSTEM_SUPPORT_USER.uid) ||
+      activeChat.participants?.includes('support') ||
+      activeChat.name?.toLowerCase().includes('support') ||
+      activeChat.name?.toLowerCase().includes('limo')
     );
 
     if (isSupportConversation && finalText.trim().startsWith('/')) {
-      const cmd = finalText.trim().toLowerCase();
+      const baseCmd = finalText.trim().split(/\s+/)[0].toLowerCase();
       setTimeout(async () => {
         let reply = '';
-        if (cmd === '/status') {
+        if (baseCmd === '/status') {
           const has2fa = !!(currentUser.authenticatorEnabled || currentUser.preferences?.authenticatorEnabled);
           reply = `🛡️ **LimoChat VIP Account Status**\n• **Line**: ${currentUser.phoneNumber || '+991 Active Line'}\n• **2FA Authenticator**: ${has2fa ? '✅ Active & Protected' : '⚠️ Not Enabled (Configure in Settings)'}\n• **Security Rating**: A+ End-to-End Cryptographic Tunnel\n• **Cloud Core**: Dual-Engine (Supabase + Firebase Realtime)\n• **Support Line**: Direct Escalation Ready`;
-        } else if (cmd === '/call') {
+        } else if (baseCmd === '/call') {
           reply = `📞 **Support Call Request Submitted**\nYour request for an authorized live voice/video support session has been logged in the active administration queue.\n\nAn authorized administrator will initiate or accept your incoming call directly in this chat shortly.`;
-        } else if (cmd === '/version') {
+        } else if (baseCmd === '/version') {
           reply = `🚀 **LimoChat System Build**\n• **Installed Version**: v1.0.8 (Build 18)\n• **Realtime Engine**: WebRTC E2E + Supabase Dual-Core\n• **Platform Status**: All systems operational with zero reported incidents.\n• **Updates**: Up-to-date with latest security patches.`;
-        } else if (cmd === '/help') {
+        } else if (baseCmd === '/help') {
           reply = `📚 **LimoChat Quick Guides & FAQ**\n• **HD Calls**: Tap the Voice or Video call icons in the header for encrypted calling.\n• **Privacy Controls**: Adjust Last Seen, Profile Photo, and Disappearing Messages in Settings > Privacy.\n• **Permanent Line**: Your +991 virtual number is globally reserved and persistent across all devices.\n• **Authenticator 2FA**: Enable standard Google/Microsoft Authenticator in Settings.\n• **Support Call**: Type \`/call\` to request an authorized live voice or video session.`;
-        } else if (cmd === '/security') {
+        } else if (baseCmd === '/security') {
           const has2fa = !!(currentUser.authenticatorEnabled || currentUser.preferences?.authenticatorEnabled);
           const hasLock = !!(currentUser.preferences?.appLockEnabled);
           reply = `🔐 **Security & Protection Report**\n• **Two-Step Verification**: ${has2fa ? '✅ Enabled (Google/Microsoft Authenticator)' : '⚠️ Deactivated'}\n• **App Passcode Screen Lock**: ${hasLock ? '✅ Enabled' : '⚪ Disabled'}\n• **End-to-End Encryption**: ✅ Active on all text, attachments, and WebRTC calls.`;
-        } else if (cmd === '/privacy') {
+        } else if (baseCmd === '/privacy') {
           const privacy = currentUser.privacy;
           reply = `👁️ **Privacy Settings Summary**\n• **Last Seen & Online**: ${privacy?.lastSeen || 'everyone'}\n• **Profile Photo**: ${privacy?.profilePhoto || 'everyone'}\n• **About Info**: ${privacy?.about || 'everyone'}\n• **Read Receipts**: ${privacy?.readReceipts !== false ? '✅ Enabled (Blue ticks)' : '⚪ Disabled'}\n• **Disappearing Messages**: ${currentUser.preferences?.disappearingDuration ? `${currentUser.preferences.disappearingDuration}h` : 'Off'}`;
-        } else if (cmd === '/clear') {
-          reply = `🧹 **Support History Cleared**\nYour support ticket history has been refreshed. How else may we assist you today?`;
+        } else if (baseCmd === '/clear') {
+          setMessages([]);
+          try {
+            localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify([]));
+          } catch {}
+          reply = `🧹 **Support History Cleared**\nYour conversation history with LimoChat Support has been cleared. How else may our team assist you today?`;
         } else {
           reply = `ℹ️ **Available Support Commands**:\n• \`/status\` — Account status & virtual line\n• \`/call\` — Request live voice/video support session\n• \`/version\` — Installed build & update details\n• \`/help\` — Quick guides & frequently asked questions\n• \`/security\` — 2FA & app passcode overview\n• \`/privacy\` — Privacy and read receipts overview\n• \`/clear\` — Refresh ticket conversation`;
         }
 
         await sendSupportReply(activeChat.id, reply);
-      }, 350);
+      }, 150);
     }
   };
 
@@ -974,10 +984,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const chatObj = chats.find(c => c.id === chatId);
     const targetUserId = chatId.startsWith('support_')
       ? chatId.replace('support_', '')
-      : (chatObj?.participants?.find(p => p !== SYSTEM_SUPPORT_USER.uid) || null);
+      : (chatObj?.participants?.find(p => p !== SYSTEM_SUPPORT_USER.uid) || currentUser?.uid || null);
     const participants = targetUserId
       ? [SYSTEM_SUPPORT_USER.uid, targetUserId]
-      : (chatObj?.participants || [SYSTEM_SUPPORT_USER.uid]);
+      : (chatObj?.participants || [SYSTEM_SUPPORT_USER.uid, currentUser?.uid].filter(Boolean) as string[]);
 
     const nextUnread = { ...(chatObj?.unreadCount || {}) };
     if (targetUserId) {
@@ -995,12 +1005,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     // Update local messages if viewing this chat
-    if (activeChat?.id === chatId) {
+    if (activeChatRef.current?.id === chatId || activeChat?.id === chatId) {
       setMessages(prev => {
         const updated = [...prev, supportMsg];
-        localStorage.setItem(`limochat_msgs_${chatId}`, JSON.stringify(updated));
+        try {
+          localStorage.setItem(`limochat_msgs_${chatId}`, JSON.stringify(updated));
+        } catch {}
         return updated;
       });
+      try {
+        soundEngine.playMessageReceived('pop');
+      } catch {}
     }
 
     const lastMsgPreview = type === 'image' 
