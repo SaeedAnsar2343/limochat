@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState, useEffect, useRef } from 'react';
 import { NativeNotificationService } from '../../utils/nativeNotifications';
 import { 
@@ -57,7 +58,6 @@ import { PasscodeModal } from './PasscodeModal';
 import { PrivacyPolicyModal } from '../pages/PrivacyPolicyModal';
 import { TermsConditionsModal } from '../pages/TermsConditionsModal';
 import { OperationalStatusModal } from '../pages/OperationalStatusModal';
-import { WhatsNewModal } from '../pages/WhatsNewModal';
 import { QRCodeModal } from '../common/QRCodeModal';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { AdminPortalModal } from '../admin/AdminPortalModal';
@@ -77,7 +77,7 @@ interface SettingsDrawerProps {
 
 type SettingsSection = 'all' | 'profile' | 'security' | 'chats' | 'notifications' | 'storage' | 'language' | 'legal';
 
-export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, onClose }) => {
+const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, onClose }) => {
   const { 
     signOut, 
     updateUserProfile, 
@@ -107,11 +107,20 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
 
   // Inline profile editing
   const [isEditingName, setIsEditingName] = useState(false);
-  const [displayName, setDisplayName] = useState(user.displayName);
-  const [about, setAbout] = useState(user.about);
+  const [displayName, setDisplayName] = useState(user?.displayName || '');
+  const [about, setAbout] = useState(user?.about || '');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isEditingAbout, setIsEditingAbout] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Synchronize profile and 2FA states whenever user profile updates or modal opens
+  useEffect(() => {
+    if (isOpen && user) {
+      setDisplayName(user.displayName || '');
+      setAbout(user.about || '');
+      setTwoStepEnabled(!!(user.authenticatorEnabled || user.preferences?.authenticatorEnabled));
+    }
+  }, [isOpen, user]);
+
 
   // Sub-Modals
   const [showAvatarEditor, setShowAvatarEditor] = useState(false);
@@ -122,7 +131,6 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
   const [showPolicy, setShowPolicy] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
-  const [showWhatsNew, setShowWhatsNew] = useState(false);
   const [showAdminPortal, setShowAdminPortal] = useState(false);
   const [adminPortalInitialTab, setAdminPortalInitialTab] = useState<'overview' | 'support' | 'users' | 'chats' | 'policies' | 'admins' | 'version'>('overview');
   const [appVersionData, setAppVersionData] = useState<AppVersionData>(getCachedAppVersion);
@@ -532,9 +540,11 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
   if (!isOpen) return null;
 
   const handleCopyPhone = () => {
-    navigator.clipboard.writeText(user.phoneNumber);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (user?.phoneNumber) {
+      navigator.clipboard.writeText(user.phoneNumber);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleContactSupportForNumber = async () => {
@@ -565,8 +575,9 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
   };
 
   const handleSaveName = async () => {
-    if (!displayName.trim()) return;
-    await updateUserProfile({ displayName: displayName.trim() });
+    const trimmed = (displayName || '').trim();
+    if (!trimmed) return;
+    await updateUserProfile({ displayName: trimmed });
     setIsEditingName(false);
   };
 
@@ -636,14 +647,19 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
 
   const shouldShow = (sec: SettingsSection) => filterTab === 'all' || filterTab === sec;
 
-  // Calculate breakdown percentages
-  const messagesPct = Math.round((storageStats.messagesBytes / storageStats.totalBytes) * 100);
-  const mediaPct = Math.round((storageStats.mediaBytes / storageStats.totalBytes) * 100);
-  const cachePct = Math.max(10, 100 - messagesPct - mediaPct);
+  // Calculate breakdown percentages safely
+  const totalStorageBytes = Math.max(storageStats?.totalBytes || 2048, 1);
+  const messagesPct = Math.min(100, Math.max(0, Math.round(((storageStats?.messagesBytes || 0) / totalStorageBytes) * 100)));
+  const mediaPct = Math.min(100, Math.max(0, Math.round(((storageStats?.mediaBytes || 0) / totalStorageBytes) * 100)));
+  const cachePct = Math.min(100, Math.max(10, 100 - messagesPct - mediaPct));
 
-  return (
+  const modalContent = (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-md animate-fade-in select-none pt-safe pb-safe">
+      <div 
+        className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in select-none pt-safe pb-safe"
+        role="dialog"
+        aria-modal="true"
+      >
         {/* Outside Backdrop */}
         <div className="fixed inset-0 cursor-default" onClick={onClose} />
 
@@ -877,7 +893,9 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
 
                     <div className="space-y-2">
                       {activeSessionsList.map((sess) => {
-                        const isMobile = sess.os.includes('Android') || sess.os.includes('iOS') || sess.os.includes('iPhone');
+                        const osStr = typeof sess?.os === 'string' ? sess.os : 'Windows';
+                        const browserStr = typeof sess?.browser === 'string' ? sess.browser : 'Browser';
+                        const isMobile = osStr.includes('Android') || osStr.includes('iOS') || osStr.includes('iPhone');
                         return (
                           <div key={sess.id} className="p-2.5 bg-[#202c33] rounded-xl border border-[#2e3b44] flex items-center justify-between text-xs">
                             <div className="flex items-center gap-2.5 min-w-0">
@@ -886,7 +904,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                               </div>
                               <div className="min-w-0">
                                 <div className="font-medium text-white flex items-center gap-1.5 truncate">
-                                  <span>{sess.os} • {sess.browser}</span>
+                                  <span>{osStr} • {browserStr}</span>
                                   {sess.isCurrent && (
                                     <span className="text-[9px] bg-emerald-500/20 text-[#00a884] px-1.5 py-0.5 rounded-md font-semibold">
                                       This Device
@@ -1873,12 +1891,6 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
         />
       )}
 
-      {showWhatsNew && (
-        <WhatsNewModal
-          isOpen={showWhatsNew}
-          onClose={() => setShowWhatsNew(false)}
-        />
-      )}
 
       {showAdminPortal && (
         <AdminPortalModal
@@ -1918,5 +1930,71 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
         />
       )}
     </>
+  );
+
+  if (typeof document === 'undefined') return modalContent;
+  return createPortal(modalContent, document.body);
+};
+
+
+class SettingsErrorBoundary extends React.Component<
+  { children: React.ReactNode; onClose: () => void },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: any) {
+    console.error('[SettingsDrawer] Caught render error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      const errorContent = (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="bg-[#202c33] border border-[#2e3b44] p-6 rounded-2xl max-w-md w-full text-center space-y-4 shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-red-500/20 text-red-400 mx-auto flex items-center justify-center">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <h3 className="text-white font-bold text-base">Settings Recovered</h3>
+            <p className="text-xs text-[#8696a0]">
+              Settings encountered a temporary state issue and recovered safely. Click below to reload.
+            </p>
+            <div className="flex gap-2 justify-center pt-2">
+              <button
+                onClick={() => this.setState({ hasError: false, error: null })}
+                className="px-4 py-2 bg-[#00a884] hover:bg-[#02906f] text-white text-xs font-semibold rounded-xl transition cursor-pointer"
+              >
+                Reload Settings
+              </button>
+              <button
+                onClick={this.props.onClose}
+                className="px-4 py-2 bg-[#111b21] hover:bg-[#202c33] border border-[#2e3b44] text-[#8696a0] hover:text-white text-xs font-semibold rounded-xl transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+      if (typeof document === 'undefined') return errorContent;
+      return createPortal(errorContent, document.body);
+    }
+    return this.props.children;
+  }
+}
+
+export const SettingsDrawer: React.FC<SettingsDrawerProps> = (props) => {
+  if (!props.isOpen || !props.user) return null;
+  return (
+    <SettingsErrorBoundary onClose={props.onClose}>
+      <SettingsDrawerContent {...props} />
+    </SettingsErrorBoundary>
   );
 };

@@ -257,7 +257,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
 
           {/* Settings */}
           <button
-            onClick={() => setShowSettings(true)}
+            onClick={() => {
+              setShowMoreMenu(false);
+              setShowSettings(true);
+            }}
             className="p-2.5 rounded-xl text-gray-600 dark:text-[#8696a0] hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/60 dark:hover:bg-[#2a3942] transition cursor-pointer"
             title="Settings & Privacy"
           >
@@ -277,7 +280,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
 
           {/* User Profile Avatar at bottom of dock */}
           <div
-            onClick={() => setShowSettings(true)}
+            onClick={() => {
+              setShowMoreMenu(false);
+              setShowSettings(true);
+            }}
             className="p-1 cursor-pointer hover:opacity-85 transition"
             title={`${currentUser.displayName} • ${currentUser.phoneNumber}`}
           >
@@ -383,7 +389,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
                       <div className="border-t border-gray-200 dark:border-[#2e3b44] my-1" />
 
                       <button
-                        onClick={() => setShowSettings(true)}
+                        onClick={() => {
+                          setShowMoreMenu(false);
+                          setShowSettings(true);
+                        }}
                         className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-[#182229] flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
                       >
                         <Settings className="w-4 h-4 text-gray-600 dark:text-[#8696a0]" />
@@ -663,7 +672,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
             {/* Settings */}
             <button
               type="button"
-              onClick={() => setShowSettings(true)}
+              onClick={() => {
+                setShowMoreMenu(false);
+                setShowSettings(true);
+              }}
               className="flex flex-col items-center justify-center text-[#8696a0] hover:text-white px-2.5 py-1 rounded-2xl hover:bg-white/[0.04] transition-all duration-200 cursor-pointer active:scale-95"
             >
               <Settings className="w-5 h-5 transition-transform duration-200 hover:rotate-45" />
