@@ -131,8 +131,14 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
     onConfirm: () => void;
   } | null>(null);
 
-  const isGroupOwner = chat.createdBy === currentUser.uid;
-  const isGroupAdmin = (chat.adminIds || []).includes(currentUser.uid) || isGroupOwner;
+  const effectiveOwner = chat.createdBy || chat.participants?.[0] || '';
+  const isGroupOwner = effectiveOwner === currentUser.uid;
+  const effectiveAdmins = (chat.adminIds && chat.adminIds.length > 0)
+    ? chat.adminIds
+    : (effectiveOwner ? [effectiveOwner] : []);
+  const effectiveMods = chat.moderatorIds || [];
+  const isGroupAdmin = effectiveAdmins.includes(currentUser.uid) || isGroupOwner;
+  const isGroupModerator = effectiveMods.includes(currentUser.uid) || isGroupAdmin;
   const groupPerms: GroupPermissions = chat.permissions || {
     whoCanSendMessage: 'all',
     whoCanAddMembers: 'all',
@@ -140,13 +146,15 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
     whoCanViewMembers: 'all',
   };
 
-  const canEditGroup = chat.type !== 'direct' && (isGroupAdmin || groupPerms.whoCanEditInfo === 'all');
-  const canAddMembers = chat.type !== 'direct' && (isGroupAdmin || groupPerms.whoCanAddMembers === 'all');
+  const canEditGroup = chat.type !== 'direct' && (isGroupAdmin || isGroupModerator || groupPerms.whoCanEditInfo === 'all');
+  const canAddMembers = chat.type !== 'direct' && (isGroupAdmin || isGroupModerator || groupPerms.whoCanAddMembers === 'all');
 
   const handleUpdatePerm = async (key: keyof GroupPermissions, val: 'all' | 'admins') => {
     const updated = { ...groupPerms, [key]: val };
+    chat.permissions = updated;
     await updateGroupPermissions(chat.id, updated);
     RealtimeCoordinator.updateGroupInfo(chat.id, { permissions: updated }).catch(() => {});
+    showAlertNotice?.("Group Permissions Updated", "Settings updated across both databases.", "primary");
   };
 
   useEffect(() => {
@@ -409,6 +417,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
     await updateDoc(doc(db, 'chats', chat.id), { adminIds: newAdmins }).catch(() => {});
     RealtimeCoordinator.updateGroupInfo(chat.id, { adminIds: newAdmins }).catch(() => {});
     setActiveMemberMenuUid(null);
+    showAlertNotice?.("Admin Appointed", "Member promoted to group admin.", "primary");
   };
 
   const handleDismissAdmin = async (targetUid: string) => {
@@ -417,6 +426,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
     await updateDoc(doc(db, 'chats', chat.id), { adminIds: newAdmins }).catch(() => {});
     RealtimeCoordinator.updateGroupInfo(chat.id, { adminIds: newAdmins }).catch(() => {});
     setActiveMemberMenuUid(null);
+    showAlertNotice?.("Admin Dismissed", "Member dismissed from group admin role.", "primary");
   };
 
   const handleMakeModerator = async (targetUid: string) => {
@@ -425,6 +435,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
     await updateDoc(doc(db, 'chats', chat.id), { moderatorIds: newMods }).catch(() => {});
     RealtimeCoordinator.updateGroupInfo(chat.id, { moderatorIds: newMods }).catch(() => {});
     setActiveMemberMenuUid(null);
+    showAlertNotice?.("Moderator Appointed", "Member granted moderator permissions.", "primary");
   };
 
   const handleDismissModerator = async (targetUid: string) => {
@@ -433,6 +444,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
     await updateDoc(doc(db, 'chats', chat.id), { moderatorIds: newMods }).catch(() => {});
     RealtimeCoordinator.updateGroupInfo(chat.id, { moderatorIds: newMods }).catch(() => {});
     setActiveMemberMenuUid(null);
+    showAlertNotice?.("Moderator Dismissed", "Member dismissed from moderator role.", "primary");
   };
 
   const handleRemoveMember = (targetUser: UserProfile) => {
@@ -1183,7 +1195,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
                 className="bg-[#202c33] border border-[#2e3b44] rounded-lg px-2 py-0.5 text-xs text-white focus:outline-none focus:border-[#00a884] cursor-pointer"
               >
                 <option value="all">All Members</option>
-                <option value="admins">Only Admins</option>
+                <option value="admins">Only Admins & Moderators</option>
               </select>
             </div>
 
@@ -1195,7 +1207,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
                 className="bg-[#202c33] border border-[#2e3b44] rounded-lg px-2 py-0.5 text-xs text-white focus:outline-none focus:border-[#00a884] cursor-pointer"
               >
                 <option value="all">All Members</option>
-                <option value="admins">Only Admins</option>
+                <option value="admins">Only Admins & Moderators</option>
               </select>
             </div>
 
@@ -1207,7 +1219,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
                 className="bg-[#202c33] border border-[#2e3b44] rounded-lg px-2 py-0.5 text-xs text-white focus:outline-none focus:border-[#00a884] cursor-pointer"
               >
                 <option value="all">All Members</option>
-                <option value="admins">Only Admins</option>
+                <option value="admins">Only Admins & Moderators</option>
               </select>
             </div>
 
@@ -1219,7 +1231,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
                 className="bg-[#202c33] border border-[#2e3b44] rounded-lg px-2 py-0.5 text-xs text-white focus:outline-none focus:border-[#00a884] cursor-pointer"
               >
                 <option value="all">All Members</option>
-                <option value="admins">Only Admins</option>
+                <option value="admins">Only Admins & Moderators</option>
               </select>
             </div>
           </div>
@@ -1383,11 +1395,14 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
           ) : (
             <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
               {participants.map((p) => {
-                const isOwner = p.uid === (chat.createdBy || chat.adminIds?.[0]);
-                const isAdmin = (chat.adminIds || []).includes(p.uid);
-                const isMod = (chat.moderatorIds || []).includes(p.uid);
+                const isOwner = p.uid === effectiveOwner;
+                const isAdmin = effectiveAdmins.includes(p.uid);
+                const isMod = effectiveMods.includes(p.uid);
                 const isSelf = p.uid === currentUser.uid;
-                const canManageUser = (isGroupAdmin || isGroupOwner) && !isSelf && !isOwner;
+                const canManageUser = !isSelf && !isOwner && (
+                  (isGroupAdmin || isGroupOwner) ||
+                  (isGroupModerator && !isAdmin && !isMod)
+                );
 
                 return (
                   <div
@@ -1442,47 +1457,51 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
                           {/* Dropdown Menu */}
                           {activeMemberMenuUid === p.uid && (
                             <div className="absolute right-0 top-8 z-50 bg-[#202c33] border border-[#2e3b44] rounded-2xl shadow-2xl py-1.5 w-48 text-xs animate-scale-in">
-                              {isAdmin ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDismissAdmin(p.uid)}
-                                  className="w-full px-3 py-2 text-left text-[#8696a0] hover:text-white hover:bg-[#111b21] flex items-center gap-2 cursor-pointer transition"
-                                >
-                                  <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
-                                  <span>Dismiss as Admin</span>
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleMakeAdmin(p.uid)}
-                                  className="w-full px-3 py-2 text-left text-white hover:bg-[#111b21] flex items-center gap-2 cursor-pointer transition"
-                                >
-                                  <ShieldCheck className="w-3.5 h-3.5 text-[#00a884]" />
-                                  <span>Make Group Admin</span>
-                                </button>
-                              )}
+                              {(isGroupAdmin || isGroupOwner) && (
+                                <>
+                                  {isAdmin ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDismissAdmin(p.uid)}
+                                      className="w-full px-3 py-2 text-left text-[#8696a0] hover:text-white hover:bg-[#111b21] flex items-center gap-2 cursor-pointer transition"
+                                    >
+                                      <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
+                                      <span>Dismiss as Admin</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMakeAdmin(p.uid)}
+                                      className="w-full px-3 py-2 text-left text-white hover:bg-[#111b21] flex items-center gap-2 cursor-pointer transition"
+                                    >
+                                      <ShieldCheck className="w-3.5 h-3.5 text-[#00a884]" />
+                                      <span>Make Group Admin</span>
+                                    </button>
+                                  )}
 
-                              {isMod ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDismissModerator(p.uid)}
-                                  className="w-full px-3 py-2 text-left text-[#8696a0] hover:text-white hover:bg-[#111b21] flex items-center gap-2 cursor-pointer transition"
-                                >
-                                  <Shield className="w-3.5 h-3.5 text-red-400" />
-                                  <span>Dismiss Moderator</span>
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleMakeModerator(p.uid)}
-                                  className="w-full px-3 py-2 text-left text-white hover:bg-[#111b21] flex items-center gap-2 cursor-pointer transition"
-                                >
-                                  <Shield className="w-3.5 h-3.5 text-indigo-400" />
-                                  <span>Assign Moderator</span>
-                                </button>
-                              )}
+                                  {isMod ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDismissModerator(p.uid)}
+                                      className="w-full px-3 py-2 text-left text-[#8696a0] hover:text-white hover:bg-[#111b21] flex items-center gap-2 cursor-pointer transition"
+                                    >
+                                      <Shield className="w-3.5 h-3.5 text-red-400" />
+                                      <span>Dismiss Moderator</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMakeModerator(p.uid)}
+                                      className="w-full px-3 py-2 text-left text-white hover:bg-[#111b21] flex items-center gap-2 cursor-pointer transition"
+                                    >
+                                      <Shield className="w-3.5 h-3.5 text-indigo-400" />
+                                      <span>Assign Moderator</span>
+                                    </button>
+                                  )}
 
-                              <div className="h-[1px] bg-[#2e3b44] my-1" />
+                                  <div className="h-[1px] bg-[#2e3b44] my-1" />
+                                </>
+                              )}
 
                               <button
                                 type="button"

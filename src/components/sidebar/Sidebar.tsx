@@ -17,7 +17,8 @@ import {
   Copy, 
   Check, 
   QrCode,
-  UserPlus
+  UserPlus,
+  LogOut
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useChat } from '../../context/ChatContext';
@@ -45,7 +46,8 @@ type RailTab = 'chats' | 'calls' | 'status' | 'communities' | 'channels';
 type FilterTag = 'all' | 'unread' | 'favourites' | 'groups';
 
 export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
-  const { currentUser, isAdmin } = useAuth();
+  const { currentUser, isAdmin, signOut } = useAuth();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const { chats, activeChat, setActiveChat, markChatAsRead } = useChat();
 
   const [activeRail, setActiveRail] = useState<RailTab>('chats');
@@ -411,6 +413,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
                           <span>Admin Control Portal</span>
                         </button>
                       )}
+
+                      <div className="border-t border-gray-200 dark:border-[#2e3b44] my-1" />
+
+                      <button
+                        onClick={() => {
+                          setShowMoreMenu(false);
+                          setShowLogoutConfirm(true);
+                        }}
+                        className="w-full px-3.5 py-2.5 text-left hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center gap-2.5 text-red-600 dark:text-red-400 font-medium transition cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4 text-red-600 dark:text-red-400" />
+                        <span>Log Out</span>
+                      </button>
                     </div>
                   </>
                 )}
@@ -583,103 +598,96 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
             <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/35 to-transparent pointer-events-none" />
             <div className="absolute inset-x-0 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-[#00a884]/25 to-transparent pointer-events-none" />
 
-            {/* Chats */}
+            {/* 1. Chats Tab */}
             <button
               type="button"
               onClick={() => {
                 setActiveRail('chats');
                 setViewingArchived(false);
               }}
-              className={`flex flex-col items-center justify-center transition-all duration-200 cursor-pointer active:scale-95 ${
+              className={`flex-1 flex flex-col items-center justify-center py-1.5 transition-all duration-200 cursor-pointer active:scale-90 relative ${
                 activeRail === 'chats'
-                  ? 'bg-gradient-to-b from-[#00a884]/25 to-[#00a884]/10 border border-[#00a884]/40 shadow-[0_0_16px_rgba(0,168,132,0.35)] text-white px-3 py-1 rounded-2xl scale-105'
-                  : 'text-[#8696a0] hover:text-white px-2.5 py-1 rounded-2xl hover:bg-white/[0.04]'
+                  ? 'text-white font-semibold'
+                  : 'text-[#8696a0] hover:text-white'
               }`}
             >
-              <div className="relative">
-                <MessageSquare className={`w-5 h-5 transition-transform duration-200 ${activeRail === 'chats' ? 'text-[#00a884]' : ''}`} />
+              <div className={`relative px-3 py-1 rounded-full transition-all duration-200 ${
+                activeRail === 'chats' ? 'bg-[#00a884]/20 text-[#00a884] shadow-[0_0_12px_rgba(0,168,132,0.3)]' : ''
+              }`}>
+                <MessageSquare className={`w-5 h-5 transition-transform duration-200 ${activeRail === 'chats' ? 'scale-110 text-[#00a884]' : ''}`} />
                 {totalUnreadCount > 0 && (
-                  <span className="absolute -top-1.5 -right-2.5 bg-gradient-to-r from-[#00a884] to-[#02906f] text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full shadow-[0_2px_8px_rgba(0,168,132,0.6)] ring-2 ring-[#111b21]">
+                  <span className="absolute -top-1 -right-1 bg-[#00a884] text-white text-[9px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center ring-2 ring-[#111b21] shadow-sm">
                     {totalUnreadCount}
                   </span>
                 )}
               </div>
-              <span className={`text-[10px] font-semibold mt-0.5 ${activeRail === 'chats' ? 'text-white' : ''}`}>Chats</span>
+              <span className={`text-[11px] mt-0.5 transition-colors ${activeRail === 'chats' ? 'text-white font-bold' : 'text-[#8696a0]'}`}>Chats</span>
               {activeRail === 'chats' && (
-                <span className="w-1 h-1 rounded-full bg-[#00a884] shadow-[0_0_6px_#00a884] mt-0.5" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00a884] shadow-[0_0_8px_#00a884] mt-0.5" />
               )}
             </button>
 
-            {/* Calls */}
-            <button
-              type="button"
-              onClick={() => setActiveRail('calls')}
-              className={`flex flex-col items-center justify-center transition-all duration-200 cursor-pointer active:scale-95 ${
-                activeRail === 'calls'
-                  ? 'bg-gradient-to-b from-[#00a884]/25 to-[#00a884]/10 border border-[#00a884]/40 shadow-[0_0_16px_rgba(0,168,132,0.35)] text-white px-3 py-1 rounded-2xl scale-105'
-                  : 'text-[#8696a0] hover:text-white px-2.5 py-1 rounded-2xl hover:bg-white/[0.04]'
-              }`}
-            >
-              <Phone className={`w-5 h-5 transition-transform duration-200 ${activeRail === 'calls' ? 'text-[#00a884]' : ''}`} />
-              <span className={`text-[10px] font-semibold mt-0.5 ${activeRail === 'calls' ? 'text-white' : ''}`}>Calls</span>
-              {activeRail === 'calls' && (
-                <span className="w-1 h-1 rounded-full bg-[#00a884] shadow-[0_0_6px_#00a884] mt-0.5" />
-              )}
-            </button>
-
-            {/* Status */}
+            {/* 2. Status Tab */}
             <button
               type="button"
               onClick={() => setActiveRail('status')}
-              className={`flex flex-col items-center justify-center transition-all duration-200 cursor-pointer active:scale-95 ${
+              className={`flex-1 flex flex-col items-center justify-center py-1.5 transition-all duration-200 cursor-pointer active:scale-90 relative ${
                 activeRail === 'status'
-                  ? 'bg-gradient-to-b from-[#00a884]/25 to-[#00a884]/10 border border-[#00a884]/40 shadow-[0_0_16px_rgba(0,168,132,0.35)] text-white px-3 py-1 rounded-2xl scale-105'
-                  : 'text-[#8696a0] hover:text-white px-2.5 py-1 rounded-2xl hover:bg-white/[0.04]'
+                  ? 'text-white font-semibold'
+                  : 'text-[#8696a0] hover:text-white'
               }`}
             >
-              <div className="relative">
-                <CircleDot className={`w-5 h-5 transition-transform duration-200 ${activeRail === 'status' ? 'text-[#00a884]' : ''}`} />
+              <div className={`relative px-3 py-1 rounded-full transition-all duration-200 ${
+                activeRail === 'status' ? 'bg-[#00a884]/20 text-[#00a884] shadow-[0_0_12px_rgba(0,168,132,0.3)]' : ''
+              }`}>
+                <CircleDot className={`w-5 h-5 transition-transform duration-200 ${activeRail === 'status' ? 'scale-110 text-[#00a884]' : ''}`} />
                 {hasUnseenStatus && (
-                  <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#00a884] ring-2 ring-[#111b21] animate-ping" />
+                  <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-[#00a884] ring-2 ring-[#111b21] animate-ping" />
                 )}
                 {hasUnseenStatus && (
-                  <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#00a884] ring-2 ring-[#111b21]" />
+                  <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-[#00a884] ring-2 ring-[#111b21]" />
                 )}
               </div>
-              <span className={`text-[10px] font-semibold mt-0.5 ${activeRail === 'status' ? 'text-white' : ''}`}>Status</span>
+              <span className={`text-[11px] mt-0.5 transition-colors ${activeRail === 'status' ? 'text-white font-bold' : 'text-[#8696a0]'}`}>Status</span>
               {activeRail === 'status' && (
-                <span className="w-1 h-1 rounded-full bg-[#00a884] shadow-[0_0_6px_#00a884] mt-0.5" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00a884] shadow-[0_0_8px_#00a884] mt-0.5" />
               )}
             </button>
 
-            {/* Communities */}
+            {/* 3. Calls Tab */}
             <button
               type="button"
-              onClick={() => setActiveRail('communities')}
-              className={`flex flex-col items-center justify-center transition-all duration-200 cursor-pointer active:scale-95 ${
-                activeRail === 'communities'
-                  ? 'bg-gradient-to-b from-[#00a884]/25 to-[#00a884]/10 border border-[#00a884]/40 shadow-[0_0_16px_rgba(0,168,132,0.35)] text-white px-3 py-1 rounded-2xl scale-105'
-                  : 'text-[#8696a0] hover:text-white px-2.5 py-1 rounded-2xl hover:bg-white/[0.04]'
+              onClick={() => setActiveRail('calls')}
+              className={`flex-1 flex flex-col items-center justify-center py-1.5 transition-all duration-200 cursor-pointer active:scale-90 relative ${
+                activeRail === 'calls'
+                  ? 'text-white font-semibold'
+                  : 'text-[#8696a0] hover:text-white'
               }`}
             >
-              <Users2 className={`w-5 h-5 transition-transform duration-200 ${activeRail === 'communities' ? 'text-[#00a884]' : ''}`} />
-              <span className={`text-[10px] font-semibold mt-0.5 ${activeRail === 'communities' ? 'text-white' : ''}`}>Groups</span>
-              {activeRail === 'communities' && (
-                <span className="w-1 h-1 rounded-full bg-[#00a884] shadow-[0_0_6px_#00a884] mt-0.5" />
+              <div className={`relative px-3 py-1 rounded-full transition-all duration-200 ${
+                activeRail === 'calls' ? 'bg-[#00a884]/20 text-[#00a884] shadow-[0_0_12px_rgba(0,168,132,0.3)]' : ''
+              }`}>
+                <Phone className={`w-5 h-5 transition-transform duration-200 ${activeRail === 'calls' ? 'scale-110 text-[#00a884]' : ''}`} />
+              </div>
+              <span className={`text-[11px] mt-0.5 transition-colors ${activeRail === 'calls' ? 'text-white font-bold' : 'text-[#8696a0]'}`}>Calls</span>
+              {activeRail === 'calls' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00a884] shadow-[0_0_8px_#00a884] mt-0.5" />
               )}
             </button>
 
-            {/* Settings */}
+            {/* 4. Settings Tab */}
             <button
               type="button"
               onClick={() => {
                 setShowMoreMenu(false);
                 setShowSettings(true);
               }}
-              className="flex flex-col items-center justify-center text-[#8696a0] hover:text-white px-2.5 py-1 rounded-2xl hover:bg-white/[0.04] transition-all duration-200 cursor-pointer active:scale-95"
+              className="flex-1 flex flex-col items-center justify-center py-1.5 text-[#8696a0] hover:text-white transition-all duration-200 cursor-pointer active:scale-90 group"
             >
-              <Settings className="w-5 h-5 transition-transform duration-200 hover:rotate-45" />
-              <span className="text-[10px] font-semibold mt-0.5">Settings</span>
+              <div className="px-3 py-1 rounded-full group-hover:bg-white/[0.06] transition-all duration-200">
+                <Settings className="w-5 h-5 transition-transform duration-300 group-hover:rotate-45" />
+              </div>
+              <span className="text-[11px] mt-0.5">Settings</span>
             </button>
           </nav>
         </div>
@@ -698,6 +706,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
         onClose={() => setShowSettings(false)}
       />
       <QRCodeModal user={currentUser} isOpen={showQR} onClose={() => setShowQR(false)} />
+      {showLogoutConfirm && (
+        <ConfirmModal
+          isOpen={showLogoutConfirm}
+          title="Log Out of LimoChat?"
+          description="Are you sure you want to log out? You will need to sign in again to access your messages, calls, and encrypted chats."
+          confirmText="Log Out"
+          cancelText="Cancel"
+          variant="danger"
+          icon={<LogOut className="w-5 h-5 text-red-500" />}
+          onConfirm={() => {
+            setShowLogoutConfirm(false);
+            signOut();
+          }}
+          onCancel={() => setShowLogoutConfirm(false)}
+        />
+      )}
       {isAdmin && (
         <AdminPortalModal
           isOpen={showAdminPortal}

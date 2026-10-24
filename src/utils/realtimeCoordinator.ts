@@ -212,6 +212,13 @@ export class RealtimeCoordinator {
         participants,
         name: chat.name || '',
         avatar: chat.avatar || '',
+        description: chat.description || '',
+        admin_ids: chat.adminIds || (participants.length > 0 ? [participants[0]] : []),
+        moderator_ids: chat.moderatorIds || [],
+        permissions: chat.permissions || null,
+        created_by: chat.createdBy || (participants.length > 0 ? participants[0] : ''),
+        member_joined_at: chat.memberJoinedAt || {},
+        member_history_restricted: chat.memberHistoryRestricted || {},
         last_message: chat.lastMessage || null,
         unread_count: chat.unreadCount || {},
         created_at: chat.createdAt || Date.now(),
@@ -247,6 +254,13 @@ export class RealtimeCoordinator {
           participants,
           name: r.name,
           avatar: r.avatar,
+          description: r.description || '',
+          adminIds: r.admin_ids || (participants.length > 0 ? [participants[0]] : []),
+          moderatorIds: r.moderator_ids || [],
+          permissions: r.permissions || undefined,
+          createdBy: r.created_by || (participants.length > 0 ? participants[0] : ''),
+          memberJoinedAt: r.member_joined_at || {},
+          memberHistoryRestricted: r.member_history_restricted || {},
           lastMessage: r.last_message,
           unreadCount: r.unread_count || {},
           createdAt: Number(r.created_at || Date.now()),
@@ -606,6 +620,13 @@ export class RealtimeCoordinator {
         participants: r.participants || [],
         name: r.name,
         avatar: r.avatar,
+        description: r.description || '',
+        adminIds: r.admin_ids || (r.participants?.length > 0 ? [r.participants[0]] : []),
+        moderatorIds: r.moderator_ids || [],
+        permissions: r.permissions || undefined,
+        createdBy: r.created_by || (r.participants?.length > 0 ? r.participants[0] : ''),
+        memberJoinedAt: r.member_joined_at || {},
+        memberHistoryRestricted: r.member_history_restricted || {},
         lastMessage: r.last_message,
         unreadCount: r.unread_count || {},
         createdAt: Number(r.created_at || Date.now()),
@@ -1540,6 +1561,7 @@ export class RealtimeCoordinator {
       if (updates.adminIds !== undefined) row.admin_ids = updates.adminIds;
       if (updates.moderatorIds !== undefined) row.moderator_ids = updates.moderatorIds;
       if (updates.permissions !== undefined) row.permissions = updates.permissions;
+      if (updates.createdBy !== undefined) row.created_by = updates.createdBy;
       if (updates.memberJoinedAt !== undefined) row.member_joined_at = updates.memberJoinedAt;
       if (updates.memberHistoryRestricted !== undefined) row.member_history_restricted = updates.memberHistoryRestricted;
 

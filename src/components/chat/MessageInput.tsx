@@ -187,15 +187,21 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     onTyping(false);
   };
 
+  const effectiveOwner = activeChat?.createdBy || activeChat?.participants?.[0] || '';
+  const isGroupOwner = effectiveOwner === currentUser?.uid;
+  const isGroupAdmin = !!(activeChat?.adminIds && activeChat.adminIds.includes(currentUser?.uid || '')) || isGroupOwner;
+  const isGroupModerator = !!(activeChat?.moderatorIds && activeChat.moderatorIds.includes(currentUser?.uid || ''));
+  const canSendInGroup = isGroupAdmin || isGroupModerator;
+
   const isRestricted = activeChat?.type === 'group' && 
     activeChat.permissions?.whoCanSendMessage === 'admins' && 
-    !activeChat.adminIds?.includes(currentUser?.uid || '');
+    !canSendInGroup;
 
   if (isRestricted) {
     return (
       <div className="p-3.5 bg-[#202c33] border-t border-[#2e3b44] flex items-center justify-center text-xs text-[#8696a0] gap-2 select-none">
         <Lock className="w-4 h-4 text-[#8696a0]" />
-        <span>Only group administrators can send messages to this group</span>
+        <span>Only group administrators and moderators can send messages to this group</span>
       </div>
     );
   }

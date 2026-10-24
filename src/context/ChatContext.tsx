@@ -1578,7 +1578,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       description,
       avatar: avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(name)}`,
       participants,
+      createdBy: currentUser.uid,
       adminIds: [currentUser.uid],
+      moderatorIds: [],
       permissions: {
         whoCanSendMessage: 'all',
         whoCanAddMembers: 'all',

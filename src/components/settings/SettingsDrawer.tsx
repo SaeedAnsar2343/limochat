@@ -1924,6 +1924,7 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
           icon={<LogOut className="w-5 h-5 text-red-500" />}
           onConfirm={() => {
             setShowLogoutConfirm(false);
+            onClose();
             signOut();
           }}
           onCancel={() => setShowLogoutConfirm(false)}
