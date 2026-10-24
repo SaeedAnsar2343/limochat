@@ -942,7 +942,10 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
 
                   {/* App Passcode & Biometric Screen Lock */}
                   <div className="pt-2 border-t border-[#2e3b44] space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div 
+                      onClick={() => setShowPasscodeModal(true)}
+                      className="flex items-center justify-between cursor-pointer p-2 rounded-2xl hover:bg-[#182229] transition group"
+                    >
                       <div>
                         <div className="text-xs font-semibold text-white flex items-center gap-1.5">
                           <Fingerprint className="w-3.5 h-3.5 text-[#00a884]" />
@@ -990,7 +993,10 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                   </div>
 
                   {/* Two-Step Verification (Authenticator App) */}
-                  <div className="pt-2 border-t border-[#2e3b44] flex items-center justify-between">
+                  <div 
+                    onClick={() => setShowTwoStepModal(true)}
+                    className="pt-2 border-t border-[#2e3b44] flex items-center justify-between cursor-pointer p-2 rounded-2xl hover:bg-[#182229] transition group"
+                  >
                     <div>
                       <div className="text-xs font-semibold text-white flex items-center gap-2">
                         <span>Two-Step Verification (Authenticator App)</span>

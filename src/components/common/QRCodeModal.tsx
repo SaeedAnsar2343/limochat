@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState, useEffect } from 'react';
 import { X, Copy, Check, Share2, ShieldCheck } from 'lucide-react';
 import { UserProfile } from '../../types';
@@ -30,9 +31,11 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({ user, isOpen, onClose 
   const qrData = encodeURIComponent(`limochat://contact?phone=${encodeURIComponent(user.phoneNumber)}&name=${encodeURIComponent(user.displayName)}`);
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${qrData}&color=11-27-33&bgcolor=ffffff&margin=10`;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4 pt-safe pb-safe animate-fade-in">
-      <div className="bg-[#202c33] text-[#e9edef] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-[#2e3b44] flex flex-col items-center">
+  const modalContent = (
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4 pt-safe pb-safe animate-fade-in"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="fixed inset-0 cursor-default" onClick={onClose} />
+      <div onClick={(e) => e.stopPropagation()} className="relative z-10 bg-[#202c33] text-[#e9edef] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-[#2e3b44] flex flex-col items-center">
         {/* Header */}
         <div className="w-full flex items-center justify-between px-5 py-4 border-b border-[#2e3b44]">
           <h3 className="font-semibold text-lg text-white">Your Contact QR Code</h3>
@@ -103,4 +106,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({ user, isOpen, onClose 
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') return modalContent;
+  return createPortal(modalContent, document.body);
 };

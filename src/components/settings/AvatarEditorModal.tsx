@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Upload, Check, Camera, Sparkles, ZoomIn, ZoomOut, RotateCw, Trash2 } from 'lucide-react';
 import { UserProfile } from '../../types';
@@ -184,8 +185,8 @@ export const AvatarEditorModal: React.FC<AvatarEditorModalProps> = ({
     await handleSavePreset(defaultUrl);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 pt-safe pb-safe bg-black/80 backdrop-blur-md select-none animate-fade-in">
+  const modalContent = (
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-3 sm:p-4 pt-safe pb-safe bg-black/80 backdrop-blur-md select-none animate-fade-in">
       <div 
         className="fixed inset-0 cursor-default" 
         onClick={() => { if (!isSaving) onClose(); }} 
@@ -386,4 +387,7 @@ export const AvatarEditorModal: React.FC<AvatarEditorModalProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') return modalContent;
+  return createPortal(modalContent, document.body);
 };

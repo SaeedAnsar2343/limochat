@@ -39,6 +39,18 @@ import {
   PolicyCheckResult 
 } from '../../utils/policyEngine';
 
+import { navigationManager } from '../../utils/navigationManager';
+
+function cleanForFirestore<T extends Record<string, any>>(obj: T): any {
+  const result: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 interface NewStatusModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -85,6 +97,15 @@ export const NewStatusModal: React.FC<NewStatusModalProps> = ({
 }) => {
   const { currentUser } = useAuth();
   const { getAllContacts } = useChat();
+
+  useEffect(() => {
+    if (isOpen) {
+      return navigationManager.registerModal('new_status_modal', () => {
+        stopCamera();
+        onClose();
+      }, 30);
+    }
+  }, [isOpen, onClose]);
 
   // Mode: 'text' | 'image' | 'video' | 'camera'
   const [statusType, setStatusType] = useState<'text' | 'image' | 'video' | 'camera'>('text');
@@ -498,7 +519,13 @@ export const NewStatusModal: React.FC<NewStatusModalProps> = ({
             isMuted: isVideoMuted,
           };
 
-          const docRef = await addDoc(collection(db, 'statuses'), statusData).catch(() => null);
+          let docRef: any = null;
+          try {
+            const cleaned = cleanForFirestore(statusData);
+            docRef = await addDoc(collection(db, 'statuses'), cleaned);
+          } catch (e) {
+            console.warn('Firestore status seg notice:', e);
+          }
           const createdItem: StatusUpdate = {
             id: docRef ? docRef.id : `status_${now}_${i}`,
             ...statusData,
@@ -539,7 +566,13 @@ export const NewStatusModal: React.FC<NewStatusModalProps> = ({
           isMuted: statusType === 'video' ? isVideoMuted : undefined,
         };
 
-        const docRef = await addDoc(collection(db, 'statuses'), statusData).catch(() => null);
+        let docRef: any = null;
+        try {
+          const cleaned = cleanForFirestore(statusData);
+          docRef = await addDoc(collection(db, 'statuses'), cleaned);
+        } catch (e) {
+          console.warn('Firestore status notice:', e);
+        }
         const createdItem: StatusUpdate = {
           id: docRef ? docRef.id : `status_${now}`,
           ...statusData,
@@ -578,9 +611,28 @@ export const NewStatusModal: React.FC<NewStatusModalProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md select-none animate-fade-in p-0 sm:p-4">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md select-none animate-fade-in p-0 sm:p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          stopCamera();
+          onClose();
+        }
+      }}
+    >
+      {/* Click outside backdrop */}
+      <div 
+        className="fixed inset-0 cursor-default" 
+        onClick={() => {
+          stopCamera();
+          onClose();
+        }} 
+      />
       {/* WhatsApp Modal Frame: Full viewport on mobile, sleek rounded card on desktop */}
-      <div className="relative w-full h-[100dvh] sm:h-[88vh] sm:max-h-[820px] sm:max-w-md bg-[#0b141a] sm:rounded-3xl overflow-hidden flex flex-col border-0 sm:border border-white/10 shadow-2xl">
+      <div 
+        className="relative z-10 w-full h-[100dvh] sm:h-[88vh] sm:max-h-[820px] sm:max-w-md bg-[#0b141a] sm:rounded-3xl overflow-hidden flex flex-col border-0 sm:border border-white/10 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* ================= TOP WHATSAPP TOOLBAR ================= */}
         <div className="px-4 py-3 bg-[#111b21]/90 backdrop-blur-md border-b border-[#202c33] flex items-center justify-between z-30 flex-shrink-0">

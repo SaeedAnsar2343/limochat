@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { navigationManager } from '../../utils/navigationManager';
 import React, { useState, useEffect } from 'react';
 import { 
@@ -1501,8 +1502,8 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 pt-safe pb-safe">
+  const modalContent = (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-6 pt-safe pb-safe">
       {/* Background overlay */}
       <div className="fixed inset-0 bg-black/80 backdrop-blur-md cursor-default" onClick={onClose} />
 
@@ -3164,4 +3165,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       )}
     </div>
   );
+
+  if (typeof document === 'undefined') return modalContent;
+  return createPortal(modalContent, document.body);
 };

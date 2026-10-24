@@ -1,3 +1,4 @@
+import { navigationManager } from '../../utils/navigationManager';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
@@ -130,6 +131,11 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
     };
   }, [isOpen, currentIndex, statuses.length, isPaused, onClose, currentStatus]);
 
+  useEffect(() => {
+    if (isOpen) {
+      return navigationManager.registerModal('status_viewer', onClose, 30);
+    }
+  }, [isOpen, onClose]);
   if (!isOpen || statuses.length === 0 || !currentStatus) return null;
 
   const isVideoStory =
@@ -282,10 +288,14 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 select-none animate-fade-in p-0 sm:p-4">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 select-none animate-fade-in p-0 sm:p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="fixed inset-0 cursor-default" onClick={onClose} />
       {/* Story Stage Container */}
       <div 
-        className="relative w-full h-[100dvh] sm:h-[90vh] sm:max-h-[840px] sm:max-w-md sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col justify-between"
+        className="relative z-10 w-full h-[100dvh] sm:h-[90vh] sm:max-h-[840px] sm:max-w-md sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col justify-between"
         style={{
           backgroundColor: currentStatus.backgroundColor || '#0b141a',
         }}

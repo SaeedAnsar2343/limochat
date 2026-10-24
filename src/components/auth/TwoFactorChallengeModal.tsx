@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, KeyRound, AlertTriangle, ArrowRight, LogOut, Check } from 'lucide-react';
 import { UserProfile } from '../../types';
@@ -82,9 +83,10 @@ export const TwoFactorChallengeModal: React.FC<TwoFactorChallengeModalProps> = (
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md select-none animate-fade-in">
-      <div className="relative w-full max-w-sm bg-[#1f2c34] border border-white/10 rounded-3xl p-6 shadow-2xl space-y-4 animate-scale-in text-center">
+  const modalContent = (
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md select-none animate-fade-in" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div className="fixed inset-0 cursor-default" onClick={onCancel} />
+      <div onClick={(e) => e.stopPropagation()} className="relative z-10 w-full max-w-sm bg-[#1f2c34] border border-white/10 rounded-3xl p-6 shadow-2xl space-y-4 animate-scale-in text-center">
         {/* Emblem */}
         <div className="w-14 h-14 rounded-2xl bg-[#00a884]/20 border border-[#00a884]/40 flex items-center justify-center text-[#00a884] mx-auto shadow-lg shadow-[#00a884]/20">
           <KeyRound className="w-7 h-7" />
@@ -167,4 +169,7 @@ export const TwoFactorChallengeModal: React.FC<TwoFactorChallengeModalProps> = (
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') return modalContent;
+  return createPortal(modalContent, document.body);
 };

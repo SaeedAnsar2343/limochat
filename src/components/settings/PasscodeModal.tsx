@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState, useEffect } from 'react';
 import { X, Lock, Unlock, Fingerprint, Check, AlertCircle, ShieldCheck, Clock } from 'lucide-react';
 import { UserProfile } from '../../types';
@@ -108,8 +109,8 @@ export const PasscodeModal: React.FC<PasscodeModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 pt-safe pb-safe bg-black/75 backdrop-blur-md animate-fade-in select-none">
+  const modalContent = (
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-3 sm:p-4 pt-safe pb-safe bg-black/75 backdrop-blur-md animate-fade-in select-none">
       <div className="fixed inset-0 cursor-default" onClick={onClose} />
 
       <div className="relative z-10 bg-[#202c33] text-[#e9edef] w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-[#2e3b44] flex flex-col animate-scale-in modal-content">
@@ -332,4 +333,7 @@ export const PasscodeModal: React.FC<PasscodeModalProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') return modalContent;
+  return createPortal(modalContent, document.body);
 };

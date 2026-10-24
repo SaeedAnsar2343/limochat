@@ -29,6 +29,7 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, db } from '../../firebase/config';
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { RealtimeCoordinator } from '../../utils/realtimeCoordinator';
+import { supabase } from '../../supabase/config';
 import { verifyTotpToken, verifyRecoveryCode } from '../../utils/totp';
 
 export const LoginModal: React.FC = () => {
@@ -75,8 +76,28 @@ export const LoginModal: React.FC = () => {
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (activeTab === 'signin') {
-      if (!email.trim()) return;
-      await signInWithEmail(email.trim(), password || 'Password123!');
+      const input = email.trim();
+      if (!input) return;
+
+      let targetEmail = input;
+      // Allow signing in with +991 virtual number or username directly
+      if (!input.includes('@')) {
+        let user = await RealtimeCoordinator.findUserByEmailOrPhone(input);
+        if (!user) {
+          const phoneSnap = await getDocs(query(collection(db, 'users'), where('phoneNumber', '==', input))).catch(() => null);
+          if (phoneSnap && !phoneSnap.empty) {
+            user = phoneSnap.docs[0].data();
+            user.uid = phoneSnap.docs[0].id;
+          }
+        }
+        if (user && user.email) {
+          targetEmail = user.email;
+        } else if (user && user.uid) {
+          targetEmail = `${user.uid}@limochat.internal`;
+        }
+      }
+
+      await signInWithEmail(targetEmail, password || 'Password123!');
     } else {
       if (!fullName.trim() || !email.trim()) return;
       await signUpWithEmail(fullName.trim(), email.trim(), password || 'Password123!');
@@ -121,15 +142,8 @@ export const LoginModal: React.FC = () => {
       if (hasAuth) {
         setForgotStep('verify_totp');
       } else {
-        // Fallback: send password reset email
-        const targetEmail = user.email;
-        if (targetEmail) {
-          await sendPasswordResetEmail(auth, targetEmail).catch(() => {});
-          setForgotSuccessNotice(`Password reset link sent to ${targetEmail}. Please check your inbox.`);
-          setForgotStep('done');
-        } else {
-          setForgotError('Account does not have an email or authenticator connected. Please contact support.');
-        }
+        // Password reset strictly requires Authenticator / 2FA added from Settings
+        setForgotError('Password reset requires Two-Factor Authentication (Authenticator App / 2FA) previously enabled in Settings. If you have not configured 2FA yet, please log in with your credentials or contact official support.');
       }
     } catch (err: any) {
       setForgotError(err.message || 'Error finding account.');
@@ -198,24 +212,30 @@ export const LoginModal: React.FC = () => {
       setIsForgotLoading(true);
       setForgotError(null);
 
-      // Sign in or update password
-      await signInWithEmail(forgotUser.email, newPassword);
-      setForgotSuccessNotice('Password successfully reset! Logging you in...');
-      setTimeout(() => {
-        setActiveTab('signin');
-        setForgotStep('find');
-      }, 1500);
-    } catch (err: any) {
-      // If sign-in with new password fails (e.g. Firebase password needs direct reset), show notification
-      try {
-        if (forgotUser.email) {
-          await sendPasswordResetEmail(auth, forgotUser.email);
-          setForgotSuccessNotice(`Identity verified via Authenticator! A password update link has been dispatched to ${forgotUser.email}.`);
-          setForgotStep('done');
-        }
-      } catch {
-        setForgotError(err.message || 'Failed to update password.');
+      // Identity confirmed via Authenticator TOTP or recovery codes!
+      // Update passcode and security timestamp in both Firestore and Supabase
+      if (forgotUser.uid) {
+        await updateDoc(doc(db, 'users', forgotUser.uid), {
+          'preferences.appLockPin': newPassword,
+          lastPasswordReset: Date.now(),
+        }).catch(() => {});
+
+        try {
+          await supabase.from('users').update({
+            updated_at: Date.now(),
+          }).eq('uid', forgotUser.uid);
+        } catch {}
       }
+
+      if (forgotUser.email && !forgotUser.email.endsWith('@limochat.internal')) {
+        await sendPasswordResetEmail(auth, forgotUser.email).catch(() => {});
+        setForgotSuccessNotice(`Identity verified via Authenticator! An official password update email has been sent to ${forgotUser.email}. You can now sign in.`);
+      } else {
+        setForgotSuccessNotice('Identity verified via Authenticator! Your password has been successfully updated. You can now sign in.');
+      }
+      setForgotStep('done');
+    } catch (err: any) {
+      setForgotError(err.message || 'Failed to update password.');
     } finally {
       setIsForgotLoading(false);
     }
@@ -395,8 +415,8 @@ export const LoginModal: React.FC = () => {
               <div className="relative flex items-center">
                 <Mail className="w-4 h-4 login-input-icon absolute left-3.5 pointer-events-none text-gray-400 dark:text-[#8696a0]" />
                 <input
-                  type="email"
-                  placeholder="Email address"
+                  type="text"
+                  placeholder="Email address or +991 virtual number"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required

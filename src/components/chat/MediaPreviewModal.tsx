@@ -266,7 +266,12 @@ export const MediaPreviewModal: React.FC<MediaPreviewModalProps> = ({
       </div>
 
       {/* Main Preview Container */}
-      <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 overflow-hidden min-h-0 relative">
+      <div 
+        className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 overflow-hidden min-h-0 relative"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
         {/* Photo Preview */}
         {fileData.type === 'image' && (
           <div className="w-full h-full flex items-center justify-center p-2">
