@@ -1,5 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
+  ShieldCheck,
+  Phone,
+  Sparkles,
+  HelpCircle,
+  Eye,
+  Trash2,
+  Terminal,
   Smile, 
   Paperclip, 
   Mic, 
@@ -42,6 +49,29 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const [inputText, setInputText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showCommandMenu, setShowCommandMenu] = useState(false);
+
+  const isSupportChat = !!(
+    activeChat?.id.startsWith('support_') ||
+    activeChat?.participants?.includes('limochat_official_support') ||
+    activeChat?.name === 'LimoChat Support'
+  );
+
+  const SUPPORT_COMMANDS = [
+    { id: '/status', name: 'Account Status', desc: 'Permanent +991 line, 2FA & verified badge', icon: ShieldCheck },
+    { id: '/call', name: 'Request Support Call', desc: 'Request live voice or video support authorization', icon: Phone },
+    { id: '/version', name: 'App Version', desc: 'Check installed release build & updates', icon: Sparkles },
+    { id: '/help', name: 'Support Guides & FAQ', desc: 'Frequently asked questions & usage guides', icon: HelpCircle },
+    { id: '/security', name: 'Security & 2FA', desc: 'Check two-step verification & app lock', icon: Lock },
+    { id: '/privacy', name: 'Privacy Controls', desc: 'Check visibility, receipts & disappearing timer', icon: Eye },
+    { id: '/clear', name: 'Clear History', desc: 'Clear messages in this support conversation', icon: Trash2 },
+  ];
+
+  const handleExecuteCommand = async (cmdId: string) => {
+    setShowCommandMenu(false);
+    setInputText('');
+    await onSendMessage(cmdId, 'text');
+  };
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [pendingMediaPreview, setPendingMediaPreview] = useState<{
     name: string;
@@ -430,6 +460,31 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             </>
           )}
         </div>
+
+        {/* Support Commands Button [/] */}
+        {isSupportChat && (
+          <button
+            type="button"
+            onClick={() => {
+              const next = !showCommandMenu;
+              if (next) window.dispatchEvent(new Event('limochat_close_all_menus'));
+              setShowCommandMenu(next);
+              setShowAttachMenu(false);
+              setShowEmojiPicker(false);
+            }}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-90 touch-manipulation flex-shrink-0 ${
+              showCommandMenu
+                ? 'text-[#00a884] bg-[#00a884]/20 border border-[#00a884]/50 shadow-[0_0_12px_rgba(0,168,132,0.35)]'
+                : 'text-gray-500 hover:text-gray-900 dark:text-[#8696a0] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/[0.08]'
+            }`}
+            title="Open Telegram-style Support Commands (/)"
+            aria-label="Commands Menu"
+          >
+            <div className="w-6 h-6 flex items-center justify-center font-mono font-bold text-sm border-2 border-current rounded-lg leading-none">
+              /
+            </div>
+          </button>
+        )}
 
         {/* Hidden inputs for attachments */}
         <input

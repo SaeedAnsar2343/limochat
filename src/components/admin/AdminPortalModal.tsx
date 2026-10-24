@@ -61,6 +61,7 @@ import { UserProfile, Chat, Message, Community, UserPunishment } from '../../typ
 import { Avatar } from '../common/Avatar';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { useAuth } from '../../context/AuthContext';
+import { useCall } from '../../context/CallContext';
 import { useChat } from '../../context/ChatContext';
 import { 
   PolicyRule, 

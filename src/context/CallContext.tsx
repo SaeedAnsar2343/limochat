@@ -194,6 +194,31 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     );
 
+    // Support line listener for authorized Admins
+    let unsubSupaSupport = () => {};
+    if (currentUser?.isAdmin) {
+      unsubSupaSupport = RealtimeCoordinator.subscribeToIncomingCalls(
+        'limochat_official_support',
+        (session) => {
+          if (!incomingSessionRef.current || incomingSessionRef.current.id !== session.id) {
+            setIncomingSession({ ...session, callerName: `${session.callerName} (Support Ticket)` });
+            soundEngine.startIncomingRingtone();
+            NativeNotificationService.notifyCall({
+              callerName: `${session.callerName} (Support Ticket)`,
+              callType: session.callType,
+              callId: session.id,
+            });
+          }
+        },
+        (callId) => {
+          if (!callId || activeSessionRef.current?.id === callId || incomingSessionRef.current?.id === callId) {
+            soundEngine.playCallEnd();
+            cleanupCallState();
+          }
+        }
+      );
+    }
+
     // 2. Firestore listener as secondary companion
     const callsRef = collection(db, 'calls');
     const q = query(callsRef, where('status', '==', 'ringing'));
@@ -202,11 +227,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let foundIncoming: CallSession | null = null;
       for (const docSnap of snapshot.docs) {
         const session = { id: docSnap.id, ...docSnap.data() } as CallSession;
-        if (session.callerId !== currentUser.uid && session.participants && session.participants[currentUser.uid]) {
-          const myParticipant = session.participants[currentUser.uid];
+        const isTargeted = session.participants && (session.participants[currentUser.uid] || (currentUser.isAdmin && session.participants['limochat_official_support']));
+        if (session.callerId !== currentUser.uid && isTargeted) {
+          const pKey = (session.participants && session.participants[currentUser.uid]) ? currentUser.uid : 'limochat_official_support';
+          const myParticipant = session.participants[pKey];
           const ageMs = Date.now() - (session.createdAt || 0);
           if (myParticipant.status === 'invited' && ageMs < 60000) {
-            foundIncoming = session;
+            foundIncoming = pKey === 'limochat_official_support' ? { ...session, callerName: `${session.callerName} (Support Ticket)` } : session;
             break;
           }
         }
@@ -229,6 +256,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       unsubSupa();
+      unsubSupaSupport();
       unsubscribe();
       soundEngine.stopRingtone();
     };

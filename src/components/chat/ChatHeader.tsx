@@ -58,6 +58,8 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
 }) => {
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showSupportCallModal, setShowSupportCallModal] = useState(false);
+  const [pendingCallType, setPendingCallType] = useState<'audio' | 'video'>('audio');
 
   // Auto-close dropdown when any other modal or menu opens across the app
   useEffect(() => {
@@ -223,23 +225,39 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
       {/* Right: Actions (Video Call, Audio Call, 3-Dots Menu) */}
       <div className="flex items-center gap-1 sm:gap-1.5 text-[#8696a0]">
         <button
-          onClick={isBlocked ? undefined : onStartVideoCall}
+          onClick={() => {
+            if (isBlocked) return;
+            if (isUserSideSupport && !chat.supportCallsAllowed) {
+              setPendingCallType('video');
+              setShowSupportCallModal(true);
+              return;
+            }
+            onStartVideoCall();
+          }}
           disabled={isBlocked}
           className={`p-2 sm:p-2.5 rounded-full transition-all active:scale-95 ${
             isBlocked ? 'opacity-30 cursor-not-allowed' : 'hover:text-white hover:bg-white/10 active:bg-white/15 cursor-pointer'
           }`}
-          title={isBlocked ? "Calls disabled (Contact blocked)" : "Start Video Call"}
+          title={isBlocked ? "Calls disabled (Contact blocked)" : (isUserSideSupport && !chat.supportCallsAllowed ? "Request Support Video Call" : "Start Video Call")}
         >
           <Video className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
 
         <button
-          onClick={isBlocked ? undefined : onStartAudioCall}
+          onClick={() => {
+            if (isBlocked) return;
+            if (isUserSideSupport && !chat.supportCallsAllowed) {
+              setPendingCallType('audio');
+              setShowSupportCallModal(true);
+              return;
+            }
+            onStartAudioCall();
+          }}
           disabled={isBlocked}
           className={`p-2 sm:p-2.5 rounded-full transition-all active:scale-95 ${
             isBlocked ? 'opacity-30 cursor-not-allowed' : 'hover:text-white hover:bg-white/10 active:bg-white/15 cursor-pointer'
           }`}
-          title={isBlocked ? "Calls disabled (Contact blocked)" : "Start Audio Call"}
+          title={isBlocked ? "Calls disabled (Contact blocked)" : (isUserSideSupport && !chat.supportCallsAllowed ? "Request Support Voice Call" : "Start Audio Call")}
         >
           <Phone className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>

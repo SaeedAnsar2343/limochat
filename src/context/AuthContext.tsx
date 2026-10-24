@@ -529,6 +529,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const merged = { ...(currentUser.preferences || {}), ...newPrefs };
     const userRef = doc(db, 'users', currentUser.uid);
     await updateDoc(userRef, { preferences: merged }).catch(() => {});
+    try {
+      await supabase.from('users').update({
+        preferences: merged,
+        updated_at: Date.now(),
+      }).eq('uid', currentUser.uid);
+    } catch (e) {
+      console.warn('[AuthContext] Supabase updateUserPreferences warning:', e);
+    }
     setCurrentUser(prev => prev ? { ...prev, preferences: merged as any } : null);
   };
 
@@ -546,8 +554,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updatePrivacySettings = async (privacyUpdates: Partial<UserPrivacy>) => {
     if (!currentUser?.uid) return;
-    const newPrivacy = { ...currentUser.privacy, ...privacyUpdates };
+    const defaultPrivacy: UserPrivacy = {
+      lastSeen: 'everyone',
+      profilePhoto: 'everyone',
+      about: 'everyone',
+      status: 'everyone',
+      readReceipts: true,
+    };
+    const newPrivacy: UserPrivacy = {
+      ...defaultPrivacy,
+      ...(currentUser.privacy || {}),
+      ...privacyUpdates,
+    };
     await updateDoc(doc(db, 'users', currentUser.uid), { privacy: newPrivacy }).catch(() => {});
+    try {
+      await supabase.from('users').update({
+        privacy: newPrivacy,
+        updated_at: Date.now(),
+      }).eq('uid', currentUser.uid);
+    } catch (e) {
+      console.warn('[AuthContext] Supabase updatePrivacySettings warning:', e);
+    }
     setCurrentUser(prev => prev ? { ...prev, privacy: newPrivacy } : null);
   };
 

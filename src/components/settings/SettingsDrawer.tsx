@@ -80,6 +80,7 @@ type SettingsSection = 'all' | 'profile' | 'security' | 'chats' | 'notifications
 
 const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, onClose }) => {
   const { 
+    currentUser,
     signOut, 
     updateUserProfile, 
     updateUserPreferences,
@@ -102,6 +103,18 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
     createDirectChat,
     showAlertNotice,
   } = useChat();
+
+  const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
+
+  const handlePrivacyChange = async (updates: Parameters<typeof updatePrivacySettings>[0]) => {
+    try {
+      await updatePrivacySettings(updates);
+      setPrivacyNotice('Privacy settings saved to both databases');
+      setTimeout(() => setPrivacyNotice(null), 3000);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // One-page section filter: 'all' shows all sections on one continuous page
   const [filterTab, setFilterTab] = useState<SettingsSection>('all');
@@ -354,12 +367,16 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
     const nextVal = !securityNotifs;
     setSecurityNotifs(nextVal);
     await updateUserPreferences({ securityNotifications: nextVal });
+    setPrivacyNotice(nextVal ? 'Security alerts enabled (saved to databases)' : 'Security alerts disabled (saved to databases)');
+    setTimeout(() => setPrivacyNotice(null), 3000);
   };
 
   const handleChangeDisappearing = async (val: string) => {
     setDisappearingTimer(val);
     const hours = val === '24h' ? 24 : val === '7d' ? 168 : val === '90d' ? 2160 : 0;
     await updateUserPreferences({ disappearingDuration: hours });
+    setPrivacyNotice(hours > 0 ? `Default disappearing timer set to ${val} (saved to databases)` : 'Default disappearing timer disabled (saved to databases)');
+    setTimeout(() => setPrivacyNotice(null), 3000);
   };
 
   // Active Sessions Management
@@ -1044,18 +1061,31 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
 
                   {/* In-Line Privacy Controls */}
                   <div className="pt-3 border-t border-[#2e3b44] space-y-3">
-                    <div className="text-xs font-semibold text-white flex items-center gap-1.5">
-                      <Eye className="w-3.5 h-3.5 text-[#00a884]" />
-                      <span>In-Line Privacy Controls</span>
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 text-[#00a884]" />
+                        <span>In-Line Privacy Controls</span>
+                      </div>
+                      <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                        <Check className="w-3 h-3 text-[#00a884]" />
+                        <span>Dual-DB Sync</span>
+                      </span>
                     </div>
+
+                    {privacyNotice && (
+                      <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2 animate-fade-in">
+                        <Check className="w-3.5 h-3.5 text-[#00a884] flex-shrink-0" />
+                        <span>{privacyNotice}</span>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                       <div className="bg-[#202c33] p-2.5 rounded-xl border border-[#2e3b44]">
                         <span className="text-[#8696a0] block mb-1">Last Seen & Online</span>
                         <select
-                          value={user.privacy?.lastSeen || 'everyone'}
-                          onChange={(e) => updatePrivacySettings({ lastSeen: e.target.value as any })}
-                          className="w-full bg-[#111b21] border border-[#2e3b44] rounded-lg px-2 py-1 text-xs text-white focus:outline-none"
+                          value={currentUser?.privacy?.lastSeen || user.privacy?.lastSeen || 'everyone'}
+                          onChange={(e) => handlePrivacyChange({ lastSeen: e.target.value as any })}
+                          className="w-full bg-[#111b21] border border-[#2e3b44] rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-[#00a884] cursor-pointer"
                         >
                           <option value="everyone">Everyone</option>
                           <option value="contacts">My Contacts</option>
@@ -1066,9 +1096,9 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                       <div className="bg-[#202c33] p-2.5 rounded-xl border border-[#2e3b44]">
                         <span className="text-[#8696a0] block mb-1">Profile Photo</span>
                         <select
-                          value={user.privacy?.profilePhoto || 'everyone'}
-                          onChange={(e) => updatePrivacySettings({ profilePhoto: e.target.value as any })}
-                          className="w-full bg-[#111b21] border border-[#2e3b44] rounded-lg px-2 py-1 text-xs text-white focus:outline-none"
+                          value={currentUser?.privacy?.profilePhoto || user.privacy?.profilePhoto || 'everyone'}
+                          onChange={(e) => handlePrivacyChange({ profilePhoto: e.target.value as any })}
+                          className="w-full bg-[#111b21] border border-[#2e3b44] rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-[#00a884] cursor-pointer"
                         >
                           <option value="everyone">Everyone</option>
                           <option value="contacts">My Contacts</option>
@@ -1079,9 +1109,9 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                       <div className="bg-[#202c33] p-2.5 rounded-xl border border-[#2e3b44]">
                         <span className="text-[#8696a0] block mb-1">About Info</span>
                         <select
-                          value={user.privacy?.about || 'everyone'}
-                          onChange={(e) => updatePrivacySettings({ about: e.target.value as any })}
-                          className="w-full bg-[#111b21] border border-[#2e3b44] rounded-lg px-2 py-1 text-xs text-white focus:outline-none"
+                          value={currentUser?.privacy?.about || user.privacy?.about || 'everyone'}
+                          onChange={(e) => handlePrivacyChange({ about: e.target.value as any })}
+                          className="w-full bg-[#111b21] border border-[#2e3b44] rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-[#00a884] cursor-pointer"
                         >
                           <option value="everyone">Everyone</option>
                           <option value="contacts">My Contacts</option>
@@ -1092,9 +1122,9 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                       <div className="bg-[#202c33] p-2.5 rounded-xl border border-[#2e3b44]">
                         <span className="text-[#8696a0] block mb-1">Status Updates</span>
                         <select
-                          value={user.privacy?.status || 'everyone'}
-                          onChange={(e) => updatePrivacySettings({ status: e.target.value as any })}
-                          className="w-full bg-[#111b21] border border-[#2e3b44] rounded-lg px-2 py-1 text-xs text-white focus:outline-none"
+                          value={currentUser?.privacy?.status || user.privacy?.status || 'everyone'}
+                          onChange={(e) => handlePrivacyChange({ status: e.target.value as any })}
+                          className="w-full bg-[#111b21] border border-[#2e3b44] rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-[#00a884] cursor-pointer"
                         >
                           <option value="everyone">Everyone</option>
                           <option value="contacts">My Contacts</option>
@@ -1110,14 +1140,14 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                         <div className="text-[11px] text-[#8696a0]">Show blue checkmarks when messages are read</div>
                       </div>
                       <button
-                        onClick={() => updatePrivacySettings({ readReceipts: !user.privacy?.readReceipts })}
+                        onClick={() => handlePrivacyChange({ readReceipts: !(currentUser?.privacy?.readReceipts ?? user.privacy?.readReceipts ?? true) })}
                         className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                          user.privacy?.readReceipts ? 'bg-[#00a884]' : 'bg-[#3b4a54]'
+                          (currentUser?.privacy?.readReceipts ?? user.privacy?.readReceipts ?? true) ? 'bg-[#00a884]' : 'bg-[#3b4a54]'
                         }`}
                       >
                         <span
                           className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-                            user.privacy?.readReceipts ? 'right-0.5' : 'left-0.5'
+                            (currentUser?.privacy?.readReceipts ?? user.privacy?.readReceipts ?? true) ? 'right-0.5' : 'left-0.5'
                           }`}
                         />
                       </button>
@@ -1132,7 +1162,7 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                       <select
                         value={disappearingTimer}
                         onChange={(e) => handleChangeDisappearing(e.target.value)}
-                        className="bg-[#202c33] border border-[#2e3b44] rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none"
+                        className="bg-[#202c33] border border-[#2e3b44] rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none focus:border-[#00a884] cursor-pointer"
                       >
                         <option value="off">Off</option>
                         <option value="24h">24 Hours</option>
@@ -1140,8 +1170,9 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                         <option value="90d">90 Days</option>
                       </select>
                     </div>
+                  </div>
 
-                    {/* Blocked Users Count & Management */}
+                  {/* Blocked Users Count & Management */}
                     <div className="p-3 bg-[#202c33] rounded-xl border border-[#2e3b44] space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 text-xs font-semibold text-white">
@@ -1172,7 +1203,6 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                     </div>
                   </div>
                 </div>
-              </div>
             )}
 
             {/* =========================================================================

@@ -94,6 +94,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   onReportMessage,
   onViewMedia,
 }) => {
+  const showBlueTicks = currentUser?.privacy?.readReceipts !== false;
   const [showHeartPop, setShowHeartPop] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [openUpwards, setOpenUpwards] = useState(false);
@@ -521,7 +522,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                         {message.status === 'sending' && <Clock className="w-2.5 h-2.5 text-white/70 animate-pulse" />}
                         {message.status === 'sent' && <Check className="w-3 h-3 text-white/70" />}
                         {message.status === 'delivered' && <CheckCheck className="w-3 h-3 text-white/70" />}
-                        {message.status === 'read' && <CheckCheck className="w-3 h-3 text-[#53bdeb]" />}
+                        {message.status === 'read' && <CheckCheck className={`w-3 h-3 ${showBlueTicks ? 'text-[#53bdeb]' : 'text-white/70'}`} />}
                       </span>
                     )}
                   </div>
@@ -572,7 +573,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                         {message.status === 'sending' && <Clock className="w-2.5 h-2.5 text-white/70 animate-pulse" />}
                         {message.status === 'sent' && <Check className="w-3 h-3 text-white/70" />}
                         {message.status === 'delivered' && <CheckCheck className="w-3 h-3 text-white/70" />}
-                        {message.status === 'read' && <CheckCheck className="w-3 h-3 text-[#53bdeb]" />}
+                        {message.status === 'read' && <CheckCheck className={`w-3 h-3 ${showBlueTicks ? 'text-[#53bdeb]' : 'text-white/70'}`} />}
                       </span>
                     )}
                   </div>
@@ -893,7 +894,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" /></span>
               )}
               {message.status === 'read' && (
-                <span title="Read"><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
+                <span title="Read"><CheckCheck className={`w-3.5 h-3.5 ${showBlueTicks ? 'text-[#53bdeb]' : 'text-[#8696a0]'}`} /></span>
               )}
               {message.status === 'failed' && (
                 <button 
