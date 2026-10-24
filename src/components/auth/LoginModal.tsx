@@ -29,6 +29,7 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, db } from '../../firebase/config';
 import { collection, query, where, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { OtpBoxInput } from '../common/OtpBoxInput';
+import { formatAuthErrorMessage } from '../../utils/authErrors';
 import { RealtimeCoordinator } from '../../utils/realtimeCoordinator';
 import { supabase } from '../../supabase/config';
 import { verifyTotpToken, verifyRecoveryCode } from '../../utils/totp';
@@ -93,11 +94,14 @@ export const LoginModal: React.FC = () => {
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError(null);
     if (activeTab === 'signin') {
       const input = email.trim();
       if (!input) return;
 
       let targetEmail = input;
+      let matchedUser: any = null;
+
       // Allow signing in with +991 virtual number or username directly
       if (!input.includes('@')) {
         let user = await RealtimeCoordinator.findUserByEmailOrPhone(input);
@@ -110,15 +114,42 @@ export const LoginModal: React.FC = () => {
         }
         if (user && user.email) {
           targetEmail = user.email;
+          matchedUser = user;
         } else if (user && user.uid) {
           targetEmail = `${user.uid}@limochat.internal`;
+          matchedUser = user;
         }
+      } else {
+        try {
+          const emailSnap = await getDocs(query(collection(db, 'users'), where('email', '==', input.toLowerCase())));
+          if (!emailSnap.empty) {
+            matchedUser = emailSnap.docs[0].data();
+            matchedUser.uid = emailSnap.docs[0].id;
+          }
+        } catch {}
       }
 
-      await signInWithEmail(targetEmail, password || 'Password123!');
+      const isGoogleAccount = !!(
+        matchedUser?.photoURL?.includes('googleusercontent.com') ||
+        matchedUser?.providerId === 'google.com'
+      );
+
+      try {
+        await signInWithEmail(targetEmail, password || 'Password123!');
+      } catch (err: any) {
+        if (isGoogleAccount) {
+          setAuthError('This email is registered with Google. Please use the "Continue with Google" button above to sign in.');
+          return;
+        }
+        setAuthError(formatAuthErrorMessage(err, { email: targetEmail, isGoogleUser: isGoogleAccount }));
+      }
     } else {
       if (!fullName.trim() || !email.trim()) return;
-      await signUpWithEmail(fullName.trim(), email.trim(), password || 'Password123!');
+      try {
+        await signUpWithEmail(fullName.trim(), email.trim(), password || 'Password123!');
+      } catch (err: any) {
+        setAuthError(formatAuthErrorMessage(err));
+      }
     }
   };
 
@@ -374,22 +405,11 @@ export const LoginModal: React.FC = () => {
           Private messaging, encrypted voice & video calls, and instant virtual lines.
         </p>
 
-        {/* Error / Warning Alert Banner */}
+        {/* User-Friendly Error Alert Banner */}
         {authError && activeTab !== 'forgot' && (
-          <div className="w-full bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3.5 mb-5 text-xs text-amber-900 dark:text-amber-200 space-y-2 animate-fade-in shadow-xs">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1 leading-relaxed">{authError}</div>
-            </div>
-            {typeof window !== 'undefined' && window.location.hostname !== 'localhost' && (
-              <a
-                href={`http://localhost:${window.location.port || '5173'}`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-300 font-semibold transition"
-              >
-                <span>Switch to localhost:{window.location.port || '5173'}</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            )}
+          <div className="w-full bg-red-500/10 border border-red-500/25 rounded-2xl p-3.5 mb-4 text-xs text-red-200 animate-fade-in shadow-sm flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 leading-relaxed font-medium text-red-200">{authError}</div>
           </div>
         )}
 

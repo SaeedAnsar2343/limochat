@@ -30,6 +30,7 @@ import { auth, googleProvider, db } from '../firebase/config';
 import { UserProfile, UserPrivacy, UserPreferences, UserPunishment, PolicyWarning, UserSession } from '../types';
 import { supabase } from '../supabase/config';
 import { RealtimeCoordinator } from '../utils/realtimeCoordinator';
+import { formatAuthErrorMessage } from '../utils/authErrors';
 import { generateTemporaryNumber, getOrAssignLifetimeNumber } from '../utils/formatters';
 
 export const getClientDeviceInfo = () => {
@@ -355,17 +356,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error: any) {
       console.error("Google sign in error:", error);
       if (error.code === 'auth/unauthorized-domain') {
-        const hostname = window.location.hostname;
-        const port = window.location.port;
-        setAuthError(
-          `Domain Unauthorized: "${hostname}" is not yet in the Firebase Authorized Domains list. ` +
-          `You can open http://localhost:${port || '5173'} in your browser, or add "${hostname}" in Firebase Console > Authentication > Settings > Authorized Domains. ` +
-          `Alternatively, use the Email form below to sign in or create an account.`
-        );
+        setAuthError("Google Sign-In is not configured for this domain yet. Please sign in with your email or virtual number below.");
       } else if (error.code === 'auth/popup-closed-by-user') {
-        setAuthError("Sign in was cancelled.");
+        setAuthError("Sign-in was cancelled.");
       } else {
-        setAuthError(error.message || "Failed to sign in with Google.");
+        setAuthError(formatAuthErrorMessage(error));
       }
     } finally {
       setIsAuthenticating(false);
@@ -397,7 +392,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (error: any) {
       console.error("Sign in error:", error);
-      setAuthError(error.message || "Sign in failed.");
+      setAuthError(formatAuthErrorMessage(error));
       throw error;
     } finally {
       setIsAuthenticating(false);
@@ -435,7 +430,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (error: any) {
       console.error("Sign up error:", error);
-      setAuthError(error.message || "Failed to create account.");
+      setAuthError(formatAuthErrorMessage(error));
       throw error;
     } finally {
       setIsAuthenticating(false);
