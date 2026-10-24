@@ -769,8 +769,13 @@ export const NewStatusModal: React.FC<NewStatusModalProps> = ({
                 onChange={(e) => setText(e.target.value)}
                 maxLength={400}
                 placeholder="Type a status update..."
-                style={{ fontFamily: selectedFont.family }}
-                className="w-full bg-transparent text-white placeholder-white/60 text-2xl sm:text-3xl font-bold text-center border-none focus:outline-none resize-none leading-relaxed drop-shadow-md"
+                style={{
+                  fontFamily: selectedFont.family,
+                  backgroundColor: 'transparent',
+                  background: 'transparent',
+                  color: '#ffffff',
+                }}
+                className="status-canvas-textarea w-full bg-transparent text-white placeholder-white/60 text-2xl sm:text-3xl font-bold text-center border-none focus:outline-none resize-none leading-relaxed drop-shadow-md"
                 rows={4}
                 autoFocus
               />

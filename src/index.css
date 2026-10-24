@@ -541,15 +541,29 @@
 
 /* Form controls (select, textarea, input) in Light Mode */
 .light-theme select,
-.light-theme textarea,
-.light-theme input:not([type="checkbox"]):not([type="radio"]) {
+.light-theme textarea:not(.status-canvas-textarea):not([class*="bg-transparent"]),
+.light-theme input:not([type="checkbox"]):not([type="radio"]):not([class*="bg-transparent"]) {
   color: #111b21 !important;
 }
 
 .light-theme select,
-.light-theme textarea {
+.light-theme textarea:not(.status-canvas-textarea):not([class*="bg-transparent"]) {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
+}
+
+/* Status editor transparent text canvas in both Light and Dark themes */
+.status-canvas-textarea,
+.status-canvas-textarea:focus,
+.status-canvas-textarea:active,
+.light-theme .status-canvas-textarea,
+.dark-theme .status-canvas-textarea {
+  background-color: transparent !important;
+  background: transparent !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
 
 .light-theme select option {

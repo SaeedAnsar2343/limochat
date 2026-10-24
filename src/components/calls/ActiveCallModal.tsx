@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { 
   PhoneOff, 
+  ArrowLeftRight, 
   Mic, 
   MicOff, 
   Video, 
@@ -59,6 +60,23 @@ export const ActiveCallModal: React.FC = () => {
   const [addedNotice, setAddedNotice] = useState<string | null>(null);
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
 
+  // PiP Swapping (swap local camera full-screen vs remote full-screen)
+  const [isPiPSwapped, setIsPiPSwapped] = useState<boolean>(false);
+
+  // Floating PiP Draggable Coordinates (Freely movable to any screen position)
+  const [pipPos, setPipPos] = useState<{ x: number; y: number }>(() => ({
+    x: typeof window !== 'undefined' ? Math.max(16, window.innerWidth - 135) : 220,
+    y: 75,
+  }));
+  const [isPipDragging, setIsPipDragging] = useState<boolean>(false);
+  const pipDragRef = useRef<{ startX: number; startY: number; initX: number; initY: number; moved: boolean }>({
+    startX: 0,
+    startY: 0,
+    initX: 0,
+    initY: 0,
+    moved: false,
+  });
+
   // Dynamic Island Draggable Coordinates
   const [islandPos, setIslandPos] = useState<{ x: number; y: number }>(() => ({
     x: typeof window !== 'undefined' ? Math.max(12, (window.innerWidth - 300) / 2) : 50,
@@ -73,7 +91,10 @@ export const ActiveCallModal: React.FC = () => {
     moved: false,
   });
 
-  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const mainLocalVideoRef = useRef<HTMLVideoElement | null>(null);
+  const mainRemoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const pipLocalVideoRef = useRef<HTMLVideoElement | null>(null);
+  const pipRemoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRefs = useRef<{ [uid: string]: HTMLVideoElement | null }>({});
 
   const otherUid = activeSession ? (
@@ -131,27 +152,100 @@ export const ActiveCallModal: React.FC = () => {
     return () => clearInterval(interval);
   }, [activeSession?.status, activeSession?.startedAt]);
 
-  // Bind local stream without flickering
+  // Bind local stream to main or pip without flickering
   useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      if (localVideoRef.current.srcObject !== localStream) {
-        localVideoRef.current.srcObject = localStream;
+    if (localStream) {
+      if (isPiPSwapped && mainLocalVideoRef.current) {
+        if (mainLocalVideoRef.current.srcObject !== localStream) {
+          mainLocalVideoRef.current.srcObject = localStream;
+        }
+      } else if (!isPiPSwapped && pipLocalVideoRef.current) {
+        if (pipLocalVideoRef.current.srcObject !== localStream) {
+          pipLocalVideoRef.current.srcObject = localStream;
+        }
       }
     }
-  }, [localStream, activeSession]);
+  }, [localStream, isPiPSwapped, activeSession]);
 
-  // Bind remote streams without flickering
+  // Bind remote streams to main or pip without flickering
   useEffect(() => {
+    const primaryRemote = Object.keys(remoteStreams).length > 0 ? Object.values(remoteStreams)[0] : null;
+    if (primaryRemote) {
+      if (!isPiPSwapped && mainRemoteVideoRef.current) {
+        if (mainRemoteVideoRef.current.srcObject !== primaryRemote) {
+          mainRemoteVideoRef.current.srcObject = primaryRemote;
+        }
+        mainRemoteVideoRef.current.volume = isSpeakerOn ? 1.0 : 0.5;
+      } else if (isPiPSwapped && pipRemoteVideoRef.current) {
+        if (pipRemoteVideoRef.current.srcObject !== primaryRemote) {
+          pipRemoteVideoRef.current.srcObject = primaryRemote;
+        }
+        pipRemoteVideoRef.current.volume = isSpeakerOn ? 1.0 : 0.5;
+      }
+    }
+
     Object.entries(remoteStreams).forEach(([uid, stream]) => {
       const el = remoteVideoRefs.current[uid];
       if (el && stream) {
         if (el.srcObject !== stream) {
           el.srcObject = stream;
         }
-        el.volume = isSpeakerOn ? 1.0 : 0.4;
+        el.volume = isSpeakerOn ? 1.0 : 0.5;
       }
     });
-  }, [remoteStreams, isSpeakerOn]);
+  }, [remoteStreams, isPiPSwapped, isSpeakerOn]);
+
+  // Draggable Pointer Event Handlers for Floating PiP Window (Touch & Mouse)
+  useEffect(() => {
+    const handlePipMove = (e: PointerEvent) => {
+      if (!isPipDragging) return;
+      const dx = e.clientX - pipDragRef.current.startX;
+      const dy = e.clientY - pipDragRef.current.startY;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+        pipDragRef.current.moved = true;
+      }
+      const pipW = 120;
+      const pipH = 175;
+      const maxX = Math.max(12, window.innerWidth - pipW - 12);
+      const maxY = Math.max(65, window.innerHeight - pipH - 120);
+      const newX = Math.max(12, Math.min(maxX, pipDragRef.current.initX + dx));
+      const newY = Math.max(65, Math.min(maxY, pipDragRef.current.initY + dy));
+      setPipPos({ x: newX, y: newY });
+    };
+
+    const handlePipUp = () => {
+      setIsPipDragging(false);
+    };
+
+    if (isPipDragging) {
+      window.addEventListener('pointermove', handlePipMove);
+      window.addEventListener('pointerup', handlePipUp);
+      window.addEventListener('pointercancel', handlePipUp);
+    }
+    return () => {
+      window.removeEventListener('pointermove', handlePipMove);
+      window.removeEventListener('pointerup', handlePipUp);
+      window.removeEventListener('pointercancel', handlePipUp);
+    };
+  }, [isPipDragging]);
+
+  const onPipPointerDown = (e: React.PointerEvent) => {
+    setIsPipDragging(true);
+    pipDragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initX: pipPos.x,
+      initY: pipPos.y,
+      moved: false,
+    };
+  };
+
+  const toggleSwap = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!pipDragRef.current.moved) {
+      setIsPiPSwapped((prev) => !prev);
+    }
+  };
 
   // Draggable Pointer Event Handlers for iPhone Dynamic Island
   useEffect(() => {
@@ -367,23 +461,33 @@ export const ActiveCallModal: React.FC = () => {
           <span>End-to-end encrypted</span>
         </div>
 
-        {/* Quality indicator & Header Flip camera */}
+        {/* Quality indicator (Clean Header) */}
         <div className="flex items-center gap-2">
-          {isVideo && (
-            <button
-              onClick={flipCamera}
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition cursor-pointer flex items-center gap-1.5 text-xs"
-              title={`Switch to ${cameraFacing === 'user' ? 'Back' : 'Front'} Camera`}
-            >
-              <RotateCcw className="w-4 h-4 text-[#00a884]" />
-              <span className="hidden sm:inline text-[11px] font-medium">{cameraFacing === 'user' ? 'Rear' : 'Front'}</span>
-            </button>
-          )}
           <div className="flex items-center gap-1 text-[11px] text-[#00a884] font-mono bg-[#00a884]/10 px-2.5 py-1 rounded-full border border-[#00a884]/20">
             <Wifi className="w-3 h-3" />
             <span>HD</span>
           </div>
         </div>
+      </div>
+
+      {/* Universal Hidden Audio Elements for All Remote Streams (Guarantees audible audio in voice and video calls) */}
+      <div className="hidden">
+        {Object.entries(remoteStreams).map(([uid, stream]) => (
+          <audio
+            key={`remote-audio-${uid}`}
+            ref={(el) => {
+              if (el) {
+                if (el.srcObject !== stream) {
+                  el.srcObject = stream;
+                }
+                el.volume = isSpeakerOn ? 1.0 : 0.6;
+                el.play().catch(() => {});
+              }
+            }}
+            autoPlay
+            playsInline
+          />
+        ))}
       </div>
 
       {/* Center Stage: Audio vs Video Layout */}
@@ -394,25 +498,52 @@ export const ActiveCallModal: React.FC = () => {
             {remoteUids.length > 0 ? (
               <div className="w-full h-full p-1 sm:p-2">
                 {remoteUids.length === 1 ? (
-                  /* Single Remote Participant */
+                  /* Single Participant: Full Stage (Swappable between Remote & Local) */
                   <div className="relative w-full h-full bg-[#182229] rounded-2xl overflow-hidden border border-white/10 shadow-2xl flex items-center justify-center">
-                    <video
-                      ref={(el) => {
-                        remoteVideoRefs.current[remoteUids[0]] = el;
-                        if (el && remoteStreams[remoteUids[0]] && el.srcObject !== remoteStreams[remoteUids[0]]) {
-                          el.srcObject = remoteStreams[remoteUids[0]];
-                        }
-                      }}
-                      autoPlay
-                      playsInline
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3.5 py-1.5 rounded-xl text-xs text-white flex items-center gap-2 z-10 shadow-lg border border-white/10">
-                      <span className="font-semibold">{displayName}</span>
-                      {activeSession.participants?.[remoteUids[0]]?.audioMuted && (
-                        <MicOff className="w-3.5 h-3.5 text-red-400" />
-                      )}
-                    </div>
+                    {isPiPSwapped ? (
+                      /* Full stage shows LOCAL camera stream */
+                      <>
+                        <video
+                          ref={mainLocalVideoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className={`w-full h-full object-cover ${isVideoMuted ? 'hidden' : 'block'}`}
+                        />
+                        {isVideoMuted && (
+                          <div className="w-full h-full flex flex-col items-center justify-center bg-[#182229] text-[#8696a0] text-sm gap-2">
+                            <VideoOff className="w-8 h-8 text-red-400" />
+                            <span>Your Camera is Off</span>
+                          </div>
+                        )}
+                        <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3.5 py-1.5 rounded-xl text-xs text-white flex items-center gap-2 z-10 shadow-lg border border-white/10">
+                          <span className="font-semibold">You (Full Stage)</span>
+                          {isAudioMuted && <MicOff className="w-3.5 h-3.5 text-red-400" />}
+                        </div>
+                      </>
+                    ) : (
+                      /* Full stage shows REMOTE video stream */
+                      <>
+                        <video
+                          ref={(el) => {
+                            mainRemoteVideoRef.current = el;
+                            remoteVideoRefs.current[remoteUids[0]] = el;
+                            if (el && remoteStreams[remoteUids[0]] && el.srcObject !== remoteStreams[remoteUids[0]]) {
+                              el.srcObject = remoteStreams[remoteUids[0]];
+                            }
+                          }}
+                          autoPlay
+                          playsInline
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3.5 py-1.5 rounded-xl text-xs text-white flex items-center gap-2 z-10 shadow-lg border border-white/10">
+                          <span className="font-semibold">{displayName}</span>
+                          {activeSession.participants?.[remoteUids[0]]?.audioMuted && (
+                            <MicOff className="w-3.5 h-3.5 text-red-400" />
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
                 ) : (
                   /* Group Adaptive Responsive Video Grid */
@@ -493,32 +624,83 @@ export const ActiveCallModal: React.FC = () => {
               </div>
             )}
 
-            {/* Floating Local Video PiP Preview */}
-            <div className="absolute top-4 right-4 w-28 h-40 sm:w-36 sm:h-52 bg-[#182229] rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl z-20 group">
-              <video
-                ref={localVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className={`w-full h-full object-cover ${isVideoMuted ? 'hidden' : 'block'}`}
-              />
-              {isVideoMuted && (
-                <div className="w-full h-full flex flex-col items-center justify-center bg-[#182229] text-[#8696a0] text-xs gap-1">
-                  <VideoOff className="w-6 h-6 text-red-400" />
-                  <span>Camera Off</span>
+            {/* Floating Swappable & Draggable PiP Window */}
+            <div
+              style={{
+                left: `${pipPos.x}px`,
+                top: `${pipPos.y}px`,
+                touchAction: 'none',
+              }}
+              onPointerDown={onPipPointerDown}
+              onClick={toggleSwap}
+              className={`fixed w-28 h-40 sm:w-36 sm:h-52 bg-[#182229] rounded-2xl overflow-hidden border-2 shadow-2xl z-30 select-none cursor-grab active:cursor-grabbing transition-transform ${
+                isPipDragging ? 'scale-105 border-[#00a884] shadow-[0_12px_45px_rgba(0,168,132,0.4)]' : 'border-white/30 hover:border-white/60'
+              }`}
+              title="Drag anywhere or tap to swap video screens"
+            >
+              {isPiPSwapped ? (
+                /* Small PiP shows REMOTE participant when swapped */
+                <div className="relative w-full h-full bg-[#182229]">
+                  {remoteUids.length > 0 ? (
+                    <video
+                      ref={pipRemoteVideoRef}
+                      autoPlay
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-black/50 p-2">
+                      <Avatar src={displayPhoto} name={displayName} size="sm" />
+                    </div>
+                  )}
+                  <div className="absolute bottom-1.5 left-2 bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] text-white truncate max-w-[80px]">
+                    {displayName}
+                  </div>
+                </div>
+              ) : (
+                /* Small PiP shows LOCAL camera preview */
+                <div className="relative w-full h-full bg-[#182229]">
+                  <video
+                    ref={pipLocalVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`w-full h-full object-cover ${isVideoMuted ? 'hidden' : 'block'}`}
+                  />
+                  {isVideoMuted && (
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-[#182229] text-[#8696a0] text-xs gap-1">
+                      <VideoOff className="w-5 h-5 text-red-400" />
+                      <span className="text-[10px]">Off</span>
+                    </div>
+                  )}
+                  <div className="absolute bottom-1.5 left-2 bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] text-white">
+                    You {isAudioMuted && '• Muted'}
+                  </div>
                 </div>
               )}
-              {/* Flip camera overlay button on PiP */}
+
+              {/* Swap streams indicator button */}
               <button
-                onClick={flipCamera}
-                className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition cursor-pointer"
+                type="button"
+                onClick={toggleSwap}
+                className="absolute top-2 left-2 p-1.5 rounded-full bg-black/65 text-white/90 hover:text-white hover:bg-black/90 transition shadow cursor-pointer active:scale-90"
+                title="Swap screens"
+              >
+                <ArrowLeftRight className="w-3 h-3 text-cyan-300" />
+              </button>
+
+              {/* Turn Back / Flip Camera Overlay Button (Exclusively on small PiP) */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  flipCamera();
+                }}
+                className="absolute top-2 right-2 p-1.5 rounded-full bg-black/65 text-white/90 hover:text-white hover:bg-black/90 transition shadow cursor-pointer active:scale-90"
                 title={`Switch camera (current: ${cameraFacing})`}
               >
                 <RotateCcw className="w-3.5 h-3.5 text-[#00a884]" />
               </button>
-              <div className="absolute bottom-2 left-2 bg-black/60 px-2 py-0.5 rounded text-[10px] text-white">
-                You {isAudioMuted && '• Muted'}
-              </div>
             </div>
           </div>
         ) : (
@@ -691,16 +873,7 @@ export const ActiveCallModal: React.FC = () => {
             {isVideoMuted ? <VideoOff className="w-5 h-5 text-red-400" /> : <Video className="w-5 h-5" />}
           </button>
 
-          {/* Flip Camera Button (Always available in Video Mode) */}
-          {isVideo && (
-            <button
-              onClick={flipCamera}
-              className="p-3.5 rounded-full bg-[#2a3942] hover:bg-[#32444f] text-white transition cursor-pointer active:scale-90"
-              title={`Flip camera (${cameraFacing === 'user' ? 'Rear' : 'Front'})`}
-            >
-              <RotateCcw className="w-5 h-5 text-[#00a884]" />
-            </button>
-          )}
+
 
           {/* Add Contact to Call (Replacing Keypad!) */}
           <button

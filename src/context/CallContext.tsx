@@ -85,6 +85,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const pcMap = useRef<{ [uid: string]: RTCPeerConnection }>({});
   const originalVideoTrack = useRef<MediaStreamTrack | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
   const incomingSessionRef = useRef<CallSession | null>(null);
   const activeSessionRef = useRef<CallSession | null>(null);
 
@@ -272,17 +273,30 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     soundEngine.stopRingtone();
     NativeNotificationService.dismissCallNotification();
 
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => {
+        try { track.stop(); } catch {}
+      });
+      localStreamRef.current = null;
+    }
+
     if (localStream) {
-      localStream.getTracks().forEach((track) => track.stop());
+      localStream.getTracks().forEach((track) => {
+        try { track.stop(); } catch {}
+      });
       setLocalStream(null);
     }
 
-    Object.values(pcMap.current).forEach((pc) => pc.close());
+    Object.values(pcMap.current).forEach((pc) => {
+      try { pc.close(); } catch {}
+    });
     pcMap.current = {};
 
     setRemoteStreams({});
     setActiveSession(null);
     setIncomingSession(null);
+    activeSessionRef.current = null;
+    incomingSessionRef.current = null;
     setIsAudioMuted(false);
     setIsVideoMuted(false);
     setIsScreenSharing(false);
@@ -359,6 +373,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       soundEngine.startDialTone();
       const stream = await getLocalUserMedia(callType);
+      localStreamRef.current = stream;
       setLocalStream(stream);
 
       const isGroup = chat ? chat.type === 'group' : false;
@@ -531,9 +546,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       pc.ontrack = (event) => {
         soundEngine.stopDialTone();
+        const incomingStream = event.streams[0] || new MediaStream([event.track]);
+        try { event.track.enabled = true; } catch {}
         setRemoteStreams((prev) => ({
           ...prev,
-          [targetUid]: event.streams[0],
+          [targetUid]: incomingStream,
         }));
       };
 
@@ -628,6 +645,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const stream = await getLocalUserMedia(incomingSession.callType);
+      localStreamRef.current = stream;
       setLocalStream(stream);
 
       const session: CallSession = {
@@ -674,9 +692,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       pc.ontrack = (event) => {
+        soundEngine.stopDialTone();
+        const incomingStream = event.streams[0] || new MediaStream([event.track]);
+        try { event.track.enabled = true; } catch {}
         setRemoteStreams((prev) => ({
           ...prev,
-          [session.callerId]: event.streams[0],
+          [session.callerId]: incomingStream,
         }));
       };
 
@@ -859,22 +880,24 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Decline Call
   const declineCall = async () => {
     soundEngine.stopRingtone();
+    soundEngine.stopDialTone();
     NativeNotificationService.dismissCallNotification();
-    if (incomingSession && currentUser) {
+    const sessionToDecline = incomingSessionRef.current || incomingSession;
+    if (sessionToDecline && currentUser) {
       const historyItem: CallHistoryItem = {
         id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        callerId: incomingSession.callerId,
-        callerName: incomingSession.callerName,
-        callerPhoto: incomingSession.callerPhoto,
+        callerId: sessionToDecline.callerId,
+        callerName: sessionToDecline.callerName,
+        callerPhoto: sessionToDecline.callerPhoto,
         receiverId: currentUser.uid,
         receiverName: currentUser.displayName || 'User',
         receiverPhoto: currentUser.photoURL || '',
-        callType: incomingSession.callType,
+        callType: sessionToDecline.callType,
         direction: 'missed',
         duration: 0,
         timestamp: Date.now(),
-        isGroup: incomingSession.isGroup,
-        groupName: incomingSession.groupName,
+        isGroup: sessionToDecline.isGroup,
+        groupName: sessionToDecline.groupName,
       };
 
       setCallHistory(prev => [historyItem, ...prev]);
@@ -882,46 +905,50 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Dual-Database: Save call log for both recipient and caller
       RealtimeCoordinator.saveCallLog(historyItem, currentUser.uid).catch(() => {});
       setDoc(doc(db, 'users', currentUser.uid, 'call_logs', historyItem.id), historyItem).catch(() => {});
-      if (incomingSession.callerId && incomingSession.callerId !== currentUser.uid) {
-        RealtimeCoordinator.saveCallLog(historyItem, incomingSession.callerId).catch(() => {});
-        setDoc(doc(db, 'users', incomingSession.callerId, 'call_logs', historyItem.id), historyItem).catch(() => {});
+      if (sessionToDecline.callerId && sessionToDecline.callerId !== currentUser.uid) {
+        RealtimeCoordinator.saveCallLog(historyItem, sessionToDecline.callerId).catch(() => {});
+        setDoc(doc(db, 'users', sessionToDecline.callerId, 'call_logs', historyItem.id), historyItem).catch(() => {});
       }
 
       postCallLogToChat(
-        incomingSession.chatId || '',
-        incomingSession.callerId,
-        incomingSession.callerName,
-        incomingSession.callerPhoto || '',
-        incomingSession.callType,
+        sessionToDecline.chatId || '',
+        sessionToDecline.callerId,
+        sessionToDecline.callerName,
+        sessionToDecline.callerPhoto || '',
+        sessionToDecline.callType,
         'missed',
         0
       );
 
       // Instant WebRTC signal termination
-      RealtimeCoordinator.sendCallSignal(incomingSession.id, {
+      RealtimeCoordinator.sendCallSignal(sessionToDecline.id, {
         type: 'end',
       }).catch(() => {});
 
-      if (incomingSession.callerId && incomingSession.callerId !== currentUser.uid) {
-        RealtimeCoordinator.sendUserCallEnded(incomingSession.callerId, incomingSession.id).catch(() => {});
+      if (sessionToDecline.callerId && sessionToDecline.callerId !== currentUser.uid) {
+        RealtimeCoordinator.sendUserCallEnded(sessionToDecline.callerId, sessionToDecline.id).catch(() => {});
       }
 
-      RealtimeCoordinator.updateCallSession(incomingSession.id, {
+      RealtimeCoordinator.updateCallSession(sessionToDecline.id, {
         status: 'declined',
       }).catch(() => {});
 
-      const sessionRef = doc(db, 'calls', incomingSession.id);
+      const sessionRef = doc(db, 'calls', sessionToDecline.id);
       await updateDoc(sessionRef, {
         status: 'declined',
         [`participants.${currentUser.uid}.status`]: 'declined',
       }).catch(() => {});
     }
-    setIncomingSession(null);
+    soundEngine.playCallEnd();
+    cleanupCallState();
   };
 
   // End Call
   const endCall = async () => {
-    const sessionToEnd = activeSession || incomingSession;
+    soundEngine.stopDialTone();
+    soundEngine.stopRingtone();
+    NativeNotificationService.dismissCallNotification();
+    const sessionToEnd = activeSessionRef.current || incomingSessionRef.current || activeSession || incomingSession;
     if (sessionToEnd) {
       const duration = sessionToEnd.startedAt 
         ? Math.round((Date.now() - sessionToEnd.startedAt) / 1000) 

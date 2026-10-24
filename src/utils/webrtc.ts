@@ -15,11 +15,9 @@ export const rtcConfiguration: RTCConfiguration = {
 
 export async function getLocalUserMedia(callType: 'audio' | 'video'): Promise<MediaStream> {
   const audioConstraints: MediaTrackConstraints = {
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true,
-    sampleRate: 48000,
-    channelCount: 1,
+    echoCancellation: { ideal: true },
+    noiseSuppression: { ideal: true },
+    autoGainControl: { ideal: true },
   };
 
   try {
@@ -33,9 +31,15 @@ export async function getLocalUserMedia(callType: 'audio' | 'video'): Promise<Me
       } : false,
     });
   } catch (err) {
-    console.warn("Could not get media device with preferred constraints, attempting audio only:", err);
-    // If video fails (e.g. no webcam), fallback to audio
-    return await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+    console.warn("Could not get media device with preferred constraints, attempting fallback:", err);
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: callType === 'video' ? { facingMode: 'user' } : false,
+      });
+    } catch {
+      return await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    }
   }
 }
 
