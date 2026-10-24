@@ -35,6 +35,7 @@ import { supabase } from '../supabase/config';
 import { RealtimeCoordinator } from '../utils/realtimeCoordinator';
 import { formatAuthErrorMessage } from '../utils/authErrors';
 import { generateTemporaryNumber, getOrAssignLifetimeNumber } from '../utils/formatters';
+import { router } from '../utils/router';
 
 export const getClientDeviceInfo = () => {
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
@@ -111,6 +112,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState<boolean>(true);
   const [isAuthenticating, setIsAuthenticating] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const unsubProfileRef = React.useRef<(() => void) | null>(null);
 
   // Safety watchdog: reset authenticating spinner if returning to foreground without completing
   useEffect(() => {
@@ -171,7 +173,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Sync user profile document from Firestore
   useEffect(() => {
-    let unsubProfile: (() => void) | null = null;
+
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
@@ -179,7 +181,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const userRef = doc(db, 'users', user.uid);
         
         // Listen to Firestore profile updates
-        unsubProfile = onSnapshot(userRef, async (snapshot) => {
+        unsubProfileRef.current = onSnapshot(userRef, async (snapshot) => {
           if (snapshot.exists()) {
             const data = snapshot.data() as UserProfile;
             const lifetimePhone = getOrAssignLifetimeNumber(user.uid, data.phoneNumber);
@@ -275,9 +277,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           lastSeen: Date.now()
         }).catch(() => {});
       } else {
-        if (unsubProfile) {
-          unsubProfile();
-          unsubProfile = null;
+        if (unsubProfileRef.current) {
+          unsubProfileRef.current();
+          unsubProfileRef.current = null;
         }
         setCurrentUser(null);
         setLoading(false);
@@ -286,7 +288,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       unsubscribeAuth();
-      if (unsubProfile) unsubProfile();
+      if (unsubProfileRef.current) { unsubProfileRef.current(); unsubProfileRef.current = null; }
     };
   }, []);
 
@@ -460,22 +462,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     const uid = currentUser?.uid;
-    if (uid) {
+
+    // 1. Instantly unhook profile listener to avoid any snapshot resurrecting currentUser
+    if (unsubProfileRef.current) {
       try {
-        await updateDoc(doc(db, 'users', uid), {
-          isOnline: false,
-          lastSeen: Date.now()
-        }).catch(() => {});
-        await supabase
-          .from('users')
-          .update({ is_online: false, last_seen: Date.now() })
-          .eq('uid', uid);
-        await supabase.auth.signOut().catch(() => {});
+        unsubProfileRef.current();
       } catch {}
+      unsubProfileRef.current = null;
     }
-    try {
-      await fbSignOut(auth);
-    } catch {}
+
+    // 2. Immediately wipe local auth state for instant UI transition to /login
+    setCurrentUser(null);
+    setFirebaseUser(null);
+    setLoading(false);
+
+    // 3. Clear all stored auth, 2FA, and lock tokens
     try {
       if (typeof sessionStorage !== 'undefined') {
         sessionStorage.clear();
@@ -490,12 +491,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch {}
 
-    // Reset browser history so pressing Android back button won't return to old pages
-    if (typeof window !== 'undefined' && window.history?.replaceState) {
-      window.history.replaceState(null, '', '/');
-    }
+    // 4. Force immediate route navigation to /login
+    router.navigate('/login', true);
 
-    setCurrentUser(null);
+    // 5. Clean up remote sessions in background without blocking UI sign out
+    try {
+      if (Capacitor.isNativePlatform()) {
+        FirebaseAuthentication.signOut().catch(() => {});
+      }
+      fbSignOut(auth).catch(() => {});
+      supabase.auth.signOut().catch(() => {});
+      if (uid) {
+        updateDoc(doc(db, 'users', uid), {
+          isOnline: false,
+          lastSeen: Date.now()
+        }).catch(() => {});
+        Promise.resolve(
+          supabase
+            .from('users')
+            .update({ is_online: false, last_seen: Date.now() })
+            .eq('uid', uid)
+        ).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('Background signOut cleanup notice:', e);
+    }
   };
 
   const setAuthenticator = async (enabled: boolean, secret: string | null, recoveryCodes: string[] = []) => {

@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
 import React, { useState, useEffect, useRef } from 'react';
 import { NativeNotificationService } from '../../utils/nativeNotifications';
+import { router } from '../../utils/router';
 import { 
   X, 
   User, 
@@ -1806,7 +1807,10 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                   {/* Admin Compliance Desk (VISIBLE TO ADMINS ONLY) */}
                   {isAdmin && (
                     <button
-                      onClick={() => setShowAdminPortal(true)}
+                      onClick={() => {
+                        onClose();
+                        router.navigate('/adminportal');
+                      }}
                       className="w-full p-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 flex items-center justify-between transition cursor-pointer text-left"
                     >
                       <div className="flex items-center gap-2.5">
@@ -1852,7 +1856,8 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
                   type="button"
                   onClick={() => {
                     setAdminPortalInitialTab('version');
-                    setShowAdminPortal(true);
+                    onClose();
+                    router.navigate('/adminportal');
                   }}
                   className="mt-1 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-[11px] font-semibold text-amber-400 flex items-center gap-1.5 transition cursor-pointer"
                 >

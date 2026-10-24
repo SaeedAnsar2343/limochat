@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useChat } from '../../context/ChatContext';
+import { router } from '../../utils/router';
 import { Avatar } from '../common/Avatar';
 import { ChatListItem } from './ChatListItem';
 import { CommunityList } from './CommunityList';
@@ -405,7 +406,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onSelectChat }) => {
                         <button
                           onClick={() => {
                             setShowMoreMenu(false);
-                            setShowAdminPortal(true);
+                            router.navigate('/adminportal');
                           }}
                           className="w-full px-3.5 py-2.5 text-left hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center gap-2.5 text-red-600 dark:text-red-400 font-semibold transition cursor-pointer"
                         >
