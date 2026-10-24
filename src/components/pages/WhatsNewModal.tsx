@@ -1,3 +1,4 @@
+import { navigationManager } from "../../utils/navigationManager";
 import React from 'react';
 import { X, Sparkles, PhoneCall, Users, Reply, ShieldAlert, CheckCircle2, Zap, Search } from 'lucide-react';
 
@@ -7,6 +8,12 @@ interface WhatsNewModalProps {
 }
 
 export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ isOpen, onClose }) => {
+  React.useEffect(() => {
+    if (isOpen) {
+      return navigationManager.registerModal('WhatsNewModal', onClose, 30);
+    }
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const updates = [

@@ -4,6 +4,7 @@ import { UserProfile } from '../../types';
 import { Avatar } from '../common/Avatar';
 import { useChat } from '../../context/ChatContext';
 import { useAuth } from '../../context/AuthContext';
+import { navigationManager } from '../../utils/navigationManager';
 
 interface NewGroupModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({ isOpen, onClose })
   useEffect(() => {
     if (isOpen) {
       window.dispatchEvent(new CustomEvent('limochat_close_all_menus'));
+      return navigationManager.registerModal('new_group', onClose, 22);
     }
     if (isOpen && currentUser) {
       getAllContacts().then((all) => {

@@ -44,6 +44,7 @@ import { db } from '../../firebase/config';
 import { useChat } from '../../context/ChatContext';
 import { RealtimeCoordinator } from '../../utils/realtimeCoordinator';
 import { supabase } from '../../supabase/config';
+import { navigationManager } from '../../utils/navigationManager';
 
 interface ChatInfoDrawerProps {
   chat: Chat;
@@ -111,6 +112,13 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
   const [editDescVal, setEditDescVal] = useState('');
   const [activeMemberMenuUid, setActiveMemberMenuUid] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  // Register modal with navigationManager for back button / Escape key
+  useEffect(() => {
+    if (isOpen) {
+      return navigationManager.registerModal('chat_info_drawer', onClose, 25);
+    }
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     setChatName(chat.name || '');

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Lock, Unlock, Fingerprint, Check, AlertCircle, ShieldCheck, Clock } from 'lucide-react';
 import { UserProfile } from '../../types';
+import { navigationManager } from '../../utils/navigationManager';
 
 interface PasscodeModalProps {
   isOpen: boolean;
@@ -34,6 +35,12 @@ export const PasscodeModal: React.FC<PasscodeModalProps> = ({
   const [biometric, setBiometric] = useState(currentBiometric);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      return navigationManager.registerModal('passcode_modal', onClose, 30);
+    }
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

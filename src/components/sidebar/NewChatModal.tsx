@@ -20,6 +20,7 @@ import { ConfirmModal } from '../common/ConfirmModal';
 import { useChat } from '../../context/ChatContext';
 import { useAuth } from '../../context/AuthContext';
 import { ChatListSkeleton } from '../common/SkeletonLoading';
+import { navigationManager } from '../../utils/navigationManager';
 
 interface NewChatModalProps {
   isOpen: boolean;
@@ -45,6 +46,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       window.dispatchEvent(new CustomEvent('limochat_close_all_menus'));
+      return navigationManager.registerModal('new_chat', onClose, 22);
     }
     if (isOpen && currentUser) {
       getAllContacts().then((all) => {

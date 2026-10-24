@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ShieldCheck, KeyRound, AlertTriangle, ArrowRight, LogOut, Check } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { verifyTotpToken, verifyRecoveryCode } from '../../utils/totp';
+import { navigationManager } from '../../utils/navigationManager';
 
 interface TwoFactorChallengeModalProps {
   user: UserProfile;
@@ -18,6 +19,10 @@ export const TwoFactorChallengeModal: React.FC<TwoFactorChallengeModalProps> = (
   const [error, setError] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [useRecovery, setUseRecovery] = useState(false);
+
+  useEffect(() => {
+    return navigationManager.registerModal('2fa_challenge', onCancel, 30);
+  }, [onCancel]);
 
   const secret = user.authenticatorSecret || user.preferences?.authenticatorSecret;
   const recoveryCodes = user.recoveryCodes || user.preferences?.recoveryCodes || [];

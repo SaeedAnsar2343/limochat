@@ -1,3 +1,4 @@
+import { navigationManager } from '../../utils/navigationManager';
 import React, { useState, useEffect } from 'react';
 import { 
   X, 
@@ -286,6 +287,12 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     issuePolicyWarning
   } = useAuth();
   const { sendSupportReply, chats: activeChatsContext } = useChat();
+
+  useEffect(() => {
+    if (isOpen) {
+      return navigationManager.registerModal('admin_portal', onClose, 25);
+    }
+  }, [isOpen, onClose]);
 
   const [activeTab, setActiveTab] = useState<'overview' | 'support' | 'users' | 'chats' | 'policies' | 'admins' | 'version'>('overview');
 

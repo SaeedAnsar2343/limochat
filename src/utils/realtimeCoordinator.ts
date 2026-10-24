@@ -557,9 +557,42 @@ export class RealtimeCoordinator {
       if (profile.isBanned !== undefined) row.is_banned = profile.isBanned;
       if (profile.punishment !== undefined) row.punishment = profile.punishment;
       if (profile.allowSupportCalls !== undefined) row.allow_support_calls = profile.allowSupportCalls;
+      if (profile.authenticatorEnabled !== undefined) row.authenticator_enabled = profile.authenticatorEnabled;
+      if (profile.authenticatorSecret !== undefined) row.authenticator_secret = profile.authenticatorSecret;
+      if (profile.recoveryCodes !== undefined) row.recovery_codes = profile.recoveryCodes;
 
       await supabase.from('users').upsert(row);
     } catch {}
+  }
+
+  public static async fetchUserProfile(uid: string): Promise<UserProfile | null> {
+    try {
+      const { data, error } = await supabase.from('users').select('*').eq('uid', uid).single();
+      if (error || !data) return null;
+      return {
+        uid: data.uid,
+        displayName: data.display_name,
+        email: data.email,
+        photoURL: data.photo_url,
+        phoneNumber: data.phone_number,
+        about: data.about,
+        isOnline: data.is_online,
+        lastSeen: Number(data.last_seen || 0),
+        privacy: data.privacy || {},
+        blockedUsers: data.blocked_users || [],
+        isAdmin: !!data.is_admin,
+        isBanned: !!data.is_banned,
+        isBannedReason: data.is_banned_reason,
+        punishment: data.punishment || null,
+        allowSupportCalls: !!data.allow_support_calls,
+        authenticatorEnabled: !!data.authenticator_enabled,
+        authenticatorSecret: data.authenticator_secret || undefined,
+        recoveryCodes: data.recovery_codes || [],
+        createdAt: Number(data.created_at || Date.now()),
+      };
+    } catch {
+      return null;
+    }
   }
 
   public static async fetchAllUsers(): Promise<UserProfile[]> {

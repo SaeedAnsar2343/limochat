@@ -1,3 +1,4 @@
+import { navigationManager } from "../../utils/navigationManager";
 import React, { useState, useEffect } from 'react';
 import { 
   X, 
@@ -41,6 +42,12 @@ export const OperationalStatusModal: React.FC<OperationalStatusModalProps> = ({ 
       checkPing();
     }
   }, [isOpen]);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      return navigationManager.registerModal('OperationalStatusModal', onClose, 30);
+    }
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

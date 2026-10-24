@@ -34,4 +34,5 @@ android/build
 release/
 *.keystore
 *.apk
+*.aab
 

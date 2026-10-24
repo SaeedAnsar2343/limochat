@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Upload, Check, Camera, Sparkles, ZoomIn, ZoomOut, RotateCw, Trash2 } from 'lucide-react';
 import { UserProfile } from '../../types';
+import { navigationManager } from '../../utils/navigationManager';
 
 interface AvatarEditorModalProps {
   isOpen: boolean;
@@ -57,6 +58,12 @@ export const AvatarEditorModal: React.FC<AvatarEditorModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imageElementRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      return navigationManager.registerModal('avatar_editor', onClose, 30);
+    }
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

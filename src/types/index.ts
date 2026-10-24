@@ -143,6 +143,7 @@ export type UserProfile = {
   pinnedChatIds?: string[];
   activeSessions?: UserSession[];
   isBanned?: boolean;
+  isBannedReason?: string;
   isAdmin?: boolean;
   authenticatorEnabled?: boolean;
   authenticatorSecret?: string;

@@ -16,6 +16,7 @@ import {
   Play
 } from 'lucide-react';
 import { formatTime } from '../../utils/formatters';
+import { navigationManager } from '../../utils/navigationManager';
 
 export interface MediaItem {
   id?: string;
@@ -107,12 +108,13 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({
     }
   }, [currentIndex, items.length]);
 
-  // Mutually exclusive modal: close any background popovers/menus
+  // Mutually exclusive modal: close any background popovers/menus and register with navigationManager
   useEffect(() => {
     if (isOpen) {
       window.dispatchEvent(new CustomEvent('limochat_close_all_menus'));
+      return navigationManager.registerModal('media_viewer', onClose, 35);
     }
-  }, [isOpen]);
+  }, [isOpen, onClose]);
 
   // Keyboard navigation
   useEffect(() => {

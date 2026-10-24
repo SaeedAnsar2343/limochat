@@ -1,3 +1,4 @@
+import { navigationManager } from '../../utils/navigationManager';
 import React, { useState, useEffect } from 'react';
 import { 
   X, 
@@ -57,6 +58,13 @@ export const AuthenticatorModal: React.FC<AuthenticatorModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [disableCode, setDisableCode] = useState('');
+
+  // Register with navigationManager for back button / Escape key
+  useEffect(() => {
+    if (isOpen) {
+      return navigationManager.registerModal('authenticator_modal', onClose, 30);
+    }
+  }, [isOpen, onClose]);
 
   // Initialize new secret and recovery codes when opening setup
   useEffect(() => {

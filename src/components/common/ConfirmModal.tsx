@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, AlertCircle, Info, CheckCircle2 } from 'lucide-react';
+import { navigationManager } from '../../utils/navigationManager';
 
 export interface ConfirmModalProps {
   isOpen: boolean;
@@ -30,14 +31,11 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   React.useEffect(() => {
     if (isOpen) {
       window.dispatchEvent(new CustomEvent('limochat_close_all_menus'));
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          if (onCancel) onCancel();
-          else onConfirm();
-        }
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
+      const unregister = navigationManager.registerModal('confirm_modal', () => {
+        if (onCancel) onCancel();
+        else onConfirm();
+      }, 50);
+      return unregister;
     }
   }, [isOpen, onCancel, onConfirm]);
 

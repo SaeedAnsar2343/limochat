@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Copy, Check, Share2, ShieldCheck } from 'lucide-react';
 import { UserProfile } from '../../types';
+import { navigationManager } from '../../utils/navigationManager';
 
 interface QRCodeModalProps {
   user: UserProfile;
@@ -10,6 +11,12 @@ interface QRCodeModalProps {
 
 export const QRCodeModal: React.FC<QRCodeModalProps> = ({ user, isOpen, onClose }) => {
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      return navigationManager.registerModal('qr_code_modal', onClose, 30);
+    }
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

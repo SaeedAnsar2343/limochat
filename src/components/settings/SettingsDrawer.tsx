@@ -68,6 +68,7 @@ import { subscribeToAppVersion, getCachedAppVersion, AppVersionData } from '../.
 import { SUPPORTED_LANGUAGES, translateText } from '../../utils/translate';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase/config';
+import { navigationManager } from '../../utils/navigationManager';
 
 interface SettingsDrawerProps {
   user: UserProfile;
@@ -112,6 +113,13 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isEditingAbout, setIsEditingAbout] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Register modal with navigationManager for back button / Escape key
+  useEffect(() => {
+    if (isOpen) {
+      return navigationManager.registerModal('settings_drawer', onClose, 20);
+    }
+  }, [isOpen, onClose]);
+
   // Synchronize profile and 2FA states whenever user profile updates or modal opens
   useEffect(() => {
     if (isOpen && user) {

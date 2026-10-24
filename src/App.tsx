@@ -16,6 +16,7 @@ import { AppLockScreen } from './components/auth/AppLockScreen';
 import { SplashScreen } from './components/common/SplashScreen';
 import { MessageSquare, Lock, ShieldCheck, Sparkles, Ban } from 'lucide-react';
 import { NativeNotificationService } from './utils/nativeNotifications';
+import { navigationManager } from './utils/navigationManager';
 
 const MainLayout: React.FC = () => {
   const { currentUser, loading, signOut, isAdmin, setAuthenticator } = useAuth();
@@ -105,6 +106,19 @@ const MainLayout: React.FC = () => {
       events.forEach((e) => window.removeEventListener(e, resetIdleTimer));
     };
   }, [isLockConfigured, isAppLocked, currentUser?.uid, currentUser?.preferences?.appLockTimeout]);
+
+  // Global Navigation & Android Hardware Back / Escape key handling
+  useEffect(() => {
+    navigationManager.init();
+    return navigationManager.registerCustomBackHandler(() => {
+      if (activeChat || mobileView === 'chat') {
+        setActiveChat(null);
+        setMobileView('sidebar');
+        return true;
+      }
+      return false;
+    });
+  }, [activeChat, mobileView, setActiveChat]);
 
   // Auto-switch to chat view on mobile when an active chat is selected
   React.useEffect(() => {
@@ -256,6 +270,9 @@ const MainLayout: React.FC = () => {
 };
 
 export default function App() {
+  useEffect(() => {
+    navigationManager.init();
+  }, []);
   return (
     <AuthProvider>
       <ChatProvider>

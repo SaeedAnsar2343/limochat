@@ -443,25 +443,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    if (currentUser?.uid) {
+    const uid = currentUser?.uid;
+    if (uid) {
       try {
-        await updateDoc(doc(db, 'users', currentUser.uid), {
+        await updateDoc(doc(db, 'users', uid), {
           isOnline: false,
           lastSeen: Date.now()
         }).catch(() => {});
         await supabase
           .from('users')
           .update({ is_online: false, last_seen: Date.now() })
-          .eq('uid', currentUser.uid);
+          .eq('uid', uid);
         await supabase.auth.signOut().catch(() => {});
       } catch {}
     }
     try {
       await fbSignOut(auth);
     } catch {}
-    if (typeof sessionStorage !== 'undefined') {
-      sessionStorage.clear();
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.clear();
+      }
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('limochat_auth_token');
+        localStorage.removeItem('supabase.auth.token');
+        if (uid) {
+          localStorage.removeItem(`limochat_2fa_verified_${uid}`);
+          localStorage.removeItem(`limochat_unlocked_${uid}`);
+        }
+      }
+    } catch {}
+
+    // Reset browser history so pressing Android back button won't return to old pages
+    if (typeof window !== 'undefined' && window.history?.replaceState) {
+      window.history.replaceState(null, '', '/');
     }
+
     setCurrentUser(null);
   };
 
@@ -474,12 +491,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       authenticatorSecret: secret || undefined,
       recoveryCodes,
     };
-    await updateDoc(userRef, {
-      authenticatorEnabled: enabled,
-      authenticatorSecret: secret,
-      recoveryCodes,
-      preferences: updatedPrefs,
-    }).catch(() => {});
+    try {
+      await updateDoc(userRef, {
+        authenticatorEnabled: enabled,
+        authenticatorSecret: secret,
+        recoveryCodes,
+        preferences: updatedPrefs,
+      });
+    } catch {
+      await setDoc(userRef, {
+        authenticatorEnabled: enabled,
+        authenticatorSecret: secret,
+        recoveryCodes,
+        preferences: updatedPrefs,
+      }, { merge: true }).catch(() => {});
+    }
 
     await RealtimeCoordinator.updateUserAuthenticator(currentUser.uid, enabled, secret, recoveryCodes).catch(() => {});
 

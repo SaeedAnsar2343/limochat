@@ -1,3 +1,4 @@
+import { navigationManager } from "../../utils/navigationManager";
 import React, { useRef } from 'react';
 import { 
   X, 
@@ -23,6 +24,12 @@ interface PrivacyPolicyModalProps {
 
 export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, onClose }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      return navigationManager.registerModal('PrivacyPolicyModal', onClose, 30);
+    }
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
