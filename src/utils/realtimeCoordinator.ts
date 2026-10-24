@@ -35,6 +35,7 @@ export class RealtimeCoordinator {
       name?: string;
       avatar?: string;
       type?: any;
+      unreadCount?: Record<string, number>;
     }
   ): Promise<boolean> {
     const row = {
@@ -101,6 +102,7 @@ export class RealtimeCoordinator {
       if (meta?.name) chatUpdate.name = meta.name;
       if (meta?.avatar) chatUpdate.avatar = meta.avatar;
       if (meta?.type) chatUpdate.type = meta.type;
+      if (meta?.unreadCount) chatUpdate.unread_count = meta.unreadCount;
 
       await supabase.from('chats').upsert(chatUpdate);
 
@@ -139,6 +141,7 @@ export class RealtimeCoordinator {
             lastMessage: lastMsgObj,
             updatedAt: message.timestamp || Date.now(),
             participants: chatParticipants,
+            unreadCount: meta?.unreadCount,
           },
         });
       }
@@ -256,11 +259,25 @@ export class RealtimeCoordinator {
   }
 
   /**
+   * Update chat unread count map in Supabase PostgreSQL (Dual-database consistency)
+   */
+  public static async updateChatUnreadCount(chatId: string, unreadCount: Record<string, number>): Promise<void> {
+    try {
+      await supabase.from('chats').update({
+        unread_count: unreadCount,
+        updated_at: Date.now()
+      }).eq('id', chatId);
+    } catch (e) {
+      console.warn('Supabase updateChatUnreadCount error:', e);
+    }
+  }
+
+  /**
    * Listen for chat list updates for the current user
    */
   public static subscribeToUserChats(
     userUid: string,
-    onChatUpdated: (update: { chatId: string; lastMessage: any; updatedAt: number; participants?: string[] }) => void
+    onChatUpdated: (update: { chatId: string; lastMessage: any; updatedAt: number; participants?: string[]; unreadCount?: Record<string, number> }) => void
   ): () => void {
     const channel = supabase
       .channel(`user_chats:${userUid}`)

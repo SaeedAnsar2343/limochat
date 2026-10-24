@@ -290,8 +290,11 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   const [activeTab, setActiveTab] = useState<'overview' | 'support' | 'users' | 'chats' | 'policies' | 'admins' | 'version'>('overview');
 
   useEffect(() => {
-    if (isOpen && initialTab) {
-      setActiveTab(initialTab);
+    if (isOpen) {
+      window.dispatchEvent(new CustomEvent('limochat_close_all_menus'));
+      if (initialTab) {
+        setActiveTab(initialTab);
+      }
     }
   }, [isOpen, initialTab]);
 
@@ -359,6 +362,14 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   const [supportFilter, setSupportFilter] = useState<'pending' | 'all'>('all');
   const supportUnsubRef = React.useRef<(() => void) | null>(null);
   const supportFileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const supportMessagesEndRef = React.useRef<HTMLDivElement | null>(null);
+
+  // Auto-scroll support chat to newest message
+  useEffect(() => {
+    if (selectedSupportChat && supportMessages.length > 0) {
+      supportMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [selectedSupportChat?.id, supportMessages.length]);
   const [supportAttachment, setSupportAttachment] = useState<{
     file?: File;
     type: 'image' | 'video' | 'voice' | 'file';
@@ -600,6 +611,9 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   const handleSelectSupportTicket = async (chat: Chat) => {
     setSelectedSupportChat(chat);
     setLoadingSupportMessages(true);
+    setTimeout(() => {
+      supportMessagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }, 150);
     setSupportAttachment(null);
 
     // Reset unread indicator for support desk
@@ -714,6 +728,9 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
         timestamp: now,
       };
       setSupportMessages((prev) => [...prev, optimisticMsg]);
+      setTimeout(() => {
+        supportMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 50);
 
       await sendSupportReply(selectedSupportChat.id, text, type, mediaUrl, extra);
       setSupportReplyText('');
@@ -1785,6 +1802,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                       <span>{selectedSupportChat ? 'No messages yet in this ticket.' : 'Select a ticket on the left to start replying.'}</span>
                     </div>
                   )}
+                  <div ref={supportMessagesEndRef} />
                 </div>
 
                 {selectedSupportChat && (

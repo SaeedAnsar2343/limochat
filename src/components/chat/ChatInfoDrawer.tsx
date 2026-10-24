@@ -151,6 +151,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
+    window.dispatchEvent(new CustomEvent('limochat_close_all_menus'));
 
     if (chat.type === 'direct') {
       const pList = chat.participants || [];

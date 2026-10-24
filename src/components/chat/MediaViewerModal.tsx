@@ -107,6 +107,13 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({
     }
   }, [currentIndex, items.length]);
 
+  // Mutually exclusive modal: close any background popovers/menus
+  useEffect(() => {
+    if (isOpen) {
+      window.dispatchEvent(new CustomEvent('limochat_close_all_menus'));
+    }
+  }, [isOpen]);
+
   // Keyboard navigation
   useEffect(() => {
     if (!isOpen) return;

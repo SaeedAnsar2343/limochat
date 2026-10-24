@@ -22,6 +22,9 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({ isOpen, onClose })
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
+    if (isOpen) {
+      window.dispatchEvent(new CustomEvent('limochat_close_all_menus'));
+    }
     if (isOpen && currentUser) {
       getAllContacts().then((all) => {
         // Exclude Support user and any blocked users

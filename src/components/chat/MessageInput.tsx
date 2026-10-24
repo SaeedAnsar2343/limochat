@@ -73,6 +73,17 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     }
   }, [activeChat?.id]);
 
+  // Auto-close input menus when other menus or modals open
+  useEffect(() => {
+    const handleCloseInputMenus = () => {
+      setShowEmojiPicker(false);
+      setShowAttachMenu(false);
+      setShowMentionList(false);
+    };
+    window.addEventListener('limochat_close_all_menus', handleCloseInputMenus);
+    return () => window.removeEventListener('limochat_close_all_menus', handleCloseInputMenus);
+  }, []);
+
   const commonEmojis = ['😀', '😂', '😍', '🔥', '👍', '🙏', '🎉', '❤️', '😎', '👏', '🥳', '💯', '✨', '👋', '🚀', '⭐', '🤝', '🙌'];
 
   // Load group members for @ mentions
@@ -340,7 +351,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         {/* Emoji Button */}
         <button
           onClick={() => {
-            setShowEmojiPicker(!showEmojiPicker);
+            const next = !showEmojiPicker;
+            if (next) window.dispatchEvent(new Event('limochat_close_all_menus'));
+            setShowEmojiPicker(next);
             setShowAttachMenu(false);
           }}
           className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-90 touch-manipulation flex-shrink-0 ${
@@ -358,7 +371,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         <div className="relative flex-shrink-0">
           <button
             onClick={() => {
-              setShowAttachMenu(!showAttachMenu);
+              const next = !showAttachMenu;
+              if (next) window.dispatchEvent(new Event('limochat_close_all_menus'));
+              setShowAttachMenu(next);
               setShowEmojiPicker(false);
             }}
             className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-90 touch-manipulation ${

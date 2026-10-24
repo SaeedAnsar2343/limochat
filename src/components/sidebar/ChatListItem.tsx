@@ -50,6 +50,12 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
 
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [showMenu, setShowMenu] = useState(false);
+
+  useEffect(() => {
+    const handleCloseAll = () => setShowMenu(false);
+    window.addEventListener('limochat_close_all_menus', handleCloseAll);
+    return () => window.removeEventListener('limochat_close_all_menus', handleCloseAll);
+  }, []);
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -264,7 +270,7 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
             {isPinned && <Pin className="w-3 h-3 text-[#00a884] rotate-45 flex-shrink-0" />}
             {isFavourite && <Star className="w-3 h-3 text-amber-400 fill-amber-400 flex-shrink-0" />}
           </div>
-          <span className="text-[11px] text-[#8696a0] flex-shrink-0 font-light">
+          <span className={`text-[11px] flex-shrink-0 font-light ${unread > 0 ? 'text-[#00a884] font-semibold' : 'text-[#8696a0]'}`}>
             {formatTime(chat.lastMessage?.timestamp || chat.updatedAt)}
           </span>
         </div>
@@ -276,8 +282,8 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
 
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {unread > 0 && (
-              <span className="bg-[#00a884] text-white text-[11px] font-bold px-1.5 py-0.2 rounded-full flex-shrink-0 min-w-4 text-center">
-                {unread}
+              <span className="min-w-5 h-5 px-1.5 bg-[#00a884] text-white text-[11px] font-bold rounded-full flex items-center justify-center flex-shrink-0 shadow-sm animate-scale-in">
+                {unread > 99 ? '99+' : unread}
               </span>
             )}
 
@@ -285,6 +291,9 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                if (!showMenu) {
+                  window.dispatchEvent(new CustomEvent('limochat_close_all_menus'));
+                }
                 setShowMenu(!showMenu);
               }}
               className="p-1.5 rounded-full text-[#8696a0] hover:text-[#d1d7db] dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/10 active:scale-90 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-all touch-manipulation cursor-pointer flex-shrink-0"

@@ -293,6 +293,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             updatedAt: update.updatedAt,
             lastMessage: update.lastMessage,
             participants: update.participants || found.participants,
+            unreadCount: update.unreadCount !== undefined ? update.unreadCount : found.unreadCount,
           };
           const others = prev.filter((c) => c.id !== update.chatId);
           const newList = [updatedChat, ...others];
@@ -492,8 +493,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn("Supabase fetch chat messages notice:", err);
     });
 
-    // Reset unread count if > 0
+    // Reset unread count if > 0 across both Supabase and Firestore
     if (currentUser?.uid && (activeChat.unreadCount?.[currentUser.uid] || 0) > 0) {
+      const clearedUnread = { ...(activeChat.unreadCount || {}), [currentUser.uid]: 0 };
+      RealtimeCoordinator.updateChatUnreadCount(activeChat.id, clearedUnread).catch(() => {});
       updateDoc(doc(db, 'chats', activeChat.id), {
         [`unreadCount.${currentUser.uid}`]: 0,
       }).catch(() => {});
@@ -809,6 +812,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setReplyingTo(null);
 
+    // Increment unread count for recipients across both databases
+    const unreadMap = { ...(activeChat.unreadCount || {}) };
+    activeChat.participants.forEach((pid) => {
+      if (pid !== currentUser.uid) {
+        unreadMap[pid] = (unreadMap[pid] || 0) + 1;
+      }
+    });
+
     // 1. Primary High-Availability: Save to Supabase PostgreSQL (UNLIMITED writes, zero quota limits, persists on refresh)
     const savedToSupabase = await RealtimeCoordinator.persistAndBroadcastMessage(
       activeChat.id,
@@ -818,6 +829,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         name: activeChat.name,
         avatar: activeChat.avatar,
         type: activeChat.type,
+        unreadCount: unreadMap,
       }
     );
 
@@ -922,8 +934,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       starredBy: [],
     };
 
-    const targetUserId = chatId.startsWith('support_') ? chatId.replace('support_', '') : null;
-    const participants = targetUserId ? [SYSTEM_SUPPORT_USER.uid, targetUserId] : [SYSTEM_SUPPORT_USER.uid];
+    const chatObj = chats.find(c => c.id === chatId);
+    const targetUserId = chatId.startsWith('support_')
+      ? chatId.replace('support_', '')
+      : (chatObj?.participants?.find(p => p !== SYSTEM_SUPPORT_USER.uid) || null);
+    const participants = targetUserId
+      ? [SYSTEM_SUPPORT_USER.uid, targetUserId]
+      : (chatObj?.participants || [SYSTEM_SUPPORT_USER.uid]);
+
+    const nextUnread = { ...(chatObj?.unreadCount || {}) };
+    if (targetUserId) {
+      nextUnread[targetUserId] = (nextUnread[targetUserId] || 0) + 1;
+    }
+    nextUnread[SYSTEM_SUPPORT_USER.uid] = 0;
 
     // 1. Primary High-Availability: Save to Supabase PostgreSQL (UNLIMITED writes)
     await RealtimeCoordinator.persistAndBroadcastMessage(chatId, supportMsg, {
@@ -931,6 +954,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       name: 'LimoChat Support',
       avatar: SYSTEM_SUPPORT_USER.photoURL,
       type: 'direct',
+      unreadCount: nextUnread,
     });
 
     // Update local messages if viewing this chat
@@ -1338,10 +1362,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const markChatAsRead = async (chatId: string) => {
     if (!currentUser) return;
+    const targetChat = chats.find(c => c.id === chatId);
+    const updatedUnread = { ...(targetChat?.unreadCount || {}), [currentUser.uid]: 0 };
     setChats(prev => prev.map(c => c.id === chatId ? {
       ...c,
-      unreadCount: { ...(c.unreadCount || {}), [currentUser.uid]: 0 }
+      unreadCount: updatedUnread
     } : c));
+    RealtimeCoordinator.updateChatUnreadCount(chatId, updatedUnread).catch(() => {});
     try {
       await updateDoc(doc(db, 'chats', chatId), {
         [`unreadCount.${currentUser.uid}`]: 0,
@@ -1351,17 +1378,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const markChatAsUnread = async (chatId: string) => {
     if (!currentUser) return;
+    const targetChat = chats.find(c => c.id === chatId);
+    const updatedUnread = { ...(targetChat?.unreadCount || {}), [currentUser.uid]: 1 };
     setChats(prev => prev.map(c => c.id === chatId ? {
       ...c,
-      unreadCount: { ...(c.unreadCount || {}), [currentUser.uid]: 1 }
+      unreadCount: updatedUnread
     } : c));
+    RealtimeCoordinator.updateChatUnreadCount(chatId, updatedUnread).catch(() => {});
     try {
       await updateDoc(doc(db, 'chats', chatId), {
         [`unreadCount.${currentUser.uid}`]: 1,
       });
     } catch {}
   };
-
   const typingStateRef = React.useRef<boolean>(false);
   const typingTimerRef = React.useRef<any>(null);
 

@@ -59,6 +59,13 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
+  // Auto-close dropdown when any other modal or menu opens across the app
+  useEffect(() => {
+    const handleCloseMenu = () => setShowMoreMenu(false);
+    window.addEventListener('limochat_close_all_menus', handleCloseMenu);
+    return () => window.removeEventListener('limochat_close_all_menus', handleCloseMenu);
+  }, []);
+
   const isSupportChat =
     chat.id.startsWith('support_') ||
     chat.participants?.includes('limochat_official_support') ||
@@ -166,7 +173,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   }
 
   return (
-    <div className="pt-safe mobile-header-safe min-h-16 px-3 sm:px-4 bg-[#202c33]/95 dark:bg-[#202c33]/95 backdrop-blur-2xl border-b border-white/[0.08] flex items-center justify-between select-none z-10 shadow-sm transition-all">
+    <div className="pt-safe mobile-header-safe min-h-16 px-3 sm:px-4 bg-[#202c33]/95 dark:bg-[#202c33]/95 backdrop-blur-2xl border-b border-white/[0.08] flex items-center justify-between select-none relative z-30 shadow-sm transition-all">
       {/* Left: Back button & Info */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0 pr-2">
         <button
@@ -240,7 +247,11 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         {/* 3-Dots More Menu Trigger (Search is accessible here) */}
         <div className="relative">
           <button
-            onClick={() => setShowMoreMenu(!showMoreMenu)}
+            onClick={() => {
+              const next = !showMoreMenu;
+              if (next) window.dispatchEvent(new Event('limochat_close_all_menus'));
+              setShowMoreMenu(next);
+            }}
             className="p-2 sm:p-2.5 rounded-full hover:text-white hover:bg-white/10 active:bg-white/15 transition-all active:scale-95 cursor-pointer"
             title="More Options"
           >
@@ -251,13 +262,13 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             <>
               {/* Outside Touch / Click Backdrop */}
               <div
-                className="fixed inset-0 z-40 cursor-default"
+                className="fixed inset-0 z-[65] cursor-default"
                 onClick={() => setShowMoreMenu(false)}
               />
 
-              {/* Dropdown Menu */}
+              {/* Dropdown Menu - Elevated above message bubbles & cards */}
               <div
-                className="absolute right-0 top-11 z-50 w-52 bg-white dark:bg-[#233138]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.18)] dark:shadow-2xl py-1.5 text-xs text-gray-800 dark:text-[#d1d7db] animate-scale-in"
+                className="absolute right-0 top-11 z-[70] w-52 bg-white dark:bg-[#233138]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.18)] dark:shadow-2xl py-1.5 text-xs text-gray-800 dark:text-[#d1d7db] animate-scale-in"
                 onClick={() => setShowMoreMenu(false)}
               >
                 <button

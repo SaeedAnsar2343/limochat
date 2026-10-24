@@ -23,6 +23,12 @@ export const MediaPreviewModal: React.FC<MediaPreviewModalProps> = ({
   const [caption, setCaption] = useState('');
   const [isSending, setIsSending] = useState(false);
 
+  React.useEffect(() => {
+    if (isOpen) {
+      window.dispatchEvent(new CustomEvent('limochat_close_all_menus'));
+    }
+  }, [isOpen]);
+
   if (!isOpen || !fileData) return null;
 
   const handleSend = async () => {

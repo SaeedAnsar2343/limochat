@@ -26,6 +26,12 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  React.useEffect(() => {
+    if (isOpen) {
+      window.dispatchEvent(new CustomEvent('limochat_close_all_menus'));
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleClose = onCancel || onConfirm;

@@ -43,6 +43,9 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<UserProfile | null>(null);
 
   useEffect(() => {
+    if (isOpen) {
+      window.dispatchEvent(new CustomEvent('limochat_close_all_menus'));
+    }
     if (isOpen && currentUser) {
       getAllContacts().then((all) => {
         setAddedContacts(

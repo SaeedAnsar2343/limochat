@@ -56,6 +56,8 @@ interface MessageBubbleProps {
   onOpenDesktopEmoji?: () => void;
   onOpenMobileModal?: () => void;
   onCloseAnyMenu?: () => void;
+  isTranslatePickerOpen?: boolean;
+  onOpenTranslatePicker?: () => void;
   onReportMessage?: (message: Message) => void;
   onViewMedia?: (media: {
     url: string;
@@ -87,6 +89,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   onOpenDesktopEmoji,
   onOpenMobileModal,
   onCloseAnyMenu,
+  isTranslatePickerOpen = false,
+  onOpenTranslatePicker,
   onReportMessage,
   onViewMedia,
 }) => {
@@ -118,7 +122,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const [currentTranslateLang, setCurrentTranslateLang] = useState<string>(
     currentUser.preferences?.translateTargetLanguage || 'en'
   );
-  const [showLangPicker, setShowLangPicker] = useState(false);
+  const [translateOpenUpwards, setTranslateOpenUpwards] = useState(false);
+  const langButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (isTranslatePickerOpen && langButtonRef.current) {
+      const rect = langButtonRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setTranslateOpenUpwards(spaceBelow < 220);
+    }
+  }, [isTranslatePickerOpen]);
 
   const { fontSize, reactToMessage, sendMessage } = useChat();
   const { startCall } = useCall();
@@ -344,7 +357,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       console.error("Translation error:", err);
     } finally {
       setIsTranslating(false);
-      setShowLangPicker(false);
+      onCloseAnyMenu?.();
     }
   };
 
@@ -461,34 +474,65 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         ) : (
           <>
-            {/* Image attachment */}
-            {message.type === 'image' && message.mediaUrl && (
-              <div className="mb-1 rounded-xl overflow-hidden max-h-80 bg-black/30">
-                <img
-                  src={message.mediaUrl}
-                  alt="Attachment"
-                  className="w-full h-auto object-cover max-h-80 cursor-pointer hover:opacity-95 transition"
-                  onClick={() => {
-                    if (onViewMedia) {
-                      onViewMedia({
-                        url: message.mediaUrl!,
-                        type: 'image',
-                        senderName: message.senderName,
-                        timestamp: message.timestamp,
-                        caption: message.text,
-                      });
-                    } else {
-                      window.open(message.mediaUrl, '_blank');
-                    }
-                  }}
-                />
+            {/* Image attachment - WhatsApp Grade Preview & Status */}
+            {message.type === 'image' && (message.mediaUrl || message.status === 'sending') && (
+              <div className="mb-1 rounded-xl overflow-hidden max-h-80 bg-black/30 relative select-none">
+                {message.mediaUrl ? (
+                  <img
+                    src={message.mediaUrl}
+                    alt="Attachment"
+                    className="w-full h-auto object-cover max-h-80 cursor-pointer hover:opacity-95 transition"
+                    onClick={() => {
+                      if (onViewMedia) {
+                        onViewMedia({
+                          url: message.mediaUrl!,
+                          type: 'image',
+                          senderName: message.senderName,
+                          timestamp: message.timestamp,
+                          caption: message.text,
+                        });
+                      } else {
+                        window.open(message.mediaUrl, '_blank');
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="w-64 h-48 bg-black/40 flex items-center justify-center">
+                    <span className="text-xs text-[#8696a0]">Loading image...</span>
+                  </div>
+                )}
+
+                {/* WhatsApp Sending Overlay */}
+                {message.status === 'sending' && (
+                  <div className="absolute inset-0 bg-black/45 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
+                    <div className="w-11 h-11 rounded-full bg-black/60 border border-white/20 flex items-center justify-center shadow-lg">
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    </div>
+                  </div>
+                )}
+
+                {/* WhatsApp Corner Timestamp Overlay when no caption */}
+                {(!message.text || message.text.trim() === '') && (
+                  <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-full bg-black/55 backdrop-blur-xs flex items-center gap-1 text-[10px] text-white/90 select-none shadow">
+                    {isStarred && <Star className="w-2.5 h-2.5 text-amber-400 fill-amber-400 mr-0.5" />}
+                    <span>{formatTime(message.timestamp)}</span>
+                    {isMe && !message.isDeletedForEveryone && (
+                      <span className="ml-0.5 inline-flex items-center">
+                        {message.status === 'sending' && <Clock className="w-2.5 h-2.5 text-white/70 animate-pulse" />}
+                        {message.status === 'sent' && <Check className="w-3 h-3 text-white/70" />}
+                        {message.status === 'delivered' && <CheckCheck className="w-3 h-3 text-white/70" />}
+                        {message.status === 'read' && <CheckCheck className="w-3 h-3 text-[#53bdeb]" />}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Video attachment */}
+            {/* Video attachment - WhatsApp Grade Preview & Status */}
             {message.type === 'video' && message.mediaUrl && (
               <div 
-                className="mb-1 rounded-xl overflow-hidden max-h-80 bg-black/60 relative cursor-pointer group"
+                className="mb-1 rounded-xl overflow-hidden max-h-80 bg-black/60 relative cursor-pointer group select-none"
                 onClick={() => {
                   if (onViewMedia) {
                     onViewMedia({
@@ -507,10 +551,32 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   preload="metadata"
                 />
                 <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/20 transition">
-                  <div className="w-12 h-12 rounded-full bg-[#00a884] text-white flex items-center justify-center shadow-lg transform group-hover:scale-110 transition">
-                    <Play className="w-5 h-5 ml-0.5 fill-current" />
-                  </div>
+                  {message.status === 'sending' ? (
+                    <div className="w-11 h-11 rounded-full bg-black/60 border border-white/20 flex items-center justify-center shadow-lg">
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    </div>
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-[#00a884] text-white flex items-center justify-center shadow-lg transform group-hover:scale-110 transition">
+                      <Play className="w-5 h-5 ml-0.5 fill-current" />
+                    </div>
+                  )}
                 </div>
+
+                {/* WhatsApp Corner Timestamp Overlay when no caption */}
+                {(!message.text || message.text.trim() === '') && (
+                  <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-full bg-black/55 backdrop-blur-xs flex items-center gap-1 text-[10px] text-white/90 select-none shadow">
+                    {isStarred && <Star className="w-2.5 h-2.5 text-amber-400 fill-amber-400 mr-0.5" />}
+                    <span>{formatTime(message.timestamp)}</span>
+                    {isMe && !message.isDeletedForEveryone && (
+                      <span className="ml-0.5 inline-flex items-center">
+                        {message.status === 'sending' && <Clock className="w-2.5 h-2.5 text-white/70 animate-pulse" />}
+                        {message.status === 'sent' && <Check className="w-3 h-3 text-white/70" />}
+                        {message.status === 'delivered' && <CheckCheck className="w-3 h-3 text-white/70" />}
+                        {message.status === 'read' && <CheckCheck className="w-3 h-3 text-[#53bdeb]" />}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -596,29 +662,51 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </div>
             )}
 
-            {/* Document / File */}
+            {/* Document / File - WhatsApp Grade Card */}
             {message.type === 'file' && (
-              <div className="flex items-center gap-3 p-2 bg-black/20 rounded-xl mb-1.5">
-                <div className="p-2.5 bg-[#00a884]/20 rounded-lg text-[#00a884]">
+              <div className="flex items-center gap-3 p-2.5 bg-black/25 hover:bg-black/35 rounded-xl mb-1.5 border border-white/5 transition select-none">
+                <div className={`p-2.5 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                  (message.fileName || '').endsWith('.pdf')
+                    ? 'bg-red-500/20 text-red-400'
+                    : (message.fileName || '').match(/\.(doc|docx)$/i)
+                    ? 'bg-blue-500/20 text-blue-400'
+                    : (message.fileName || '').match(/\.(xls|xlsx|csv)$/i)
+                    ? 'bg-emerald-500/20 text-emerald-400'
+                    : (message.fileName || '').match(/\.(zip|rar|7z|tar|gz)$/i)
+                    ? 'bg-amber-500/20 text-amber-400'
+                    : 'bg-[#00a884]/20 text-[#00a884]'
+                }`}>
                   <FileIcon className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-white truncate">
+                  <div className="text-xs font-semibold text-white truncate" title={message.fileName}>
                     {message.fileName || 'Document'}
                   </div>
-                  <div className="text-[10px] text-[#8696a0]">{message.fileSize || 'Attachment'}</div>
+                  <div className="text-[10px] text-[#8696a0] flex items-center gap-1.5 mt-0.5">
+                    <span>{message.fileSize || 'File'}</span>
+                    <span>•</span>
+                    <span className="uppercase font-mono">
+                      {(message.fileName || '').split('.').pop() || 'FILE'}
+                    </span>
+                  </div>
                 </div>
-                {message.mediaUrl && (
+                {message.status === 'sending' ? (
+                  <div className="p-2 text-[#8696a0] flex items-center justify-center">
+                    <div className="w-4 h-4 border-2 border-[#00a884]/30 border-t-[#00a884] rounded-full animate-spin" />
+                  </div>
+                ) : message.mediaUrl ? (
                   <a
                     href={message.mediaUrl}
                     download={message.fileName || 'file'}
                     target="_blank"
                     rel="noreferrer"
-                    className="p-2 text-[#8696a0] hover:text-white transition"
+                    className="p-2 text-[#8696a0] hover:text-white hover:bg-black/20 rounded-full transition cursor-pointer"
+                    title="Download document"
+                    onClick={(e) => e.stopPropagation()}
                   >
                     <Download className="w-4 h-4" />
                   </a>
-                )}
+                ) : null}
               </div>
             )}
 
@@ -671,7 +759,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             )}
 
             {/* Text Message with Real-Time Translation, Large Animated Emojis, or LimoCraft Sticker */}
-            {message.text && message.type !== 'call_log' && (
+            {message.text && message.type !== 'call_log' && (message.type !== 'file' || (message.text !== message.fileName && message.text.trim() !== '')) && (
               <div className="relative">
                 {limoCraftSticker ? (
                   <div className="py-2 px-1 select-none flex flex-col items-center">
@@ -709,26 +797,31 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
                     {/* Change target language button */}
                     <button
+                      ref={langButtonRef}
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setShowLangPicker(!showLangPicker);
+                        if (isTranslatePickerOpen) {
+                          onCloseAnyMenu?.();
+                        } else {
+                          onOpenTranslatePicker?.();
+                        }
                       }}
-                      className="text-[9px] text-[#8696a0] hover:text-white px-1 uppercase font-mono"
+                      className="text-[9px] text-[#8696a0] hover:text-white px-1 uppercase font-mono cursor-pointer"
                       title="Select target language"
                     >
                       {currentTranslateLang}
                     </button>
 
-                    {/* Language Picker Dropdown */}
-                    {showLangPicker && (
+                    {/* Language Picker Dropdown - Mutually Exclusive & Screen-Adaptive */}
+                    {isTranslatePickerOpen && (
                       <>
                         <div 
                           className="fixed inset-0 z-40 cursor-default" 
-                          onClick={(e) => { e.stopPropagation(); setShowLangPicker(false); }} 
+                          onClick={(e) => { e.stopPropagation(); onCloseAnyMenu?.(); }} 
                         />
                         <div 
-                          className="absolute right-0 top-6 z-50 w-44 max-h-48 overflow-y-auto bg-[#233138] border border-[#2e3b44] rounded-xl shadow-2xl py-1 text-xs text-[#d1d7db]"
+                          className={`absolute right-0 ${translateOpenUpwards ? 'bottom-6' : 'top-6'} z-50 w-48 max-h-52 overflow-y-auto bg-[#233138] border border-[#2e3b44] rounded-xl shadow-2xl py-1 text-xs text-[#d1d7db] animate-scale-in`}
                           onClick={(e) => e.stopPropagation()}
                         >
                           <div className="px-3 py-1 text-[10px] uppercase font-semibold text-[#8696a0] border-b border-[#2e3b44]">
@@ -738,8 +831,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                             <button
                               key={lang.code}
                               type="button"
-                              onClick={() => handleTranslate(lang.code)}
-                              className={`w-full px-3 py-1.5 text-left text-xs hover:bg-[#182229] flex items-center justify-between ${
+                              onClick={() => {
+                                handleTranslate(lang.code);
+                                onCloseAnyMenu?.();
+                              }}
+                              className={`w-full px-3 py-1.5 text-left text-xs hover:bg-[#182229] flex items-center justify-between cursor-pointer ${
                                 currentTranslateLang === lang.code ? 'text-[#00a884] font-semibold' : ''
                               }`}
                             >
@@ -778,7 +874,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </>
         )}
 
-        {/* Timestamp, Star & Status Checkmarks */}
+        {/* Timestamp, Star & Status Checkmarks - Hidden if image/video with corner overlay */}
+        {((message.type !== 'image' && message.type !== 'video') || (message.text && message.text.trim() !== '')) && (
         <div className="flex items-center justify-end gap-1 text-[11px] text-[#8696a0] mt-1 float-right ml-3 select-none">
           {isStarred && <Star className="w-3 h-3 text-amber-400 fill-amber-400 mr-0.5" />}
           <span>{formatTime(message.timestamp)}</span>
@@ -814,6 +911,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             </span>
           )}
         </div>
+        )}
 
         {/* REACTION PILLS BADGE (WhatsApp style overlapping bottom) */}
         {reactionCounts.length > 0 && (

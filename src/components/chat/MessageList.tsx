@@ -46,21 +46,40 @@ export const MessageList: React.FC<MessageListProps> = ({
 
   // Single active menu coordinator: only one message menu/modal can be open at a time
   const [activeMenuMessageId, setActiveMenuMessageId] = useState<string | null>(null);
-  const [activeMenuMode, setActiveMenuMode] = useState<'desktop_menu' | 'desktop_emoji' | 'mobile_modal' | null>(null);
+  const [activeMenuMode, setActiveMenuMode] = useState<'desktop_menu' | 'desktop_emoji' | 'mobile_modal' | 'translate_picker' | null>(null);
+
+  // Close any open message popover/menu when a global modal or menu opens elsewhere
+  useEffect(() => {
+    const handleCloseAll = () => {
+      setActiveMenuMessageId(null);
+      setActiveMenuMode(null);
+    };
+    window.addEventListener('limochat_close_all_menus', handleCloseAll);
+    return () => window.removeEventListener('limochat_close_all_menus', handleCloseAll);
+  }, []);
 
   const handleOpenDesktopMenu = (msgId: string) => {
+    window.dispatchEvent(new Event('limochat_close_all_menus'));
     setActiveMenuMessageId(msgId);
     setActiveMenuMode('desktop_menu');
   };
 
   const handleOpenDesktopEmoji = (msgId: string) => {
+    window.dispatchEvent(new Event('limochat_close_all_menus'));
     setActiveMenuMessageId(msgId);
     setActiveMenuMode('desktop_emoji');
   };
 
   const handleOpenMobileModal = (msgId: string) => {
+    window.dispatchEvent(new Event('limochat_close_all_menus'));
     setActiveMenuMessageId(msgId);
     setActiveMenuMode('mobile_modal');
+  };
+
+  const handleOpenTranslatePicker = (msgId: string) => {
+    window.dispatchEvent(new Event('limochat_close_all_menus'));
+    setActiveMenuMessageId(msgId);
+    setActiveMenuMode('translate_picker');
   };
 
   const handleCloseAnyMenu = () => {
@@ -117,6 +136,7 @@ export const MessageList: React.FC<MessageListProps> = ({
         const isDesktopMenuOpen = isAnyMenuOpen && activeMenuMode === 'desktop_menu';
         const isDesktopEmojiOpen = isAnyMenuOpen && activeMenuMode === 'desktop_emoji';
         const isMobileModalOpen = isAnyMenuOpen && activeMenuMode === 'mobile_modal';
+        const isTranslatePickerOpen = isAnyMenuOpen && activeMenuMode === 'translate_picker';
 
         return (
           <React.Fragment key={message.id}>
@@ -142,10 +162,12 @@ export const MessageList: React.FC<MessageListProps> = ({
               isDesktopMenuOpen={isDesktopMenuOpen}
               isDesktopEmojiOpen={isDesktopEmojiOpen}
               isMobileModalOpen={isMobileModalOpen}
+              isTranslatePickerOpen={isTranslatePickerOpen}
               isAnyMenuOpenForThisMessage={isAnyMenuOpen}
               onOpenDesktopMenu={() => handleOpenDesktopMenu(message.id)}
               onOpenDesktopEmoji={() => handleOpenDesktopEmoji(message.id)}
               onOpenMobileModal={() => handleOpenMobileModal(message.id)}
+              onOpenTranslatePicker={() => handleOpenTranslatePicker(message.id)}
               onCloseAnyMenu={handleCloseAnyMenu}
               onReportMessage={onReportMessage}
               onViewMedia={onViewMedia}
