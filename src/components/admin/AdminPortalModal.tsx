@@ -630,19 +630,38 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       }
     } catch {}
 
-    // 2. Real-time Firestore stream
+    // 2. Real-time Supabase live messages stream
+    const unsubLive = RealtimeCoordinator.subscribeToLiveMessages(chat.id, (liveMsg) => {
+      if (liveMsg.chatId !== chat.id) return;
+      setSupportMessages((prev) => {
+        if (prev.some((m) => m.id === liveMsg.id)) return prev;
+        return [...prev, liveMsg].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      });
+    });
+
+    // 3. Real-time Firestore stream
     const messagesRef = collection(db, 'chats', chat.id, 'messages');
-    supportUnsubRef.current = onSnapshot(messagesRef, (snapshot) => {
+    const unsubFs = onSnapshot(messagesRef, (snapshot) => {
       const list: Message[] = [];
       snapshot.forEach((d) => list.push({ ...d.data(), id: d.id } as Message));
       list.sort((a, b) => a.timestamp - b.timestamp);
       if (list.length > 0) {
-        setSupportMessages(list);
+        setSupportMessages((prev) => {
+          const map = new Map<string, Message>();
+          prev.forEach((m) => map.set(m.id, m));
+          list.forEach((m) => map.set(m.id, m));
+          return Array.from(map.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        });
       }
       setLoadingSupportMessages(false);
     }, () => {
       setLoadingSupportMessages(false);
     });
+
+    supportUnsubRef.current = () => {
+      try { unsubLive(); } catch {}
+      try { unsubFs(); } catch {}
+    };
   };
 
   // Handle support media attachment
@@ -679,6 +698,22 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       const type = supportAttachment ? supportAttachment.type : 'text';
       const mediaUrl = supportAttachment ? supportAttachment.dataUrl : undefined;
       const extra = supportAttachment ? { fileName: supportAttachment.name, fileSize: supportAttachment.size } : undefined;
+
+      const now = Date.now();
+      const optimisticMsg: Message = {
+        id: `msg_${now}_support`,
+        chatId: selectedSupportChat.id,
+        senderId: 'limochat_official_support',
+        senderName: 'LimoChat Support',
+        text: text,
+        type: type as any,
+        mediaUrl: mediaUrl || '',
+        fileName: extra?.fileName || '',
+        fileSize: extra?.fileSize || '',
+        status: 'delivered',
+        timestamp: now,
+      };
+      setSupportMessages((prev) => [...prev, optimisticMsg]);
 
       await sendSupportReply(selectedSupportChat.id, text, type, mediaUrl, extra);
       setSupportReplyText('');
@@ -1402,12 +1437,12 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       u.phoneNumber?.toLowerCase().includes(userSearchQuery.toLowerCase())
   );
 
-  // Filter support chats
+  // Filter support chats (covers support_ prefix, participant limochat_official_support or support)
   const supportChats = chatsList.filter(
     (c) =>
-      c.type === 'direct' &&
-      c.participants &&
-      c.participants.includes('limochat_official_support')
+      c.id.startsWith('support_') ||
+      c.name === 'LimoChat Support' ||
+      (c.participants && (c.participants.includes('limochat_official_support') || c.participants.includes('support')))
   );
 
   // Check if a support ticket has unread messages or is waiting for support to reply
@@ -1791,6 +1826,31 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                         </button>
                       </div>
                     )}
+
+                    {/* Quick Response Templates */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[10px] select-none">
+                      <button
+                        type="button"
+                        onClick={() => setSupportReplyText("Hello! Thank you for contacting LimoChat Support. How may we help you today?")}
+                        className="px-2.5 py-1 rounded-lg bg-[#182229] hover:bg-[#202c33] text-[#8696a0] hover:text-[#00a884] border border-white/5 transition whitespace-nowrap cursor-pointer"
+                      >
+                        👋 Welcome greeting
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSupportReplyText("Your inquiry has been resolved. Please let us know if you need any further assistance!")}
+                        className="px-2.5 py-1 rounded-lg bg-[#182229] hover:bg-[#202c33] text-[#8696a0] hover:text-emerald-400 border border-white/5 transition whitespace-nowrap cursor-pointer"
+                      >
+                        ✅ Resolved notice
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSupportReplyText("Live voice and video calling has been authorized for your support chat.")}
+                        className="px-2.5 py-1 rounded-lg bg-[#182229] hover:bg-[#202c33] text-[#8696a0] hover:text-blue-400 border border-white/5 transition whitespace-nowrap cursor-pointer"
+                      >
+                        📞 Calls authorized
+                      </button>
+                    </div>
 
                     <form onSubmit={handleSendSupportReply} className="flex items-center gap-2">
                       {/* Hidden file input */}

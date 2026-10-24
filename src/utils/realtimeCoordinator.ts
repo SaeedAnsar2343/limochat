@@ -731,12 +731,24 @@ export class RealtimeCoordinator {
     try {
       await supabase.from('calls').update(row).eq('id', callId);
 
-      // Broadcast status change
-      const channel = supabase.channel(`call:${callId}`);
-      await channel.send({
-        type: 'broadcast',
-        event: 'call_status_update',
-        payload: { callId, ...updates },
+      // Broadcast status change via subscribed channel
+      const pubChannel = supabase.channel(`pub_upd_${callId}_${Date.now()}`);
+      await new Promise<void>((resolve) => {
+        pubChannel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            pubChannel.send({
+              type: 'broadcast',
+              event: 'call_status_update',
+              payload: { callId, ...updates },
+            }).then(() => {
+              setTimeout(() => {
+                try { supabase.removeChannel(pubChannel); } catch {}
+              }, 1200);
+              resolve();
+            }).catch(() => resolve());
+          }
+        });
+        setTimeout(resolve, 2500);
       });
     } catch (e) {
       console.warn('Update call session notice:', e);
@@ -748,11 +760,23 @@ export class RealtimeCoordinator {
    */
   public static async sendUserCallEnded(targetUid: string, callId: string): Promise<void> {
     try {
-      const channel = supabase.channel(`user_calls:${targetUid}`);
-      await channel.send({
-        type: 'broadcast',
-        event: 'call_ended',
-        payload: { callId },
+      const pubChannel = supabase.channel(`pub_ended_${targetUid}_${Date.now()}`);
+      await new Promise<void>((resolve) => {
+        pubChannel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            pubChannel.send({
+              type: 'broadcast',
+              event: 'call_ended',
+              payload: { callId },
+            }).then(() => {
+              setTimeout(() => {
+                try { supabase.removeChannel(pubChannel); } catch {}
+              }, 1200);
+              resolve();
+            }).catch(() => resolve());
+          }
+        });
+        setTimeout(resolve, 2500);
       });
     } catch {}
   }
@@ -978,11 +1002,23 @@ export class RealtimeCoordinator {
 
     // 2. Broadcast via Supabase Realtime channel for sub-25ms WebSocket latency
     try {
-      const channel = supabase.channel(`call:${callId}`);
-      await channel.send({
-        type: 'broadcast',
-        event: 'call_signal',
-        payload: packet,
+      const pubChannel = supabase.channel(`pub_sig_${callId}_${Date.now()}`);
+      await new Promise<void>((resolve) => {
+        pubChannel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            pubChannel.send({
+              type: 'broadcast',
+              event: 'call_signal',
+              payload: packet,
+            }).then(() => {
+              setTimeout(() => {
+                try { supabase.removeChannel(pubChannel); } catch {}
+              }, 1000);
+              resolve();
+            }).catch(() => resolve());
+          }
+        });
+        setTimeout(resolve, 2000);
       });
     } catch {}
 

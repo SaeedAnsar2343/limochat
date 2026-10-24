@@ -86,10 +86,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const pcMap = useRef<{ [uid: string]: RTCPeerConnection }>({});
   const originalVideoTrack = useRef<MediaStreamTrack | null>(null);
   const incomingSessionRef = useRef<CallSession | null>(null);
+  const activeSessionRef = useRef<CallSession | null>(null);
 
   useEffect(() => {
     incomingSessionRef.current = incomingSession;
   }, [incomingSession]);
+
+  useEffect(() => {
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
 
   const toggleSpeaker = () => {
     setIsSpeakerOn((prev) => !prev);
@@ -181,7 +186,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       },
       (callId) => {
         // Immediate termination if remote user ended or declined the call
-        if (activeSession?.id === callId || incomingSessionRef.current?.id === callId) {
+        if (!callId || activeSessionRef.current?.id === callId || incomingSessionRef.current?.id === callId) {
           soundEngine.playCallEnd();
           cleanupCallState();
         }
@@ -995,7 +1000,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }).catch(() => {});
     }
     soundEngine.playCallEnd();
-    cleanupCallState();
+    setTimeout(() => {
+      cleanupCallState();
+    }, 250);
   };
 
   const toggleAudio = () => {

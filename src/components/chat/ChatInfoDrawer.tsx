@@ -153,9 +153,14 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
     if (!isOpen) return;
 
     if (chat.type === 'direct') {
-      const otherUid = chat.participants.find((p) => p !== currentUser.uid);
+      const pList = chat.participants || [];
+      let otherUid = pList.find((p) => p !== currentUser.uid);
+      if (!otherUid && chat.id) {
+        otherUid = chat.id.replace(/^chat_/, '').replace(/^support_/, '').split('_').find((p) => p !== currentUser.uid);
+      }
+
       if (otherUid) {
-        if (otherUid === 'limochat_official_support') {
+        if (otherUid === 'limochat_official_support' || chat.id.startsWith('support_') || chat.name === 'LimoChat Support') {
           setTargetUser({
             uid: 'limochat_official_support',
             displayName: 'LimoChat Support',
@@ -172,7 +177,23 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
           return;
         }
 
-        // Try Firestore then fallback to Supabase
+        // Initialize targetUser immediately with available chat data to prevent blank screen
+        const initialPd = (chat as any).participantDetails?.[otherUid];
+        setTargetUser({
+          uid: otherUid,
+          displayName: initialPd?.displayName || chat.name || 'Contact',
+          phoneNumber: initialPd?.phoneNumber || (chat as any).phoneNumber || '',
+          photoURL: initialPd?.photoURL || chat.avatar || '',
+          about: '',
+          email: '',
+          isOnline: false,
+          lastSeen: 0,
+          createdAt: 0,
+          blockedUsers: [],
+          privacy: { lastSeen: 'everyone', profilePhoto: 'everyone', about: 'everyone', readReceipts: true, status: 'everyone' },
+        });
+
+        // Dual-Database hydration: Fetch from Firestore then Supabase
         getDoc(doc(db, 'users', otherUid)).then((snap) => {
           if (snap.exists()) {
             setTargetUser(snap.data() as UserProfile);
@@ -191,21 +212,6 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
                   createdAt: Number(data.created_at || 0),
                   blockedUsers: data.blocked_users || [],
                   privacy: data.privacy || {},
-                });
-              } else if ((chat as any).participantDetails?.[otherUid]) {
-                const pd = (chat as any).participantDetails[otherUid];
-                setTargetUser({
-                  uid: pd.uid,
-                  displayName: pd.displayName,
-                  phoneNumber: pd.phoneNumber || '',
-                  photoURL: pd.photoURL || '',
-                  about: '',
-                  email: '',
-                  isOnline: false,
-                  lastSeen: 0,
-                  createdAt: 0,
-                  blockedUsers: [],
-                  privacy: { lastSeen: 'everyone', profilePhoto: 'everyone', about: 'everyone', readReceipts: true, status: 'everyone' },
                 });
               }
             });
@@ -720,12 +726,12 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
         )}
 
         {/* Lifetime Virtual Telephone Line */}
-        {chat.type === 'direct' && targetUser && (
+        {chat.type === 'direct' && (targetUser?.phoneNumber || (chat as any).phoneNumber || targetUser) && (
           <div className="flex items-center gap-2 mt-2.5 text-xs text-[#00a884] bg-[#202c33] px-3.5 py-1.5 rounded-xl font-mono border border-[#2e3b44] shadow-inner">
             <ShieldCheck className="w-4 h-4 text-[#00a884]" />
-            <span className="font-bold tracking-wide">{targetUser.phoneNumber}</span>
+            <span className="font-bold tracking-wide">{targetUser?.phoneNumber || (chat as any).phoneNumber || '+991 Verified Line'}</span>
             <button
-              onClick={() => handleCopyPhone(targetUser.phoneNumber)}
+              onClick={() => handleCopyPhone(targetUser?.phoneNumber || (chat as any).phoneNumber || '')}
               className="ml-1.5 p-1 rounded hover:bg-[#111b21] text-[#8696a0] hover:text-white transition cursor-pointer"
               title="Copy virtual number"
             >

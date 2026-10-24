@@ -14,7 +14,8 @@ import {
   Ban,
   Star,
   Calendar,
-  Download
+  Download,
+  Settings
 } from 'lucide-react';
 import { Chat, UserProfile } from '../../types';
 import { Avatar } from '../common/Avatar';
@@ -39,6 +40,7 @@ interface ChatHeaderProps {
   onToggleBlock?: () => void;
   isFilteringStarred?: boolean;
   onToggleStarredFilter?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
@@ -57,6 +59,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   onToggleBlock,
   isFilteringStarred = false,
   onToggleStarredFilter,
+  onOpenSettings,
 }) => {
   const { exportChat } = useChat();
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
@@ -264,12 +267,28 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 onClick={() => setShowMoreMenu(false)}
               >
                 <button
-                  onClick={onToggleInfo}
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    onToggleInfo();
+                  }}
                   className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
                 >
                   <Info className="w-4 h-4 text-[#00a884]" />
                   <span>{chat.type === 'direct' ? 'Contact info' : 'Group info'}</span>
                 </button>
+
+                {onOpenSettings && (
+                  <button
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      onOpenSettings();
+                    }}
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-white/10 flex items-center gap-2.5 transition cursor-pointer font-medium text-gray-800 dark:text-[#d1d7db]"
+                  >
+                    <Settings className="w-4 h-4 text-emerald-500" />
+                    <span>Settings & Privacy</span>
+                  </button>
+                )}
 
                 {onOpenSearch && (
                   <button

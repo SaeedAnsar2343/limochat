@@ -9,6 +9,7 @@ import { ChatInfoDrawer } from './ChatInfoDrawer';
 import { ReportMessageModal } from './ReportMessageModal';
 import { MediaViewerModal } from './MediaViewerModal';
 import { JumpToDateModal } from './JumpToDateModal';
+import { SettingsDrawer } from '../settings/SettingsDrawer';
 import { Message, UserProfile } from '../../types';
 import { Ban, X, Star, Copy, Trash2, AlertTriangle, RotateCcw, Search, ChevronUp, ChevronDown, Calendar } from 'lucide-react';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -39,6 +40,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
   const { currentUser, blockUser, unblockUser } = useAuth();
   const { startCall } = useCall();
   const [showInfo, setShowInfo] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
 
   // Multi-selection state
@@ -106,10 +108,12 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
     return () => unsub();
   }, [otherUid]);
 
-  // Reset selection mode when activeChat changes
+  // Reset selection mode, info drawer, and settings when activeChat changes
   useEffect(() => {
     setIsSelectionMode(false);
     setSelectedMessageIds([]);
+    setShowInfo(false);
+    setShowSettings(false);
   }, [activeChat?.id]);
 
   // Mark chat as read when opened/viewing
@@ -340,6 +344,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
             onStartAudioCall={() => startCall({ chat: activeChat, callType: 'audio' })}
             onStartVideoCall={() => startCall({ chat: activeChat, callType: 'video' })}
             onToggleInfo={() => setShowInfo(!showInfo)}
+            onOpenSettings={() => setShowSettings(true)}
             onOpenSearch={() => setIsSearchingMessages(true)}
             onOpenJumpToDate={() => setShowJumpToDateModal(true)}
             onEnterSelectionMode={() => handleEnterSelectionMode()}
@@ -509,6 +514,15 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
           )}
         </div>
       </div>
+
+      {/* In-Chat Settings & Privacy Drawer */}
+      {showSettings && (
+        <SettingsDrawer
+          user={currentUser}
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
 
       {/* Slide-out Contact / Group Info Panel */}
       <ChatInfoDrawer
