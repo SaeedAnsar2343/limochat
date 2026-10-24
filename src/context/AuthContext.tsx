@@ -9,7 +9,10 @@ import {
   signInAnonymously,
   updateProfile as updateFbProfile,
   GoogleAuthProvider,
-  signInWithCredential
+  signInWithCredential,
+  EmailAuthProvider,
+  linkWithCredential,
+  updatePassword
 } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
@@ -97,6 +100,7 @@ interface AuthContextType {
   liftAdminSuspension: () => Promise<void>;
   logOutOtherSessions: () => Promise<void>;
   setAuthenticator: (enabled: boolean, secret: string | null, recoveryCodes?: string[]) => Promise<void>;
+  createOrUpdatePasswordForUser: (targetUid: string, email: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -353,6 +357,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // 2. Web Popup Sign-In
       await signInWithPopup(auth, googleProvider);
+
+      const pendingPwd = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('limochat_pending_password_link') : null;
+      if (pendingPwd && auth.currentUser?.email) {
+        sessionStorage.removeItem('limochat_pending_password_link');
+        try {
+          await linkWithCredential(auth.currentUser, EmailAuthProvider.credential(auth.currentUser.email, pendingPwd));
+        } catch {
+          await updatePassword(auth.currentUser, pendingPwd).catch(() => {});
+        }
+        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+          hasPassword: true,
+          'preferences.hasPassword': true,
+          'preferences.appLockPin': pendingPwd,
+          lastPasswordCreated: Date.now(),
+        }).catch(() => {});
+        try { await supabase.from('users').update({ updated_at: Date.now() }).eq('uid', auth.currentUser.uid); } catch {}
+      }
     } catch (error: any) {
       console.error("Google sign in error:", error);
       if (error.code === 'auth/unauthorized-domain') {
@@ -788,6 +809,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser((prev) => (prev ? { ...prev, activeSessions: [currSession] } : null));
   };
 
+  const createOrUpdatePasswordForUser = async (targetUid: string, email: string, newPassword: string) => {
+    if (auth.currentUser && auth.currentUser.uid === targetUid && auth.currentUser.email) {
+      try {
+        await linkWithCredential(auth.currentUser, EmailAuthProvider.credential(auth.currentUser.email, newPassword));
+      } catch {
+        await updatePassword(auth.currentUser, newPassword).catch(() => {});
+      }
+    }
+    await updateDoc(doc(db, 'users', targetUid), {
+      hasPassword: true,
+      'preferences.hasPassword': true,
+      'preferences.appLockPin': newPassword,
+      lastPasswordCreated: Date.now(),
+    }).catch(() => {});
+    try {
+      await supabase.from('users').update({
+        updated_at: Date.now(),
+      }).eq('uid', targetUid);
+    } catch {}
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -818,6 +860,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         liftAdminSuspension,
         logOutOtherSessions,
         setAuthenticator,
+        createOrUpdatePasswordForUser,
       }}
     >
       {children}

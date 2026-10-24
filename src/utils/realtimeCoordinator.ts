@@ -1643,20 +1643,76 @@ export class RealtimeCoordinator {
   }
 
   /**
-   * Lookup user by email or virtual phone number for Forgot Password / Authenticator reset
+   * Lookup user by email or virtual phone number for Login / Password Reset / Authenticator flow
+   * Handles any phone format: with/without spaces, with/without +991, dashes, etc.
    */
   public static async findUserByEmailOrPhone(query: string): Promise<any | null> {
     try {
-      const clean = query.trim().toLowerCase();
-      const { data, error } = await supabase
+      const trimmed = query.trim();
+      if (!trimmed) return null;
+      const clean = trimmed.toLowerCase();
+
+      // If email
+      if (clean.includes('@')) {
+        const { data } = await supabase
+          .from('users')
+          .select('*')
+          .ilike('email', clean)
+          .limit(1)
+          .maybeSingle();
+        if (data) return data;
+      }
+
+      // Extract pure digits
+      const digits = trimmed.replace(/\D/g, '');
+      let coreDigits = digits;
+      if (digits.startsWith('991') && digits.length >= 10) {
+        coreDigits = digits.slice(3);
+      } else if (digits.startsWith('0') && digits.length === 8) {
+        coreDigits = digits.slice(1);
+      }
+
+      const orClauses: string[] = [
+        `email.ilike.${clean}`,
+        `phone_number.ilike.%${trimmed}%`,
+      ];
+
+      if (coreDigits.length >= 6) {
+        const wildcard = coreDigits.split('').join('%');
+        orClauses.push(`phone_number.ilike.%${wildcard}%`);
+        if (coreDigits.length === 7) {
+          const standard = `+991 ${coreDigits.slice(0, 3)} ${coreDigits.slice(3)}`;
+          orClauses.push(`phone_number.eq.${standard}`);
+        }
+      }
+
+      const { data } = await supabase
         .from('users')
         .select('*')
-        .or(`email.ilike.${clean},phone_number.ilike.%${clean}%`)
+        .or(orClauses.join(','))
         .limit(1)
-        .single();
-      if (error || !data) return null;
-      return data;
-    } catch {
+        .maybeSingle();
+
+      if (data) return data;
+
+      // In-memory fallback if not matched by SQL pattern
+      if (digits.length >= 6) {
+        const { data: usersList } = await supabase
+          .from('users')
+          .select('*')
+          .limit(100);
+        if (usersList) {
+          const matched = usersList.find((u: any) => {
+            const uDigits = (u.phone_number || '').replace(/\D/g, '');
+            return uDigits.includes(coreDigits) || coreDigits.includes(uDigits);
+          });
+          if (matched) return matched;
+        }
+      }
+
+      return null;
+    } catch (e) {
+      console.warn('[RealtimeCoordinator] findUserByEmailOrPhone error:', e);
       return null;
     }
   }
