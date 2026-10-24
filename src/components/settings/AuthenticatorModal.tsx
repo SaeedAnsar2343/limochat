@@ -19,6 +19,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { UserProfile } from '../../types';
+import { OtpBoxInput } from '../common/OtpBoxInput';
 import { 
   generateTotpSecret, 
   getOtpAuthUrl, 
@@ -125,9 +126,10 @@ export const AuthenticatorModal: React.FC<AuthenticatorModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const handleVerifyCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (verificationCode.trim().length !== 6) {
+  const handleVerifyCode = async (e?: React.FormEvent, codeOverride?: string) => {
+    if (e) e.preventDefault();
+    const codeToTest = (codeOverride !== undefined ? codeOverride : verificationCode).replace(/\D/g, '');
+    if (codeToTest.length !== 6) {
       setError('Please enter the full 6-digit code shown in your Authenticator app.');
       return;
     }
@@ -136,9 +138,9 @@ export const AuthenticatorModal: React.FC<AuthenticatorModalProps> = ({
       setIsSubmitting(true);
       setError(null);
 
-      const isValid = await verifyTotpToken(verificationCode, secret);
+      const isValid = await verifyTotpToken(codeToTest, secret);
       if (!isValid) {
-        setError('Invalid authenticator code. Please check your authenticator app and try again.');
+        setError('Invalid authenticator code. Check your authenticator app (make sure your device clock is accurate) and try again.');
         setIsSubmitting(false);
         return;
       }
@@ -164,10 +166,11 @@ export const AuthenticatorModal: React.FC<AuthenticatorModalProps> = ({
     }
   };
 
-  const handleConfirmDisable = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleConfirmDisable = async (e?: React.FormEvent, codeOverride?: string) => {
+    if (e) e.preventDefault();
     const existingSecret = currentUser.authenticatorSecret || currentUser.preferences?.authenticatorSecret;
     const existingRecoveryCodes = currentUser.recoveryCodes || currentUser.preferences?.recoveryCodes || [];
+    const codeToTest = (codeOverride !== undefined ? codeOverride : disableCode).trim();
 
     if (!existingSecret) {
       // Direct disable if no secret found
@@ -177,11 +180,15 @@ export const AuthenticatorModal: React.FC<AuthenticatorModalProps> = ({
     }
 
     // Verify current 6-digit code or recovery code
-    const isValidTotp = await verifyTotpToken(disableCode, existingSecret);
-    const recoveryResult = verifyRecoveryCode(disableCode, existingRecoveryCodes);
+    const cleanDigits = codeToTest.replace(/\D/g, '');
+    let isValidTotp = false;
+    if (cleanDigits.length === 6) {
+      isValidTotp = await verifyTotpToken(cleanDigits, existingSecret);
+    }
+    const recoveryResult = verifyRecoveryCode(codeToTest, existingRecoveryCodes);
 
     if (!isValidTotp && !recoveryResult.valid) {
-      setError('Invalid code. Enter a valid 6-digit Authenticator code or a backup recovery code to disable.');
+      setError('Invalid code. Enter the 6-digit Authenticator code or a backup recovery code to disable.');
       return;
     }
 
@@ -345,26 +352,30 @@ export const AuthenticatorModal: React.FC<AuthenticatorModalProps> = ({
             STATE 3: STEP 2 - VERIFY 6-DIGIT CODE
             ========================================================================= */}
         {step === 'verify' && (
-          <form onSubmit={handleVerifyCode} className="space-y-4">
-            <p className="text-xs text-[#8696a0] leading-relaxed">
+          <form onSubmit={(e) => handleVerifyCode(e)} className="space-y-4">
+            <p className="text-xs text-[#8696a0] leading-relaxed text-center">
               Enter the 6-digit code currently displayed for <strong className="text-white">LimoChat</strong> in your authenticator app to verify the connection:
             </p>
 
-            <div className="flex justify-center my-3">
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                autoFocus
-                placeholder="000000"
+            <div className="py-2">
+              <OtpBoxInput
+                length={6}
                 value={verificationCode}
-                onChange={(e) => {
-                  setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                onChange={(val) => {
+                  setVerificationCode(val);
                   setError(null);
                 }}
-                className="w-48 text-center text-2xl font-mono font-bold tracking-[0.4em] py-3 bg-[#111b21] border-2 border-[#00a884] rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-[#00a884]/50 shadow-inner"
+                onComplete={(code) => {
+                  handleVerifyCode(undefined, code);
+                }}
+                disabled={isSubmitting}
+                isError={!!error}
+                autoFocus={true}
               />
+              <p className="text-[11px] text-[#8696a0] text-center mt-2 flex items-center justify-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-[#00a884]" />
+                <span>Auto-verifies instantly on 6th digit</span>
+              </p>
             </div>
 
             {error && (
@@ -459,30 +470,34 @@ export const AuthenticatorModal: React.FC<AuthenticatorModalProps> = ({
             STATE 5: DISABLE CONFIRMATION
             ========================================================================= */}
         {step === 'disable_confirm' && (
-          <form onSubmit={handleConfirmDisable} className="space-y-4">
+          <form onSubmit={(e) => handleConfirmDisable(e)} className="space-y-4">
             <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-xs text-red-300 flex items-start gap-2.5">
               <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
               <div>
                 <strong className="font-semibold block mb-0.5">Disable Authenticator?</strong>
-                This removes two-step verification protection from your account. Please enter your 6-digit code or a recovery code to confirm.
+                This removes two-step verification protection from your account. Please enter your 6-digit Authenticator code to confirm.
               </div>
             </div>
 
-            <div>
-              <label className="text-xs text-[#8696a0] block mb-1.5">
-                Current 6-Digit Authenticator Code (or Backup Recovery Code)
-              </label>
-              <input
-                type="text"
-                autoFocus
-                placeholder="Enter 6-digit code or recovery code..."
+            <div className="py-2">
+              <OtpBoxInput
+                length={6}
                 value={disableCode}
-                onChange={(e) => {
-                  setDisableCode(e.target.value);
+                onChange={(val) => {
+                  setDisableCode(val);
                   setError(null);
                 }}
-                className="w-full py-2.5 px-3.5 bg-[#111b21] border border-[#2e3b44] rounded-xl text-white text-sm focus:outline-none focus:border-red-500 font-mono"
+                onComplete={(code) => {
+                  handleConfirmDisable(undefined, code);
+                }}
+                disabled={isSubmitting}
+                isError={!!error}
+                autoFocus={true}
               />
+              <p className="text-[11px] text-[#8696a0] text-center mt-2 flex items-center justify-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-red-400" />
+                <span>Auto-verifies on 6th digit</span>
+              </p>
             </div>
 
             {error && (
@@ -502,7 +517,7 @@ export const AuthenticatorModal: React.FC<AuthenticatorModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={!disableCode.trim() || isSubmitting}
+                disabled={disableCode.length !== 6 || isSubmitting}
                 className="flex-1 py-2.5 px-4 rounded-xl bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-semibold text-xs transition cursor-pointer shadow-md"
               >
                 {isSubmitting ? 'Disabling...' : 'Confirm Disable'}

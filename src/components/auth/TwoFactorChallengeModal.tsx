@@ -1,7 +1,8 @@
 import { createPortal } from 'react-dom';
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, KeyRound, AlertTriangle, ArrowRight, LogOut, Check } from 'lucide-react';
+import { ShieldCheck, KeyRound, AlertTriangle, ArrowRight, LogOut, Check, Sparkles } from 'lucide-react';
 import { UserProfile } from '../../types';
+import { OtpBoxInput } from '../common/OtpBoxInput';
 import { verifyTotpToken, verifyRecoveryCode } from '../../utils/totp';
 import { navigationManager } from '../../utils/navigationManager';
 
@@ -28,9 +29,10 @@ export const TwoFactorChallengeModal: React.FC<TwoFactorChallengeModalProps> = (
   const secret = user.authenticatorSecret || user.preferences?.authenticatorSecret;
   const recoveryCodes = user.recoveryCodes || user.preferences?.recoveryCodes || [];
 
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!code.trim()) {
+  const handleVerify = async (e?: React.FormEvent, codeOverride?: string) => {
+    if (e) e.preventDefault();
+    const targetCode = (codeOverride !== undefined ? codeOverride : code).trim();
+    if (!targetCode) {
       setError('Please enter your code.');
       return;
     }
@@ -41,7 +43,7 @@ export const TwoFactorChallengeModal: React.FC<TwoFactorChallengeModalProps> = (
 
       if (useRecovery) {
         // Verify backup recovery code
-        const res = verifyRecoveryCode(code, recoveryCodes);
+        const res = verifyRecoveryCode(targetCode, recoveryCodes);
         if (!res.valid) {
           setError('Invalid recovery code. Please check and try again.');
           setIsVerifying(false);
@@ -54,7 +56,8 @@ export const TwoFactorChallengeModal: React.FC<TwoFactorChallengeModalProps> = (
       }
 
       // Verify standard 6-digit TOTP code
-      if (code.replace(/\D/g, '').length !== 6) {
+      const cleanDigits = targetCode.replace(/\D/g, '');
+      if (cleanDigits.length !== 6) {
         setError('Please enter a 6-digit Authenticator code.');
         setIsVerifying(false);
         return;
@@ -67,7 +70,7 @@ export const TwoFactorChallengeModal: React.FC<TwoFactorChallengeModalProps> = (
         return;
       }
 
-      const isValid = await verifyTotpToken(code, secret);
+      const isValid = await verifyTotpToken(cleanDigits, secret);
       if (!isValid) {
         setError('Invalid 6-digit code. Please check your Authenticator app and make sure your device clock is accurate.');
         setIsVerifying(false);
@@ -103,22 +106,43 @@ export const TwoFactorChallengeModal: React.FC<TwoFactorChallengeModalProps> = (
           </p>
         </div>
 
-        <form onSubmit={handleVerify} className="space-y-4">
+        <form onSubmit={(e) => handleVerify(e)} className="space-y-4">
           <div className="flex justify-center">
-            <input
-              type="text"
-              autoFocus
-              maxLength={useRecovery ? 12 : 6}
-              placeholder={useRecovery ? 'ABCD-1234' : '000000'}
-              value={code}
-              onChange={(e) => {
-                setCode(e.target.value);
-                setError(null);
-              }}
-              className={`w-full py-3 text-center rounded-2xl bg-[#111b21] border-2 border-[#00a884] text-white focus:outline-none font-mono ${
-                useRecovery ? 'text-lg tracking-widest' : 'text-2xl tracking-[0.4em] font-bold'
-              }`}
-            />
+            {useRecovery ? (
+              <input
+                type="text"
+                autoFocus
+                maxLength={12}
+                placeholder="ABCD-1234"
+                value={code}
+                onChange={(e) => {
+                  setCode(e.target.value.toUpperCase());
+                  setError(null);
+                }}
+                className="w-full py-3 text-center rounded-2xl bg-[#111b21] border-2 border-[#00a884] text-white focus:outline-none font-mono text-lg tracking-widest uppercase"
+              />
+            ) : (
+              <div className="w-full">
+                <OtpBoxInput
+                  length={6}
+                  value={code}
+                  onChange={(val) => {
+                    setCode(val);
+                    setError(null);
+                  }}
+                  onComplete={(c) => {
+                    handleVerify(undefined, c);
+                  }}
+                  disabled={isVerifying}
+                  isError={!!error}
+                  autoFocus={true}
+                />
+                <p className="text-[11px] text-[#8696a0] text-center mt-2 flex items-center justify-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-[#00a884]" />
+                  <span>Auto-verifies on 6th digit</span>
+                </p>
+              </div>
+            )}
           </div>
 
           {error && (

@@ -27,7 +27,8 @@ import { TermsConditionsModal } from '../pages/TermsConditionsModal';
 import { OperationalStatusModal } from '../pages/OperationalStatusModal';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, db } from '../../firebase/config';
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { OtpBoxInput } from '../common/OtpBoxInput';
 import { RealtimeCoordinator } from '../../utils/realtimeCoordinator';
 import { supabase } from '../../supabase/config';
 import { verifyTotpToken, verifyRecoveryCode } from '../../utils/totp';
@@ -61,6 +62,23 @@ export const LoginModal: React.FC = () => {
   const [totpCode, setTotpCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [useRecoveryMode, setUseRecoveryMode] = useState(false);
+  const [recoveryCodeInput, setRecoveryCodeInput] = useState('');
+
+  const getPasswordStrength = (pwd: string) => {
+    if (!pwd) return { score: 0, label: '', barClass: 'bg-gray-400', textClass: 'text-gray-400' };
+    let score = 0;
+    if (pwd.length >= 6) score += 1;
+    if (pwd.length >= 8) score += 1;
+    if (/[A-Z]/.test(pwd) && /[a-z]/.test(pwd)) score += 1;
+    if (/\d/.test(pwd) || /[^A-Za-z0-9]/.test(pwd)) score += 1;
+
+    if (score <= 1) return { score: 1, label: 'Weak', barClass: 'bg-red-500', textClass: 'text-red-400' };
+    if (score <= 3) return { score: 2, label: 'Good', barClass: 'bg-amber-500', textClass: 'text-amber-400' };
+    return { score: 3, label: 'Strong', barClass: 'bg-emerald-500', textClass: 'text-emerald-400' };
+  };
   const [forgotSuccessNotice, setForgotSuccessNotice] = useState<string | null>(null);
   const [forgotError, setForgotError] = useState<string | null>(null);
   const [isForgotLoading, setIsForgotLoading] = useState(false);
@@ -107,26 +125,56 @@ export const LoginModal: React.FC = () => {
   // Step 1: Find Account
   const handleFindForgotAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!forgotInput.trim()) return;
+    const queryTerm = forgotInput.trim();
+    if (!queryTerm) return;
     try {
       setIsForgotLoading(true);
       setForgotError(null);
 
       // 1. Try Supabase lookup
-      let user = await RealtimeCoordinator.findUserByEmailOrPhone(forgotInput.trim());
+      let user = await RealtimeCoordinator.findUserByEmailOrPhone(queryTerm);
 
-      // 2. Fallback to Firestore lookup
-      if (!user) {
-        const clean = forgotInput.trim().toLowerCase();
+      // 2. Merge from Firestore to guarantee all 2FA / Authenticator credentials
+      if (user?.uid) {
+        try {
+          const fsDocSnap = await getDoc(doc(db, 'users', user.uid));
+          if (fsDocSnap.exists()) {
+            const fsData = fsDocSnap.data();
+            user = {
+              ...user,
+              ...fsData,
+              authenticator_secret: user.authenticator_secret || fsData.authenticatorSecret || fsData.preferences?.authenticatorSecret,
+              recovery_codes: user.recovery_codes || fsData.recoveryCodes || fsData.preferences?.recoveryCodes || [],
+              authenticator_enabled: !!(user.authenticator_enabled || fsData.authenticatorEnabled || fsData.preferences?.authenticatorEnabled || user.authenticator_secret || fsData.authenticatorSecret),
+            };
+          }
+        } catch (e) {
+          console.warn('[LoginModal] Firestore merge warning:', e);
+        }
+      } else {
+        // Fallback to direct Firestore lookup
+        const clean = queryTerm.toLowerCase();
         const emailSnap = await getDocs(query(collection(db, 'users'), where('email', '==', clean))).catch(() => null);
         if (emailSnap && !emailSnap.empty) {
-          user = emailSnap.docs[0].data();
-          user.uid = emailSnap.docs[0].id;
+          const fsData = emailSnap.docs[0].data();
+          user = {
+            uid: emailSnap.docs[0].id,
+            ...fsData,
+            authenticator_secret: fsData.authenticatorSecret || fsData.preferences?.authenticatorSecret,
+            recovery_codes: fsData.recoveryCodes || fsData.preferences?.recoveryCodes || [],
+            authenticator_enabled: !!(fsData.authenticatorEnabled || fsData.preferences?.authenticatorEnabled || fsData.authenticatorSecret),
+          };
         } else {
-          const phoneSnap = await getDocs(query(collection(db, 'users'), where('phoneNumber', '==', forgotInput.trim()))).catch(() => null);
+          const phoneSnap = await getDocs(query(collection(db, 'users'), where('phoneNumber', '==', queryTerm))).catch(() => null);
           if (phoneSnap && !phoneSnap.empty) {
-            user = phoneSnap.docs[0].data();
-            user.uid = phoneSnap.docs[0].id;
+            const fsData = phoneSnap.docs[0].data();
+            user = {
+              uid: phoneSnap.docs[0].id,
+              ...fsData,
+              authenticator_secret: fsData.authenticatorSecret || fsData.preferences?.authenticatorSecret,
+              recovery_codes: fsData.recoveryCodes || fsData.preferences?.recoveryCodes || [],
+              authenticator_enabled: !!(fsData.authenticatorEnabled || fsData.preferences?.authenticatorEnabled || fsData.authenticatorSecret),
+            };
           }
         }
       }
@@ -137,12 +185,22 @@ export const LoginModal: React.FC = () => {
       }
 
       setForgotUser(user);
+      setTotpCode('');
+      setRecoveryCodeInput('');
+      setUseRecoveryMode(false);
 
-      const hasAuth = !!(user.authenticator_enabled || user.authenticatorEnabled || user.preferences?.authenticatorEnabled);
+      const hasAuth = !!(
+        user.authenticator_enabled || 
+        user.authenticatorEnabled || 
+        user.preferences?.authenticatorEnabled || 
+        user.authenticator_secret || 
+        user.authenticatorSecret || 
+        user.preferences?.authenticatorSecret
+      );
+
       if (hasAuth) {
         setForgotStep('verify_totp');
       } else {
-        // Password reset strictly requires Authenticator / 2FA added from Settings
         setForgotError('Password reset requires Two-Factor Authentication (Authenticator App / 2FA) previously enabled in Settings. If you have not configured 2FA yet, please log in with your credentials or contact official support.');
       }
     } catch (err: any) {
@@ -153,9 +211,17 @@ export const LoginModal: React.FC = () => {
   };
 
   // Step 2: Verify TOTP Code
-  const handleVerifyForgotTotp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!totpCode.trim()) return;
+  const handleVerifyForgotTotp = async (e?: React.FormEvent, codeOverride?: string) => {
+    if (e) e.preventDefault();
+    const rawCode = (codeOverride !== undefined ? codeOverride : (useRecoveryMode ? recoveryCodeInput : totpCode)).trim();
+    if (!rawCode) return;
+
+    if (!forgotUser) {
+      setForgotError('Account session lost. Please try again.');
+      setForgotStep('find');
+      return;
+    }
+
     try {
       setIsForgotLoading(true);
       setForgotError(null);
@@ -163,27 +229,36 @@ export const LoginModal: React.FC = () => {
       const secret = forgotUser.authenticator_secret || forgotUser.authenticatorSecret || forgotUser.preferences?.authenticatorSecret;
       const recoveryCodes = forgotUser.recovery_codes || forgotUser.recoveryCodes || forgotUser.preferences?.recoveryCodes || [];
 
-      // Try 6-digit TOTP
       let isValid = false;
-      if (secret && totpCode.replace(/\D/g, '').length === 6) {
-        isValid = await verifyTotpToken(totpCode, secret);
+
+      // Try 6-digit TOTP
+      const cleanDigits = rawCode.replace(/\D/g, '');
+      if (cleanDigits.length === 6 && secret) {
+        isValid = await verifyTotpToken(cleanDigits, secret);
       }
 
       // Try backup recovery code
       if (!isValid && recoveryCodes.length > 0) {
-        const recResult = verifyRecoveryCode(totpCode, recoveryCodes);
+        const recResult = verifyRecoveryCode(rawCode, recoveryCodes);
         if (recResult.valid) {
           isValid = true;
-          // Update remaining recovery codes in both databases
+          // Update remaining recovery codes in both Supabase and Firestore
           if (forgotUser.uid) {
             await RealtimeCoordinator.updateUserAuthenticator(forgotUser.uid, true, secret, recResult.remainingCodes).catch(() => {});
-            await updateDoc(doc(db, 'users', forgotUser.uid), { recoveryCodes: recResult.remainingCodes }).catch(() => {});
+            await updateDoc(doc(db, 'users', forgotUser.uid), { 
+              recoveryCodes: recResult.remainingCodes,
+              'preferences.recoveryCodes': recResult.remainingCodes
+            }).catch(() => {});
           }
         }
       }
 
       if (!isValid) {
-        setForgotError('Invalid code. Please enter the current 6-digit Authenticator code or a valid backup recovery code.');
+        if (cleanDigits.length === 6) {
+          setForgotError('Invalid 6-digit Authenticator code. Ensure your device clock is accurate and check Google/Microsoft Authenticator.');
+        } else {
+          setForgotError('Invalid code. Please enter the current 6-digit Authenticator code or a valid 8-character backup recovery code.');
+        }
         return;
       }
 
@@ -212,8 +287,6 @@ export const LoginModal: React.FC = () => {
       setIsForgotLoading(true);
       setForgotError(null);
 
-      // Identity confirmed via Authenticator TOTP or recovery codes!
-      // Update passcode and security timestamp in both Firestore and Supabase
       if (forgotUser.uid) {
         await updateDoc(doc(db, 'users', forgotUser.uid), {
           'preferences.appLockPin': newPassword,
@@ -229,7 +302,7 @@ export const LoginModal: React.FC = () => {
 
       if (forgotUser.email && !forgotUser.email.endsWith('@limochat.internal')) {
         await sendPasswordResetEmail(auth, forgotUser.email).catch(() => {});
-        setForgotSuccessNotice(`Identity verified via Authenticator! An official password update email has been sent to ${forgotUser.email}. You can now sign in.`);
+        setForgotSuccessNotice(`Identity verified via Authenticator! Password updated and official confirmation sent to ${forgotUser.email}. You can now sign in.`);
       } else {
         setForgotSuccessNotice('Identity verified via Authenticator! Your password has been successfully updated. You can now sign in.');
       }
@@ -548,28 +621,60 @@ export const LoginModal: React.FC = () => {
 
             {/* STEP 2: Verify Authenticator Code */}
             {forgotStep === 'verify_totp' && (
-              <form onSubmit={handleVerifyForgotTotp} className="space-y-3">
-                <div className="p-2.5 rounded-xl bg-[#00a884]/10 border border-[#00a884]/20 flex items-center gap-2 text-xs text-[#00a884]">
+              <form onSubmit={(e) => handleVerifyForgotTotp(e)} className="space-y-4">
+                <div className="p-3 rounded-2xl bg-[#00a884]/10 border border-[#00a884]/25 flex items-center gap-2.5 text-xs text-[#00a884]">
                   <ShieldCheck className="w-4 h-4 flex-shrink-0" />
-                  <span>Authenticator Connected Account</span>
+                  <span className="font-semibold">Authenticator Connected & Protected</span>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-[#8696a0] leading-relaxed">
-                  Enter the 6-digit code from your <strong className="text-white">Google Authenticator</strong> or <strong className="text-white">Microsoft Authenticator</strong> app (or an unused backup recovery code):
+
+                <p className="text-xs text-gray-500 dark:text-[#8696a0] leading-relaxed text-center">
+                  {useRecoveryMode
+                    ? 'Enter your 8-character backup recovery code:'
+                    : 'Enter the 6-digit code from your Authenticator app:'}
                 </p>
-                <div className="flex justify-center my-2">
-                  <input
-                    type="text"
-                    autoFocus
-                    placeholder="000000"
-                    value={totpCode}
-                    onChange={(e) => setTotpCode(e.target.value)}
-                    required
-                    className="w-full text-center text-xl font-mono font-bold tracking-widest py-3 bg-gray-50 dark:bg-[#111b21] border-2 border-[#00a884] rounded-xl text-gray-900 dark:text-white focus:outline-none"
-                  />
-                </div>
+
+                {useRecoveryMode ? (
+                  <div className="relative flex items-center">
+                    <KeyRound className="w-4 h-4 absolute left-3.5 text-gray-400 dark:text-[#8696a0] pointer-events-none" />
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="ABCD-1234"
+                      value={recoveryCodeInput}
+                      onChange={(e) => {
+                        setRecoveryCodeInput(e.target.value.toUpperCase());
+                        setForgotError(null);
+                      }}
+                      required
+                      className="w-full text-center text-lg font-mono font-bold tracking-widest py-3 bg-gray-50 dark:bg-[#111b21] border-2 border-[#00a884] rounded-2xl text-gray-900 dark:text-white focus:outline-none uppercase"
+                    />
+                  </div>
+                ) : (
+                  <div className="py-1">
+                    <OtpBoxInput
+                      length={6}
+                      value={totpCode}
+                      onChange={(val) => {
+                        setTotpCode(val);
+                        setForgotError(null);
+                      }}
+                      onComplete={(code) => {
+                        handleVerifyForgotTotp(undefined, code);
+                      }}
+                      disabled={isForgotLoading}
+                      isError={!!forgotError}
+                      autoFocus={true}
+                    />
+                    <p className="text-[11px] text-gray-400 dark:text-[#8696a0] text-center mt-2 flex items-center justify-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 text-[#00a884]" />
+                      <span>Auto-verifies instantly on 6th digit</span>
+                    </p>
+                  </div>
+                )}
+
                 <button
                   type="submit"
-                  disabled={isForgotLoading || !totpCode.trim()}
+                  disabled={isForgotLoading || (useRecoveryMode ? !recoveryCodeInput.trim() : totpCode.length !== 6)}
                   className="w-full py-3 px-4 rounded-xl bg-[#00a884] hover:bg-[#02906f] active:scale-95 disabled:opacity-50 text-white font-semibold text-xs transition cursor-pointer shadow-md flex items-center justify-center gap-2"
                 >
                   {isForgotLoading ? (
@@ -577,45 +682,135 @@ export const LoginModal: React.FC = () => {
                   ) : (
                     <>
                       <KeyRound className="w-4 h-4" />
-                      <span>Verify Authenticator</span>
+                      <span>Verify & Proceed</span>
                     </>
                   )}
                 </button>
+
+                <div className="flex items-center justify-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUseRecoveryMode(!useRecoveryMode);
+                      setForgotError(null);
+                    }}
+                    className="text-xs text-[#00a884] hover:underline cursor-pointer font-medium"
+                  >
+                    {useRecoveryMode ? 'Use 6-digit Authenticator code instead' : 'Lost authenticator? Use backup recovery code'}
+                  </button>
+                </div>
               </form>
             )}
 
             {/* STEP 3: Set New Password */}
             {forgotStep === 'new_password' && (
-              <form onSubmit={handleSaveNewPassword} className="space-y-3">
-                <p className="text-xs text-gray-500 dark:text-[#8696a0] leading-relaxed">
-                  Identity confirmed! Choose a new password for your account:
-                </p>
-                <div className="relative flex items-center">
-                  <KeyRound className="w-4 h-4 absolute left-3.5 text-gray-400 dark:text-[#8696a0] pointer-events-none" />
-                  <input
-                    type="password"
-                    placeholder="New password (min 6 characters)"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    required
-                    className="login-form-input w-full rounded-xl pl-10 pr-3.5 py-3 text-sm focus:outline-none transition-all bg-gray-50 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] text-gray-900 dark:text-white focus:border-[#00a884]"
-                  />
+              <form onSubmit={handleSaveNewPassword} className="space-y-3.5">
+                <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center gap-2 text-xs text-emerald-400">
+                  <Check className="w-4 h-4 flex-shrink-0" />
+                  <span>Identity Verified! Create your new secure password:</span>
                 </div>
-                <div className="relative flex items-center">
-                  <KeyRound className="w-4 h-4 absolute left-3.5 text-gray-400 dark:text-[#8696a0] pointer-events-none" />
-                  <input
-                    type="password"
-                    placeholder="Confirm new password"
-                    value={confirmNewPassword}
-                    onChange={(e) => setConfirmNewPassword(e.target.value)}
-                    required
-                    className="login-form-input w-full rounded-xl pl-10 pr-3.5 py-3 text-sm focus:outline-none transition-all bg-gray-50 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] text-gray-900 dark:text-white focus:border-[#00a884]"
-                  />
+
+                {/* New Password Input */}
+                <div className="space-y-1">
+                  <div className="relative flex items-center">
+                    <KeyRound className="w-4 h-4 absolute left-3.5 text-gray-400 dark:text-[#8696a0] pointer-events-none" />
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      placeholder="New password (min 6 characters)"
+                      value={newPassword}
+                      onChange={(e) => {
+                        setNewPassword(e.target.value);
+                        setForgotError(null);
+                      }}
+                      required
+                      autoFocus
+                      className="login-form-input w-full rounded-xl pl-10 pr-10 py-3 text-sm focus:outline-none transition-all bg-gray-50 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] text-gray-900 dark:text-white focus:border-[#00a884]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      tabIndex={-1}
+                      aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                      className="absolute right-3.5 p-1 text-gray-400 hover:text-gray-600 dark:text-[#8696a0] dark:hover:text-white transition cursor-pointer"
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  {/* Strength Indicator */}
+                  {newPassword && (
+                    <div className="px-1 pt-1 flex items-center justify-between text-[11px]">
+                      <div className="flex items-center gap-1.5 flex-1 mr-3">
+                        <div className="h-1.5 flex-1 bg-gray-200 dark:bg-[#2e3b44] rounded-full overflow-hidden flex gap-1">
+                          <div
+                            className={`h-full transition-all duration-300 rounded-full ${
+                              getPasswordStrength(newPassword).score >= 1 ? 'w-1/3 ' + getPasswordStrength(newPassword).barClass : 'w-0'
+                            }`}
+                          />
+                          <div
+                            className={`h-full transition-all duration-300 rounded-full ${
+                              getPasswordStrength(newPassword).score >= 2 ? 'w-1/3 ' + getPasswordStrength(newPassword).barClass : 'w-0'
+                            }`}
+                          />
+                          <div
+                            className={`h-full transition-all duration-300 rounded-full ${
+                              getPasswordStrength(newPassword).score >= 3 ? 'w-1/3 ' + getPasswordStrength(newPassword).barClass : 'w-0'
+                            }`}
+                          />
+                        </div>
+                      </div>
+                      <span className={`font-semibold ${getPasswordStrength(newPassword).textClass}`}>
+                        {getPasswordStrength(newPassword).label}
+                      </span>
+                    </div>
+                  )}
                 </div>
+
+                {/* Confirm Password Input */}
+                <div className="space-y-1">
+                  <div className="relative flex items-center">
+                    <KeyRound className="w-4 h-4 absolute left-3.5 text-gray-400 dark:text-[#8696a0] pointer-events-none" />
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      placeholder="Confirm new password"
+                      value={confirmNewPassword}
+                      onChange={(e) => {
+                        setConfirmNewPassword(e.target.value);
+                        setForgotError(null);
+                      }}
+                      required
+                      className="login-form-input w-full rounded-xl pl-10 pr-10 py-3 text-sm focus:outline-none transition-all bg-gray-50 dark:bg-[#111b21] border border-gray-200 dark:border-[#2e3b44] text-gray-900 dark:text-white focus:border-[#00a884]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      tabIndex={-1}
+                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                      className="absolute right-3.5 p-1 text-gray-400 hover:text-gray-600 dark:text-[#8696a0] dark:hover:text-white transition cursor-pointer"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  {confirmNewPassword && (
+                    <div className="px-1 flex items-center gap-1.5 text-[11px]">
+                      {newPassword === confirmNewPassword ? (
+                        <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+                          <Check className="w-3.5 h-3.5" /> Passwords match
+                        </span>
+                      ) : (
+                        <span className="text-red-400 flex items-center gap-1 font-semibold">
+                          <AlertCircle className="w-3.5 h-3.5" /> Passwords do not match
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <button
                   type="submit"
-                  disabled={isForgotLoading || !newPassword || !confirmNewPassword}
-                  className="w-full py-3 px-4 rounded-xl bg-[#00a884] hover:bg-[#02906f] active:scale-95 disabled:opacity-50 text-white font-semibold text-xs transition cursor-pointer shadow-md flex items-center justify-center gap-2"
+                  disabled={isForgotLoading || !newPassword || !confirmNewPassword || newPassword !== confirmNewPassword || newPassword.length < 6}
+                  className="w-full py-3 px-4 rounded-xl bg-[#00a884] hover:bg-[#02906f] active:scale-95 disabled:opacity-50 text-white font-semibold text-xs transition cursor-pointer shadow-md flex items-center justify-center gap-2 mt-2"
                 >
                   {isForgotLoading ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

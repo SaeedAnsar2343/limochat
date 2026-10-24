@@ -111,7 +111,7 @@ async function computeTotpToken(keyBytes: Uint8Array, timeStep: number): Promise
 export async function verifyTotpToken(
   token: string,
   secret: string,
-  windowTolerance = 1
+  windowTolerance = 2
 ): Promise<boolean> {
   const cleanToken = token.trim().replace(/\D/g, '');
   if (cleanToken.length !== 6) return false;
