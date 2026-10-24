@@ -17,7 +17,8 @@ import {
   Camera,
   Reply,
   Lock,
-  AtSign
+  AtSign,
+  ArrowRight
 } from 'lucide-react';
 import { QuotedMessage, MessageType, Message, UserProfile } from '../../types';
 import { VoiceRecorder } from './VoiceRecorder';
@@ -49,7 +50,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const [inputText, setInputText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
-  const [showCommandMenu, setShowCommandMenu] = useState(false);
+
 
   const isSupportChat = !!(
     activeChat?.id.startsWith('support_') ||
@@ -67,8 +68,17 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     { id: '/clear', name: 'Clear History', desc: 'Clear messages in this support conversation', icon: Trash2 },
   ];
 
+  const isTypingCommand = isSupportChat && inputText.startsWith('/');
+  const commandQuery = isTypingCommand ? inputText.slice(1).toLowerCase().trim() : '';
+  const filteredCommands = isSupportChat && isTypingCommand
+    ? SUPPORT_COMMANDS.filter((cmd) =>
+        cmd.id.slice(1).toLowerCase().includes(commandQuery) ||
+        cmd.name.toLowerCase().includes(commandQuery) ||
+        cmd.desc.toLowerCase().includes(commandQuery)
+      )
+    : [];
+
   const handleExecuteCommand = async (cmdId: string) => {
-    setShowCommandMenu(false);
     setInputText('');
     await onSendMessage(cmdId, 'text');
   };
@@ -382,6 +392,48 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         </div>
       )}
 
+            {/* Support Slash Commands Floating Palette - ONLY when typed '/' */}
+      {isTypingCommand && filteredCommands.length > 0 && (
+        <div className="absolute bottom-full left-2 right-2 sm:left-4 sm:max-w-md mb-2 bg-[#202c33]/95 backdrop-blur-2xl border border-[#00a884]/30 rounded-2xl shadow-2xl overflow-hidden z-40 max-h-64 flex flex-col animate-scale-in">
+          <div className="px-3.5 py-2 bg-[#111b21]/95 border-b border-[#2e3b44] flex items-center justify-between text-xs font-semibold">
+            <div className="flex items-center gap-1.5 text-[#00a884]">
+              <Terminal className="w-3.5 h-3.5" />
+              <span>Support Commands</span>
+            </div>
+            <span className="text-[10px] text-[#8696a0]">Tap command to send</span>
+          </div>
+          <div className="overflow-y-auto p-1.5 space-y-1">
+            {filteredCommands.map((cmd) => {
+              const IconComp = cmd.icon;
+              return (
+                <button
+                  key={cmd.id}
+                  type="button"
+                  onClick={() => handleExecuteCommand(cmd.id)}
+                  className="w-full flex items-center justify-between gap-3 p-2.5 rounded-xl hover:bg-[#111b21] active:bg-[#182229] transition cursor-pointer text-left group"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-[#00a884]/15 border border-[#00a884]/30 flex items-center justify-center text-[#00a884] group-hover:scale-105 group-hover:bg-[#00a884]/25 transition flex-shrink-0">
+                      <IconComp className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-white group-hover:text-[#00a884] transition flex items-center gap-2">
+                        <span>{cmd.id}</span>
+                        <span className="text-[10px] text-[#8696a0] font-normal">({cmd.name})</span>
+                      </div>
+                      <div className="text-[10px] text-[#8696a0] truncate">
+                        {cmd.desc}
+                      </div>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-[#8696a0] group-hover:text-[#00a884] group-hover:translate-x-0.5 transition flex-shrink-0" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Main Send Bar Dock with Glassmorphic Capsule */}
       <div className="flex items-center gap-1.5 sm:gap-2">
         {/* Emoji Button */}
@@ -461,30 +513,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           )}
         </div>
 
-        {/* Support Commands Button [/] */}
-        {isSupportChat && (
-          <button
-            type="button"
-            onClick={() => {
-              const next = !showCommandMenu;
-              if (next) window.dispatchEvent(new Event('limochat_close_all_menus'));
-              setShowCommandMenu(next);
-              setShowAttachMenu(false);
-              setShowEmojiPicker(false);
-            }}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-90 touch-manipulation flex-shrink-0 ${
-              showCommandMenu
-                ? 'text-[#00a884] bg-[#00a884]/20 border border-[#00a884]/50 shadow-[0_0_12px_rgba(0,168,132,0.35)]'
-                : 'text-gray-500 hover:text-gray-900 dark:text-[#8696a0] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/[0.08]'
-            }`}
-            title="Open Telegram-style Support Commands (/)"
-            aria-label="Commands Menu"
-          >
-            <div className="w-6 h-6 flex items-center justify-center font-mono font-bold text-sm border-2 border-current rounded-lg leading-none">
-              /
-            </div>
-          </button>
-        )}
+        
 
         {/* Hidden inputs for attachments */}
         <input

@@ -886,6 +886,43 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
     }
+
+    // 3. Automated Support Bot Command Processor
+    const isSupportConversation = !!(
+      activeChat.id.startsWith('support_') ||
+      activeChat.participants.includes('limochat_official_support') ||
+      activeChat.name === 'LimoChat Support'
+    );
+
+    if (isSupportConversation && finalText.trim().startsWith('/')) {
+      const cmd = finalText.trim().toLowerCase();
+      setTimeout(async () => {
+        let reply = '';
+        if (cmd === '/status') {
+          const has2fa = !!(currentUser.authenticatorEnabled || currentUser.preferences?.authenticatorEnabled);
+          reply = `🛡️ **LimoChat VIP Account Status**\n• **Line**: ${currentUser.phoneNumber || '+991 Active Line'}\n• **2FA Authenticator**: ${has2fa ? '✅ Active & Protected' : '⚠️ Not Enabled (Configure in Settings)'}\n• **Security Rating**: A+ End-to-End Cryptographic Tunnel\n• **Cloud Core**: Dual-Engine (Supabase + Firebase Realtime)\n• **Support Line**: Direct Escalation Ready`;
+        } else if (cmd === '/call') {
+          reply = `📞 **Support Call Request Submitted**\nYour request for an authorized live voice/video support session has been logged in the active administration queue.\n\nAn authorized administrator will initiate or accept your incoming call directly in this chat shortly.`;
+        } else if (cmd === '/version') {
+          reply = `🚀 **LimoChat System Build**\n• **Installed Version**: v1.0.8 (Build 18)\n• **Realtime Engine**: WebRTC E2E + Supabase Dual-Core\n• **Platform Status**: All systems operational with zero reported incidents.\n• **Updates**: Up-to-date with latest security patches.`;
+        } else if (cmd === '/help') {
+          reply = `📚 **LimoChat Quick Guides & FAQ**\n• **HD Calls**: Tap the Voice or Video call icons in the header for encrypted calling.\n• **Privacy Controls**: Adjust Last Seen, Profile Photo, and Disappearing Messages in Settings > Privacy.\n• **Permanent Line**: Your +991 virtual number is globally reserved and persistent across all devices.\n• **Authenticator 2FA**: Enable standard Google/Microsoft Authenticator in Settings.\n• **Support Call**: Type \`/call\` to request an authorized live voice or video session.`;
+        } else if (cmd === '/security') {
+          const has2fa = !!(currentUser.authenticatorEnabled || currentUser.preferences?.authenticatorEnabled);
+          const hasLock = !!(currentUser.preferences?.appLockEnabled);
+          reply = `🔐 **Security & Protection Report**\n• **Two-Step Verification**: ${has2fa ? '✅ Enabled (Google/Microsoft Authenticator)' : '⚠️ Deactivated'}\n• **App Passcode Screen Lock**: ${hasLock ? '✅ Enabled' : '⚪ Disabled'}\n• **End-to-End Encryption**: ✅ Active on all text, attachments, and WebRTC calls.`;
+        } else if (cmd === '/privacy') {
+          const privacy = currentUser.privacy;
+          reply = `👁️ **Privacy Settings Summary**\n• **Last Seen & Online**: ${privacy?.lastSeen || 'everyone'}\n• **Profile Photo**: ${privacy?.profilePhoto || 'everyone'}\n• **About Info**: ${privacy?.about || 'everyone'}\n• **Read Receipts**: ${privacy?.readReceipts !== false ? '✅ Enabled (Blue ticks)' : '⚪ Disabled'}\n• **Disappearing Messages**: ${currentUser.preferences?.disappearingDuration ? `${currentUser.preferences.disappearingDuration}h` : 'Off'}`;
+        } else if (cmd === '/clear') {
+          reply = `🧹 **Support History Cleared**\nYour support ticket history has been refreshed. How else may we assist you today?`;
+        } else {
+          reply = `ℹ️ **Available Support Commands**:\n• \`/status\` — Account status & virtual line\n• \`/call\` — Request live voice/video support session\n• \`/version\` — Installed build & update details\n• \`/help\` — Quick guides & frequently asked questions\n• \`/security\` — 2FA & app passcode overview\n• \`/privacy\` — Privacy and read receipts overview\n• \`/clear\` — Refresh ticket conversation`;
+        }
+
+        await sendSupportReply(activeChat.id, reply);
+      }, 350);
+    }
   };
 
   // Update Group Permissions
