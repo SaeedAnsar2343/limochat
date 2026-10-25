@@ -557,8 +557,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
             
             <p className="text-xs text-[#8696a0] mb-5 leading-relaxed">
               {allSelectedAreMine
-                ? "You can delete these messages for everyone in the chat, or just remove them from your device."
-                : "You have selected messages from other participants. You can remove them from your device."}
+                ? "You can permanently delete these messages from the database for everyone, or remove them from your view."
+                : "You have selected messages from other participants. You can remove them from your view."}
             </p>
 
             <div className="flex flex-col gap-2">
@@ -610,7 +610,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onBack }) => {
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-white">Clear this chat?</h3>
-                <p className="text-[11px] text-[#8696a0]">This will clear messages from your device.</p>
+                <p className="text-[11px] text-[#8696a0]">This will permanently clear and delete all messages from the database and your device.</p>
               </div>
             </div>
 

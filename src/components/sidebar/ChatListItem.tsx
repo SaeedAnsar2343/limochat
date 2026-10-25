@@ -159,7 +159,7 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
     setConfirmConfig({
       isOpen: true,
       title: `Clear "${displayName}"?`,
-      description: "All messages in this chat will be cleared from your device.",
+      description: "All messages in this chat will be permanently cleared from the database and your device.",
       confirmText: "Clear History",
       cancelText: "Cancel",
       variant: "warning",

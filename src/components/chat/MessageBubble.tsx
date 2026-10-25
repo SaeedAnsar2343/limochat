@@ -164,24 +164,132 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   };
 
   const renderMessageContent = (content: string) => {
-    const parts = content.split(/(@[a-zA-Z0-9_\s]{1,30}?(?=\s|$|[.,!?]))|(::limo_[a-z_]+::)/g);
-    return parts.filter(Boolean).map((part, idx) => {
-      if (part.startsWith('@')) {
-        return (
-          <span key={idx} className="text-[#53bdeb] font-semibold bg-[#53bdeb]/10 px-1 py-0.5 rounded">
-            {part}
-          </span>
-        );
-      }
-      if (part.startsWith('::limo_') && part.endsWith('::')) {
-        const id = part.slice(2, -2);
-        return (
-          <span key={idx} className="inline-flex align-middle mx-1">
-            <LimoCraftEmoji id={id} size={22} animated={true} />
-          </span>
-        );
-      }
-      return part;
+    if (!content) return null;
+
+    const lines = content.split('\n');
+
+    return lines.map((line, lineIdx) => {
+      const tokenRegex = /(\*\*[^*\n]+\*\*|(?<!\*)\*(?!\*)([^*\n]+)(?<!\*)\*(?!\*)|\`[^\`\n]+\`|(?<![a-zA-Z0-9])_[^_\n]+_(?![a-zA-Z0-9])|~[^~\n]+~|https?:\/\/[^\s]+|(?<!\w)\/(?:status|call|version|help|security|privacy|clear)\b|@[a-zA-Z0-9_\s]{1,30}?(?=\s|$|[.,!?])|::limo_[a-z_]+::)/g;
+
+      const parts = line.split(tokenRegex);
+
+      const renderedParts = parts.filter(Boolean).map((part, partIdx) => {
+        // Double asterisk bold
+        if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+          return (
+            <strong key={partIdx} className="font-semibold text-white/95">
+              {part.slice(2, -2)}
+            </strong>
+          );
+        }
+        // Single asterisk bold
+        if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+          return (
+            <strong key={partIdx} className="font-semibold text-white/95">
+              {part.slice(1, -1)}
+            </strong>
+          );
+        }
+        // Inline code / slash command in backticks
+        if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+          const val = part.slice(1, -1);
+          if (val.startsWith('/')) {
+            return (
+              <button
+                key={partIdx}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  sendMessage(val);
+                }}
+                className="inline-flex items-center font-mono font-medium text-xs bg-[#00a884]/20 hover:bg-[#00a884]/35 text-[#00a884] border border-[#00a884]/30 px-1.5 py-0.5 rounded cursor-pointer mx-0.5 transition select-none"
+                title={`Send ${val}`}
+              >
+                {val}
+              </button>
+            );
+          }
+          return (
+            <code key={partIdx} className="bg-[#111b21]/80 px-1.5 py-0.5 rounded text-[#00a884] font-mono text-xs border border-white/5">
+              {val}
+            </code>
+          );
+        }
+        // Italic
+        if (part.startsWith('_') && part.endsWith('_') && part.length > 2) {
+          return (
+            <em key={partIdx} className="italic text-white/90">
+              {part.slice(1, -1)}
+            </em>
+          );
+        }
+        // Strikethrough
+        if (part.startsWith('~') && part.endsWith('~') && part.length > 2) {
+          return (
+            <span key={partIdx} className="line-through opacity-75">
+              {part.slice(1, -1)}
+            </span>
+          );
+        }
+        // Clickable URL
+        if (part.startsWith('http://') || part.startsWith('https://')) {
+          return (
+            <a
+              key={partIdx}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#53bdeb] hover:underline underline-offset-2 break-all"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {part}
+            </a>
+          );
+        }
+        // Interactive slash command
+        if (part.startsWith('/') && ['/status', '/call', '/version', '/help', '/security', '/privacy', '/clear'].includes(part.toLowerCase())) {
+          return (
+            <button
+              key={partIdx}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                sendMessage(part);
+              }}
+              className="inline-flex items-center font-mono font-medium text-xs bg-[#00a884]/20 hover:bg-[#00a884]/35 text-[#00a884] border border-[#00a884]/30 px-1.5 py-0.5 rounded cursor-pointer mx-0.5 transition select-none"
+              title={`Send ${part}`}
+            >
+              {part}
+            </button>
+          );
+        }
+        // User mention
+        if (part.startsWith('@')) {
+          return (
+            <span key={partIdx} className="text-[#53bdeb] font-semibold bg-[#53bdeb]/10 px-1 py-0.5 rounded">
+              {part}
+            </span>
+          );
+        }
+        // LimoCraft Animated Sticker
+        if (part.startsWith('::limo_') && part.endsWith('::')) {
+          const id = part.slice(2, -2);
+          return (
+            <span key={partIdx} className="inline-flex align-middle mx-1">
+              <LimoCraftEmoji id={id} size={22} animated={true} />
+            </span>
+          );
+        }
+
+        return <span key={partIdx}>{part}</span>;
+      });
+
+      return (
+        <React.Fragment key={lineIdx}>
+          {renderedParts}
+          {lineIdx < lines.length - 1 && <br />}
+        </React.Fragment>
+      );
     });
   };
 

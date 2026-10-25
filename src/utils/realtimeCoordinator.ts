@@ -1,6 +1,6 @@
 import { rtdb, db } from '../firebase/config';
 import { ref, set, push, onChildAdded, onValue, remove, off } from 'firebase/database';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import { supabase } from '../supabase/config';
 import { Message, CallSession, Chat, UserProfile, StatusUpdate, CallHistoryItem } from '../types';
 
@@ -369,42 +369,132 @@ export class RealtimeCoordinator {
   }
 
   /**
-   * Clear all messages for a chat in Supabase
+   * Clear all messages for a chat across both databases (Supabase & Firestore + RTDB)
    */
   public static async clearChatHistory(chatId: string): Promise<void> {
+    // 1. Supabase Postgres: Delete all messages and clear last_message
     try {
       await supabase.from('messages').delete().eq('chat_id', chatId);
       await supabase.from('chats').update({ last_message: null, updated_at: Date.now() }).eq('id', chatId);
+    } catch (e) {
+      console.warn('Supabase clearChatHistory notice:', e);
+    }
+
+    // 2. Firebase RTDB: Clear messages and last_message
+    try {
+      await remove(ref(rtdb, `live_chats/${chatId}/messages`));
+      await remove(ref(rtdb, `live_chats/${chatId}/last_message`));
+    } catch (e) {
+      console.warn('RTDB clearChatHistory notice:', e);
+    }
+
+    // 3. Firestore: Delete all messages in the subcollection and update chat lastMessage
+    try {
+      const messagesRef = collection(db, 'chats', chatId, 'messages');
+      const snap = await getDocs(messagesRef);
+      const deletes = snap.docs.map(d => deleteDoc(d.ref));
+      await Promise.allSettled(deletes);
+      await updateDoc(doc(db, 'chats', chatId), {
+        lastMessage: null,
+        updatedAt: Date.now(),
+      }).catch(() => {});
+    } catch (e) {
+      console.warn('Firestore clearChatHistory notice:', e);
+    }
+
+    // 4. Broadcast live room event so all connected devices update immediately
+    try {
+      const channel = supabase.channel(`room:${chatId}`);
+      await channel.send({
+        type: 'broadcast',
+        event: 'chat_cleared',
+        payload: { chatId },
+      });
     } catch {}
   }
 
   /**
-   * Delete chat and its messages in Supabase
+   * Delete chat and its messages across both databases (Supabase & Firestore + RTDB)
    */
   public static async deleteChat(chatId: string): Promise<void> {
+    // 1. Supabase Postgres: Delete messages and chat row
     try {
       await supabase.from('messages').delete().eq('chat_id', chatId);
       await supabase.from('chats').delete().eq('id', chatId);
+    } catch (e) {
+      console.warn('Supabase deleteChat notice:', e);
+    }
+
+    // 2. Firebase RTDB: Delete chat subtree
+    try {
+      await remove(ref(rtdb, `live_chats/${chatId}`));
+    } catch (e) {
+      console.warn('RTDB deleteChat notice:', e);
+    }
+
+    // 3. Firestore: Delete subcollection messages and chat doc
+    try {
+      const messagesRef = collection(db, 'chats', chatId, 'messages');
+      const snap = await getDocs(messagesRef);
+      const deletes = snap.docs.map(d => deleteDoc(d.ref));
+      await Promise.allSettled(deletes);
+      await deleteDoc(doc(db, 'chats', chatId));
+    } catch (e) {
+      console.warn('Firestore deleteChat notice:', e);
+    }
+
+    // 4. Broadcast live room event
+    try {
+      const channel = supabase.channel(`room:${chatId}`);
+      await channel.send({
+        type: 'broadcast',
+        event: 'chat_deleted',
+        payload: { chatId },
+      });
     } catch {}
   }
 
   /**
-   * Delete a single message from Supabase
+   * Delete a single message across both databases (Supabase & Firestore + RTDB)
    */
   public static async deleteMessage(chatId: string, messageId: string): Promise<void> {
+    // 1. Supabase Postgres
     try {
       await supabase.from('messages').delete().eq('id', messageId);
+    } catch (e) {
+      console.warn('Supabase deleteMessage notice:', e);
+    }
+
+    // 2. Firebase RTDB
+    try {
+      await remove(ref(rtdb, `live_chats/${chatId}/messages/${messageId}`));
+    } catch (e) {
+      console.warn('RTDB deleteMessage notice:', e);
+    }
+
+    // 3. Firestore
+    try {
+      await deleteDoc(doc(db, 'chats', chatId, 'messages', messageId));
+    } catch (e) {
+      console.warn('Firestore deleteMessage notice:', e);
+    }
+
+    // 4. Broadcast live room event
+    try {
+      const channel = supabase.channel(`room:${chatId}`);
+      await channel.send({
+        type: 'broadcast',
+        event: 'message_deleted',
+        payload: { messageId },
+      });
     } catch {}
   }
 
   /**
-   * Purge all messages from a chat in Supabase
+   * Purge all messages from a chat across both databases
    */
   public static async purgeAllMessages(chatId: string): Promise<void> {
-    try {
-      await supabase.from('messages').delete().eq('chat_id', chatId);
-      await supabase.from('chats').update({ last_message: null, updated_at: Date.now() }).eq('id', chatId);
-    } catch {}
+    await this.clearChatHistory(chatId);
   }
 
   /**
@@ -500,6 +590,22 @@ export class RealtimeCoordinator {
             isDeletedForEveryone: true,
             text: '🚫 This message was deleted',
             mediaUrl: '',
+          });
+        }
+      })
+      .on('broadcast', { event: 'message_deleted' }, (payload: any) => {
+        if (onMessageUpdate && payload.payload?.messageId) {
+          onMessageUpdate({
+            id: payload.payload.messageId,
+            isDeletedPermanently: true,
+          });
+        }
+      })
+      .on('broadcast', { event: 'chat_cleared' }, () => {
+        if (onMessageUpdate) {
+          onMessageUpdate({
+            id: '__chat_cleared__',
+            isChatCleared: true,
           });
         }
       })
