@@ -105,7 +105,16 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
     }
   }
 
-  const isOnline = chat.type === 'direct' ? otherUser?.isOnline : undefined;
+  const isContact = Boolean(otherUser && (!currentUser.deletedContactUids?.includes(otherUser.uid)));
+  const isPhotoHidden = chat.type === 'direct' && Boolean(
+    otherUser?.privacy?.profilePhoto === 'nobody' ||
+    (otherUser?.privacy?.profilePhoto === 'contacts' && !isContact)
+  );
+  const isLastSeenHidden = chat.type === 'direct' && Boolean(
+    otherUser?.privacy?.lastSeen === 'nobody' ||
+    (otherUser?.privacy?.lastSeen === 'contacts' && !isContact)
+  );
+  const isOnline = chat.type === 'direct' ? (isLastSeenHidden ? undefined : otherUser?.isOnline) : undefined;
   const isMeSender = chat.lastMessage?.senderId === currentUser.uid;
 
   // Toggle archive
@@ -257,6 +266,7 @@ export const ChatListItem: React.FC<ChatListItemProps> = ({
           src={avatarUrl}
           name={displayName}
           size="md"
+          hidePhoto={isPhotoHidden}
           isOnline={isOnline}
         />
       </div>

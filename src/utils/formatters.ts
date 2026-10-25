@@ -79,9 +79,13 @@ export function formatMessageDate(timestamp: number | undefined): string {
 export function formatLastSeen(
   isOnline: boolean,
   lastSeenTimestamp: number | undefined,
-  privacySetting: 'everyone' | 'contacts' | 'nobody' | undefined = 'everyone'
+  privacySetting: 'everyone' | 'contacts' | 'nobody' | undefined = 'everyone',
+  isContact: boolean = true
 ): string {
   if (privacySetting === 'nobody') {
+    return '';
+  }
+  if (privacySetting === 'contacts' && !isContact) {
     return '';
   }
 

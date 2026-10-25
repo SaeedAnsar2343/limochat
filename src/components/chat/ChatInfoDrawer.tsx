@@ -510,6 +510,20 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
     });
   };
 
+  const isContact = Boolean(targetUser && (!currentUser.deletedContactUids?.includes(targetUser.uid)));
+  const isPhotoHidden = chat.type === 'direct' && Boolean(
+    targetUser?.privacy?.profilePhoto === 'nobody' ||
+    (targetUser?.privacy?.profilePhoto === 'contacts' && !isContact)
+  );
+  const isAboutHidden = chat.type === 'direct' && Boolean(
+    targetUser?.privacy?.about === 'nobody' ||
+    (targetUser?.privacy?.about === 'contacts' && !isContact)
+  );
+  const isLastSeenHidden = chat.type === 'direct' && Boolean(
+    targetUser?.privacy?.lastSeen === 'nobody' ||
+    (targetUser?.privacy?.lastSeen === 'contacts' && !isContact)
+  );
+
   const isSupportChat =
     chat.id.startsWith('support_') ||
     targetUser?.uid === 'limochat_official_support' ||
@@ -643,7 +657,7 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
           <div 
             className="relative group cursor-pointer"
             onClick={() => {
-              if (avatarUrl) {
+              if (avatarUrl && !isPhotoHidden) {
                 onViewMedia({
                   url: avatarUrl,
                   type: 'image',
@@ -658,7 +672,8 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
               src={avatarUrl}
               name={displayName}
               size="xl"
-              isOnline={chat.type === 'direct' ? targetUser?.isOnline : undefined}
+              hidePhoto={isPhotoHidden}
+              isOnline={chat.type === 'direct' ? (isLastSeenHidden ? undefined : targetUser?.isOnline) : undefined}
             />
             <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-md">
               <Maximize2 className="w-6 h-6 text-white" />
@@ -898,7 +913,11 @@ export const ChatInfoDrawer: React.FC<ChatInfoDrawerProps> = ({
       {chat.type === 'direct' && targetUser && (
         <div className="p-4 border-b border-[#222e35] bg-[#111b21] space-y-1">
           <div className="text-xs text-[#8696a0] font-semibold uppercase tracking-wider">About Bio</div>
-          <p className="text-sm text-white leading-relaxed">{targetUser.about || 'Hey there! I am using LimoChat.'}</p>
+          {isAboutHidden ? (
+            <p className="text-sm text-[#8696a0] italic">Bio is private</p>
+          ) : (
+            <p className="text-sm text-white leading-relaxed">{targetUser.about || 'Hey there! I am using LimoChat.'}</p>
+          )}
         </div>
       )}
 

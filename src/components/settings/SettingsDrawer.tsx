@@ -136,12 +136,19 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
 
   // Synchronize profile and 2FA states whenever user profile updates or modal opens
   useEffect(() => {
-    if (isOpen && user) {
-      setDisplayName(user.displayName || '');
-      setAbout(user.about || '');
-      setTwoStepEnabled(!!(user.authenticatorEnabled || user.preferences?.authenticatorEnabled));
+    if (isOpen && (user || currentUser)) {
+      const u = currentUser || user;
+      setDisplayName(u.displayName || '');
+      setAbout(u.about || '');
+      const isAuth = !!(
+        u.authenticatorEnabled ||
+        u.preferences?.authenticatorEnabled ||
+        u.authenticatorSecret ||
+        u.preferences?.authenticatorSecret
+      );
+      setTwoStepEnabled(isAuth);
     }
-  }, [isOpen, user]);
+  }, [isOpen, user, currentUser]);
 
 
   // Sub-Modals
@@ -186,7 +193,17 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
   const [desktopNotifs, setDesktopNotifs] = useState(
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission === 'granted' : false
   );
-  const [twoStepEnabled, setTwoStepEnabled] = useState(!!(user.authenticatorEnabled || user.preferences?.authenticatorEnabled));
+  const isAuthInit = !!(
+    currentUser?.authenticatorEnabled ||
+    currentUser?.preferences?.authenticatorEnabled ||
+    currentUser?.authenticatorSecret ||
+    currentUser?.preferences?.authenticatorSecret ||
+    user?.authenticatorEnabled ||
+    user?.preferences?.authenticatorEnabled ||
+    user?.authenticatorSecret ||
+    user?.preferences?.authenticatorSecret
+  );
+  const [twoStepEnabled, setTwoStepEnabled] = useState(isAuthInit);
   const [securityNotifs, setSecurityNotifs] = useState(user.preferences?.securityNotifications ?? true);
   const [inAppVibration, setInAppVibration] = useState(user.preferences?.inAppVibration ?? true);
   const [highPriorityNotifs, setHighPriorityNotifs] = useState(user.preferences?.highPriorityNotifs ?? true);
@@ -1901,7 +1918,7 @@ const SettingsDrawerContent: React.FC<SettingsDrawerProps> = ({ user, isOpen, on
         <AuthenticatorModal
           isOpen={showTwoStepModal}
           onClose={() => setShowTwoStepModal(false)}
-          currentUser={user}
+          currentUser={currentUser || user}
           onSaveAuthenticator={handleSaveAuthenticator}
         />
       )}

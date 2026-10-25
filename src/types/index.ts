@@ -191,6 +191,7 @@ export type Message = {
   callType?: CallType;
   callStatus?: 'missed' | 'ended' | 'declined';
   reactions?: { emoji: string; userId: string; userName: string }[];
+  expiresAt?: number;
 };
 
 export type ChatType = 'direct' | 'group' | 'announcement';
@@ -232,6 +233,7 @@ export type Chat = {
   pinnedBy?: string[]; // uids of users who pinned this
   tags?: string[]; // 'favourites'
   permissions?: GroupPermissions;
+  disappearingDuration?: number;
   memberJoinedAt?: { [uid: string]: number };
   memberHistoryRestricted?: { [uid: string]: boolean };
   createdAt: number;
@@ -298,7 +300,7 @@ export type CallHistoryItem = {
   groupName?: string;
 };
 
-export type StatusPrivacyMode = 'contacts' | 'contacts_except' | 'only_share_with';
+export type StatusPrivacyMode = 'contacts' | 'contacts_except' | 'only_share_with' | 'nobody';
 
 export type StatusUpdate = {
   id: string;
@@ -316,6 +318,7 @@ export type StatusUpdate = {
   viewers?: { uid: string; displayName: string; photoURL?: string; timestamp: number }[];
   reactions?: { emoji: string; userId: string; userName: string; timestamp: number }[];
   privacy?: StatusPrivacyMode;
+  authorPrivacy?: UserPrivacy;
   privacyUids?: string[];
   taggedContacts?: { uid: string; displayName: string }[];
   videoDuration?: number;

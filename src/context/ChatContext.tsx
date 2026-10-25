@@ -425,6 +425,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
+    const disappearingHours = activeChat.disappearingDuration || currentUser?.preferences?.disappearingDuration || 0;
+    const disappearingCutoff = disappearingHours > 0 ? Date.now() - disappearingHours * 3600 * 1000 : 0;
+
     // 1. Immediately load cached messages for instant rendering on switch/open
     let initialList: Message[] = [];
     try {
@@ -432,7 +435,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed)) {
-          initialList = parsed.filter((m: Message) => m.chatId === activeChat.id);
+          initialList = parsed.filter((m: Message) => {
+            if (m.chatId !== activeChat.id) return false;
+            if (disappearingCutoff > 0 && (m.timestamp || 0) < disappearingCutoff) return false;
+            if (m.expiresAt && m.expiresAt <= Date.now()) return false;
+            return true;
+          });
         }
       }
     } catch {}
@@ -451,7 +459,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           });
           const combined = Array.from(map.values())
-            .filter((m) => !m.deletedForUsers?.includes(currentUser?.uid || ''))
+            .filter((m) => {
+              if (disappearingCutoff > 0 && (m.timestamp || 0) < disappearingCutoff) return false;
+              if (m.expiresAt && m.expiresAt <= Date.now()) return false;
+              return !m.deletedForUsers?.includes(currentUser?.uid || '');
+            })
             .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
           try {
             localStorage.setItem(`limochat_msgs_${activeChat.id}`, JSON.stringify(combined));
@@ -600,7 +612,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       snapshot.forEach((docSnap) => {
         const msg = { id: docSnap.id, ...docSnap.data() } as Message;
         if (!msg.deletedForUsers?.includes(currentUser?.uid || '')) {
-          msgList.push(msg);
+          if (disappearingCutoff > 0 && (msg.timestamp || 0) < disappearingCutoff) {
+            // expired
+          } else if (msg.expiresAt && msg.expiresAt <= Date.now()) {
+            // expired
+          } else {
+            msgList.push(msg);
+          }
         }
 
         // Live Read Receipt: mark incoming messages as read in Firestore
@@ -803,6 +821,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       deletedForUsers: [],
       starredBy: [],
       callType: extra?.callType,
+      expiresAt: (activeChat.disappearingDuration || currentUser.preferences?.disappearingDuration || 0) > 0
+        ? now + (activeChat.disappearingDuration || currentUser.preferences?.disappearingDuration || 0) * 3600 * 1000
+        : undefined,
       callStatus: extra?.callStatus,
     };
 

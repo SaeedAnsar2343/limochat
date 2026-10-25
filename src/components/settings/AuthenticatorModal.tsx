@@ -45,7 +45,9 @@ export const AuthenticatorModal: React.FC<AuthenticatorModalProps> = ({
 }) => {
   const isCurrentlyEnabled = !!(
     currentUser.authenticatorEnabled || 
-    currentUser.preferences?.authenticatorEnabled
+    currentUser.preferences?.authenticatorEnabled ||
+    currentUser.authenticatorSecret ||
+    currentUser.preferences?.authenticatorSecret
   );
 
   const [step, setStep] = useState<'status' | 'setup_scan' | 'verify' | 'recovery_codes' | 'disable_confirm'>(

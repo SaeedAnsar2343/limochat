@@ -126,7 +126,8 @@ export const NewStatusModal: React.FC<NewStatusModalProps> = ({
   const [videoCurrentTime, setVideoCurrentTime] = useState<number>(0);
 
   // Status Privacy
-  const [privacy, setPrivacy] = useState<StatusPrivacyMode>('contacts');
+  const initialPrivacyMode: StatusPrivacyMode = currentUser?.privacy?.status === 'nobody' ? 'nobody' : 'contacts';
+  const [privacy, setPrivacy] = useState<StatusPrivacyMode>(initialPrivacyMode);
   const [privacyUids, setPrivacyUids] = useState<string[]>([]);
   const [showPrivacyPicker, setShowPrivacyPicker] = useState(false);
   const [privacySearchQuery, setPrivacySearchQuery] = useState('');
@@ -508,8 +509,9 @@ export const NewStatusModal: React.FC<NewStatusModalProps> = ({
             backgroundColor: '#0b141a',
             timestamp: now + i * 50, // Staggered by 50ms so they appear in sequence
             viewedBy: [currentUser.uid],
-            privacy,
+            privacy: currentUser?.privacy?.status === 'nobody' ? 'nobody' : privacy,
             privacyUids,
+            authorPrivacy: currentUser?.privacy,
             taggedContacts,
             videoDuration: seg.duration,
             segmentIndex: i,
@@ -555,8 +557,9 @@ export const NewStatusModal: React.FC<NewStatusModalProps> = ({
           fontFamily: statusType === 'text' ? selectedFont.family : undefined,
           timestamp: now,
           viewedBy: [currentUser.uid],
-          privacy,
-          privacyUids,
+          privacy: currentUser?.privacy?.status === 'nobody' ? 'nobody' : privacy,
+            privacyUids,
+            authorPrivacy: currentUser?.privacy,
           taggedContacts,
           videoDuration: activeSeg ? activeSeg.duration : undefined,
           segmentIndex: activeSeg ? activeSeg.index : 0,

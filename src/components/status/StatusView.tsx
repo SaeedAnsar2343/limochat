@@ -151,6 +151,9 @@ export const StatusView: React.FC = () => {
     }
 
     // 3. Status Privacy Filtering
+    if (s.privacy === 'nobody' || (s as any).authorPrivacy?.status === 'nobody') {
+      return false;
+    }
     if (s.privacy === 'contacts_except' && s.privacyUids?.includes(currentUser.uid)) {
       return false;
     }

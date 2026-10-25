@@ -189,6 +189,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               updateDoc(userRef, { phoneNumber: lifetimePhone }).catch(() => {});
             }
 
+            // Dual-Database Reconciliation: Fetch Supabase user profile
+            let supaUser: any = null;
+            try {
+              const res = await supabase.from('users').select('*').eq('uid', user.uid).maybeSingle();
+              supaUser = res.data;
+            } catch {}
+
+            // Reconcile Authenticator across both databases
+            const isAuthActive = !!(
+              data.authenticatorEnabled ||
+              data.preferences?.authenticatorEnabled ||
+              supaUser?.authenticator_enabled ||
+              supaUser?.authenticator_secret
+            );
+            const authSecret =
+              data.authenticatorSecret ||
+              data.preferences?.authenticatorSecret ||
+              supaUser?.authenticator_secret ||
+              undefined;
+            const recoveryCodes =
+              data.recoveryCodes ||
+              data.preferences?.recoveryCodes ||
+              supaUser?.recovery_codes ||
+              [];
+
+            // Self-heal Firestore if missing Authenticator data
+            if (isAuthActive && (!data.authenticatorEnabled || !data.authenticatorSecret)) {
+              updateDoc(userRef, {
+                authenticatorEnabled: true,
+                authenticatorSecret: authSecret || null,
+                recoveryCodes: recoveryCodes,
+                'preferences.authenticatorEnabled': true,
+                'preferences.authenticatorSecret': authSecret || null,
+                'preferences.recoveryCodes': recoveryCodes,
+              }).catch(() => {});
+            }
+
+            // Self-heal Supabase if missing Authenticator data
+            if (isAuthActive && (!supaUser?.authenticator_enabled || !supaUser?.authenticator_secret)) {
+              RealtimeCoordinator.updateUserAuthenticator(user.uid, true, authSecret || null, recoveryCodes).catch(() => {});
+            }
+
+            const mergedPrivacy: UserPrivacy = Object.assign(
+              {
+                lastSeen: 'everyone' as const,
+                profilePhoto: 'everyone' as const,
+                about: 'everyone' as const,
+                status: 'everyone' as const,
+                readReceipts: true,
+              },
+              supaUser?.privacy || {},
+              data.privacy || {}
+            );
+
+            const mergedPrefs = {
+              ...(supaUser?.preferences || {}),
+              ...(data.preferences || {}),
+              authenticatorEnabled: isAuthActive,
+              authenticatorSecret: authSecret,
+              recoveryCodes: recoveryCodes,
+            };
+
             // Check admin authorization status
             const profileEmail = (data.email || user.email || '').toLowerCase().trim();
             const cachedAdmins = getInitialAdminEmails();
@@ -214,7 +276,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               data.isAdmin = true;
             }
 
-            setCurrentUser({ ...data, phoneNumber: lifetimePhone });
+            setCurrentUser({
+              ...data,
+              phoneNumber: lifetimePhone,
+              authenticatorEnabled: isAuthActive,
+              authenticatorSecret: authSecret,
+              recoveryCodes: recoveryCodes,
+              privacy: mergedPrivacy as any,
+              preferences: mergedPrefs as any,
+            });
           } else {
             // First time registration: assign permanent lifetime virtual +991 phone number
             const lifetimePhone = getOrAssignLifetimeNumber(user.uid);
@@ -527,12 +597,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       authenticatorSecret: secret || undefined,
       recoveryCodes,
     };
+
+    // 1. Dual-Database update: Firestore
     try {
       await updateDoc(userRef, {
         authenticatorEnabled: enabled,
         authenticatorSecret: secret,
         recoveryCodes,
         preferences: updatedPrefs,
+        'preferences.authenticatorEnabled': enabled,
+        'preferences.authenticatorSecret': secret,
+        'preferences.recoveryCodes': recoveryCodes,
       });
     } catch {
       await setDoc(userRef, {
@@ -540,10 +615,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         authenticatorSecret: secret,
         recoveryCodes,
         preferences: updatedPrefs,
+        'preferences.authenticatorEnabled': enabled,
+        'preferences.authenticatorSecret': secret,
+        'preferences.recoveryCodes': recoveryCodes,
       }, { merge: true }).catch(() => {});
     }
 
+    // 2. Dual-Database update: Supabase
     await RealtimeCoordinator.updateUserAuthenticator(currentUser.uid, enabled, secret, recoveryCodes).catch(() => {});
+    try {
+      await supabase.from('users').update({
+        preferences: updatedPrefs,
+        updated_at: Date.now(),
+      }).eq('uid', currentUser.uid);
+    } catch {}
 
     setCurrentUser((prev) =>
       prev

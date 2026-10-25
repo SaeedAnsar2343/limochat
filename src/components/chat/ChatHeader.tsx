@@ -115,6 +115,17 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
     ([uid, typing]) => uid !== currentUser.uid && typing
   );
 
+  const isContact = Boolean(otherUser && (!currentUser.deletedContactUids?.includes(otherUser.uid)));
+  const isPhotoHidden = chat.type === 'direct' && Boolean(
+    otherUser?.privacy?.profilePhoto === 'nobody' ||
+    (otherUser?.privacy?.profilePhoto === 'contacts' && !isContact)
+  );
+  const isLastSeenHidden = chat.type === 'direct' && Boolean(
+    otherUser?.privacy?.lastSeen === 'nobody' ||
+    (otherUser?.privacy?.lastSeen === 'contacts' && !isContact)
+  );
+  const activeDisappearingDuration = chat.disappearingDuration || currentUser.preferences?.disappearingDuration || 0;
+
   const getSubtitle = () => {
     if (isTyping) {
       return <span className="text-[#00a884] font-medium animate-pulse">typing...</span>;
@@ -142,10 +153,14 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
     }
 
     if (otherUser) {
+      if (isLastSeenHidden) {
+        return null;
+      }
       const statusText = formatLastSeen(
         otherUser.isOnline,
         otherUser.lastSeen,
-        otherUser.privacy?.lastSeen
+        otherUser.privacy?.lastSeen,
+        isContact
       );
       return (
         <span className={otherUser.isOnline ? 'text-[#00a884] font-medium' : 'text-[#8696a0]'}>
@@ -196,7 +211,8 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
               src={avatarUrl}
               name={displayName}
               size="md"
-              isOnline={chat.type === 'direct' ? otherUser?.isOnline : undefined}
+              hidePhoto={isPhotoHidden}
+              isOnline={chat.type === 'direct' ? (isLastSeenHidden ? undefined : otherUser?.isOnline) : undefined}
             />
           </div>
 
@@ -214,6 +230,15 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
               {chat.type === 'direct' && otherUser?.phoneNumber && (
                 <span className="text-[10px] text-[#8696a0] bg-[#111b21] px-1.5 py-0.5 rounded border border-[#2e3b44] font-mono hidden md:inline">
                   {otherUser.phoneNumber}
+                </span>
+              )}
+              {activeDisappearingDuration > 0 && (
+                <span
+                  className="text-[10px] text-amber-400 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-mono flex items-center gap-1"
+                  title={`Disappearing messages active: ${activeDisappearingDuration === 24 ? '24 Hours' : activeDisappearingDuration === 168 ? '7 Days' : '90 Days'}`}
+                >
+                  <span>⏱️</span>
+                  <span>{activeDisappearingDuration === 24 ? '24h' : activeDisappearingDuration === 168 ? '7d' : '90d'}</span>
                 </span>
               )}
             </div>
